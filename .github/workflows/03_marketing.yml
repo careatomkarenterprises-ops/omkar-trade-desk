@@ -1,0 +1,30 @@
+name: 📢 Marketing Posts - Daily
+
+on:
+  schedule:
+    - cron: '30 5 * * 1-5'  # 11:00 AM IST
+    - cron: '30 8 * * 1-5'  # 2:00 PM IST
+    - cron: '30 11 * * 1-5' # 5:00 PM IST
+  workflow_dispatch:
+
+jobs:
+  marketing:
+    name: Post Marketing Content
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      
+      - name: Post Marketing
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          RAZORPAY_LINK: ${{ secrets.RAZORPAY_LINK }}
+        run: |
+          python -m src.marketing.content
