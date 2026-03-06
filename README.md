@@ -1,30 +1,49 @@
-# Omkar Trade Desk - Private Trading System
+# Omkar Trade Desk - Automated Trading Scanner
 
-## 🔒 PRIVATE REPOSITORY
-This is a private repository. Access restricted to authorized users only.
+## 🚀 Features
 
-## 🚀 System Components
-- Automated Scanner (30-min intervals)
-- News Alert System (15-min intervals)
-- Marketing Automation
-- Daily Reset & Maintenance
+- 🔍 **Automated Pattern Detection** - Runs every 30 minutes
+- 📰 **News Alerts** - Every 15 minutes
+- 📢 **Marketing Posts** - Scheduled daily
+- 🔄 **Daily Reset** - Automatic cleanup
+- 📊 **Multi-Asset Coverage** - Stocks, Indices, Commodities, Forex
 
-## 📊 Channels Managed
-- 10 Telegram channels
-- Multi-asset coverage (Stocks, Indices, Commodities, Forex)
-- Educational content
-- Premium alerts
+## 🏗️ Architecture
 
-## ⚙️ GitHub Actions Workflows
-- Scanner: Every 30 mins during market hours
-- News: Every 15 mins (24/7)
-- Marketing: 11 AM, 2 PM, 5 PM IST
-- Daily Reset: 8 AM IST
+- **100% GitHub Actions** - No servers needed
+- **Yahoo Finance** - No API tokens required
+- **Telegram** - Instant notifications
+- **Zero Maintenance** - Set once, runs forever
 
-## 🔑 Secrets Required
-- TELEGRAM_BOT_TOKEN
-- NEWS_API_KEY (optional)
-- RAZORPAY_LINK
+## 📁 Channels
 
-## 📅 Created: March 2026
-## 👤 Owner: Santosh Shendkar
+- @OmkarNifty50 - Nifty 50 stocks
+- @OmkarBankNifty - Banking stocks
+- @OmkarCommodity - Gold, Silver, Crude
+- @OmkarCurrency - Forex pairs
+- @OmkarEducation - Learning content
+- @OmkarSwing - Swing trading setups
+- @OmkarIntraday - Intraday patterns
+- @OmkarFNO - F&O analysis
+- @OmkarTradeDesk - Main channel
+- @OmkarTradeDeskPro - Premium channel
+
+## ⚙️ Setup
+
+1. Fork this repository
+2. Add secrets in GitHub Settings:
+   - `TELEGRAM_BOT_TOKEN`
+   - `NEWS_API_KEY` (optional)
+   - `RAZORPAY_LINK`
+3. That's it! System runs automatically
+
+## 🔄 Schedule
+
+- **Scanner:** Every 30 mins (9:15 AM - 3:30 PM IST)
+- **News:** Every 15 mins (24/7)
+- **Marketing:** 11 AM, 2 PM, 5 PM IST
+- **Reset:** 8 AM IST daily
+
+## 📝 License
+
+© 2026 Omkar Enterprises (Division of TRFSK OMKAR SERVICES PVT LTD)
