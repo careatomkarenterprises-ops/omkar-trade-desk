@@ -4,11 +4,10 @@ Marketing Content - Automated promotional posts
 
 import os
 import random
-import logging  # ← ADD THIS LINE
+import logging
 from datetime import datetime
 from src.telegram.poster import TelegramPoster
 
-# Now this will work
 logger = logging.getLogger(__name__)
 
 class MarketingContent:
@@ -59,21 +58,35 @@ class MarketingContent:
         print("\n=== STARTING MARKETING ===")
         hour = datetime.now().hour
         
-        if hour == 9:  # 9 AM
+        if hour == 9 or hour == 16:  # 9 AM and 4 PM
             self.post_educational()
-        elif hour == 11:  # 11 AM
+        elif hour == 11 or hour == 14 or hour == 17:  # 11 AM, 2 PM, 5 PM
             self.post_promotion()
-        elif hour == 14:  # 2 PM
-            self.post_promotion()
-        elif hour == 16:  # 4 PM
-            self.post_educational()
-        
-        print("\n=== MARKETING COMPLETE ===")
+        else:
+            print(f"⏰ Hour {hour} - no scheduled marketing")
+            # Send test message if manually triggered
+            if os.getenv('GITHUB_ACTIONS'):  # If running in GitHub
+                test_msg = f"🧪 Marketing test at hour {hour}"
+                self.poster.send_message('education', test_msg)
+    
+    def send_test_message(self):
+        """Send a test message to verify"""
+        print("\n🧪 SENDING TEST MESSAGE FROM MARKETING...")
+        test_msg = f"""
+🧪 **MARKETING TEST MESSAGE**
+
+If you see this, the marketing workflow is working!
+
+✅ GitHub Actions
+✅ Telegram Bot
+✅ Channel Access
+
+⏰ {datetime.now().strftime('%H:%M IST')}
+"""
+        return self.poster.send_message('education', test_msg)
 
 if __name__ == "__main__":
-    # Configure logging
     logging.basicConfig(level=logging.INFO)
-    
     print("🚀 Starting Marketing...")
     marketing = MarketingContent()
     marketing.run()
