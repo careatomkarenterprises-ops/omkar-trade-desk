@@ -14,7 +14,36 @@ class TelegramPoster:
     """
     Post messages to Telegram channels
     """
-    
+
+    def send_photo(self, channel: str, photo_path: str, caption: str = "") -> Dict:
+    """Send a photo to Telegram channel"""
+    try:
+        chat_id = self.channels.get(channel)
+        if not chat_id:
+            return {'success': False, 'error': 'Unknown channel'}
+        
+        url = f"{self.base_url}/sendPhoto"
+        
+        with open(photo_path, 'rb') as photo:
+            files = {'photo': photo}
+            data = {
+                'chat_id': chat_id,
+                'caption': caption + self.disclaimer,
+                'parse_mode': 'Markdown'
+            }
+            response = requests.post(url, files=files, data=data, timeout=30)
+        
+        if response.status_code == 200:
+            logger.info(f"Photo sent to {channel}")
+            return {'success': True, 'data': response.json()}
+        else:
+            logger.error(f"Failed: {response.text}")
+            return {'success': False, 'error': response.text}
+            
+    except Exception as e:
+        logger.error(f"Error sending photo: {e}")
+        return {'success': False, 'error': str(e)}
+        
     def __init__(self):
         # Print EVERYTHING for debugging
         print("\n" + "="*60)
@@ -222,3 +251,4 @@ class TelegramPoster:
 ✨ Join 100+ serious traders
 """
         return self.send_message('education', message)
+
