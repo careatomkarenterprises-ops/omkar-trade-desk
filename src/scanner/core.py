@@ -44,48 +44,31 @@ class OmkarScanner:
         logger.info("Omkar Scanner initialized - Ready for auto mode")
     
     def load_patterns_log(self):
-        """Load patterns from previous runs"""
-        if self.patterns_log.exists():
+    """Load patterns from previous runs with error handling"""
+    if self.patterns_log.exists():
+        try:
             with open(self.patterns_log, 'r') as f:
-                self.patterns_history = json.load(f)
-        else:
+                content = f.read().strip()
+                if content:  # If file has content
+                    self.patterns_history = json.loads(content)
+                else:  # If file is empty
+                    self.patterns_history = {
+                        'date': datetime.now().strftime('%Y-%m-%d'),
+                        'patterns': []
+                    }
+        except json.JSONDecodeError:
+            # If JSON is corrupted, create new
+            print("⚠️ Patterns log corrupted, creating new one")
             self.patterns_history = {
                 'date': datetime.now().strftime('%Y-%m-%d'),
                 'patterns': []
             }
-    
-    def save_patterns_log(self):
-        """Save patterns to log"""
-        with open(self.patterns_log, 'w') as f:
-            json.dump(self.patterns_history, f, indent=2)
-    
-    def scan_nifty_stocks(self) -> List[Dict]:
-        """Scan all Nifty stocks for patterns"""
-        patterns_found = []
+    else:
+        self.patterns_history = {
+            'date': datetime.now().strftime('%Y-%m-%d'),
+            'patterns': []
+        }
         
-        for symbol in self.fetcher.nifty_stocks.keys():
-            try:
-                logger.info(f"Scanning {symbol}...")
-                data = self.fetcher.get_stock_data(symbol)
-                
-                if data is not None:
-                    pattern = self.detector.analyze(symbol, data)
-                    
-                    if pattern:
-                        patterns_found.append(pattern)
-                        logger.info(f"✅ Pattern found in {symbol}: {pattern['primary_pattern']}")
-                        
-                        # Determine channel
-                        channel = self.get_channel_for_stock(symbol)
-                        
-                        # Post to Telegram
-                        self.poster.post_pattern(channel, pattern)
-                        
-            except Exception as e:
-                logger.error(f"Error scanning {symbol}: {e}")
-        
-        return patterns_found
-    
     def scan_indices(self) -> List[Dict]:
         """Scan indices for patterns"""
         patterns_found = []
