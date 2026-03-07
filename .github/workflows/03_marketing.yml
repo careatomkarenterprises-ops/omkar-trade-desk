@@ -24,7 +24,10 @@ jobs:
       
       - name: Post Marketing
         env:
+          PYTHONPATH: .  # ← ADD THIS
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           RAZORPAY_LINK: ${{ secrets.RAZORPAY_LINK }}
+          # Marketing only needs education channel probably
+          CHANNEL_EDUCATION: ${{ secrets.CHANNEL_EDUCATION }}
         run: |
           python -m src.marketing.content
