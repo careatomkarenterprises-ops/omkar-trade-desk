@@ -26,12 +26,23 @@ jobs:
 
       - name: Run Scanner
         env:
+          PYTHONPATH: .
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          # ALL CHANNEL SECRETS - ADDED EVERYTHING
+          CHANNEL_EDUCATION: ${{ secrets.CHANNEL_EDUCATION }}
+          CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
+          CHANNEL_NIFTY: ${{ secrets.CHANNEL_NIFTY }}
+          CHANNEL_BANKNIFTY: ${{ secrets.CHANNEL_BANKNIFTY }}
+          CHANNEL_COMMODITY: ${{ secrets.CHANNEL_COMMODITY }}
+          CHANNEL_CURRENCY: ${{ secrets.CHANNEL_CURRENCY }}
+          CHANNEL_SWING: ${{ secrets.CHANNEL_SWING }}
+          CHANNEL_INTRADAY: ${{ secrets.CHANNEL_INTRADAY }}
+          CHANNEL_FNO: ${{ secrets.CHANNEL_FNO }}
         run: |
           python -m src.scanner.core
 
       - name: Upload scan logs
-        if: always()  # Upload even if previous step fails
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: scan-logs
