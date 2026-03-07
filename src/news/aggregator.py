@@ -9,7 +9,7 @@ from datetime import datetime
 import random
 from typing import List, Dict
 
-from src.telegram.poster import TelegramPoster
+from src.telegram.poster import TelegramPoster  # ← This import must be correct
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +19,10 @@ class NewsAggregator:
     """
     
     def __init__(self):
-        self.poster = TelegramPoster()
+        print("\n📰 NewsAggregator Initializing...")
+        self.poster = TelegramPoster()  # ← This creates the poster instance
         self.api_key = os.getenv('NEWS_API_KEY')
+        print(f"  ├─ NEWS_API_KEY exists: {'✅ YES' if self.api_key else '❌ NO'}")
         
         # Sector keywords
         self.sectors = {
@@ -30,13 +32,14 @@ class NewsAggregator:
             'currency': ['rupee', 'dollar', 'forex', 'inr'],
             'economy': ['gdp', 'inflation', 'cpi', 'budget', 'economy']
         }
+        print("  └─ ✅ NewsAggregator initialized")
     
     def fetch_news(self) -> List[Dict]:
-        """
-        Fetch real news from NewsAPI
-        """
+        """Fetch real news from NewsAPI"""
+        print("\n📡 Fetching news...")
         try:
             if not self.api_key:
+                print("  ├─ No API key, using fallback")
                 return self.generate_fallback_news()
             
             url = "https://newsapi.org/v2/top-headlines"
@@ -47,10 +50,13 @@ class NewsAggregator:
                 'pageSize': 5
             }
             
+            print(f"  ├─ Making API request to NewsAPI...")
             response = requests.get(url, params=params, timeout=10)
+            print(f"  ├─ Response status: {response.status_code}")
             
             if response.status_code == 200:
                 articles = response.json().get('articles', [])
+                print(f"  ├─ Found {len(articles)} articles")
                 news_list = []
                 
                 for article in articles:
@@ -64,20 +70,19 @@ class NewsAggregator:
                 
                 return news_list
             
+            print(f"  └─ API failed, using fallback")
             return self.generate_fallback_news()
             
         except Exception as e:
-            logger.error(f"News API error: {e}")
+            print(f"  └─ ❌ Error: {e}")
             return self.generate_fallback_news()
     
     def generate_fallback_news(self) -> List[Dict]:
-        """
-        Generate contextual news when API fails
-        """
+        """Generate contextual news when API fails"""
+        print("  ├─ Generating fallback news")
         now = datetime.now()
         hour = now.hour
         
-        # Morning news
         if 8 <= hour <= 10:
             return [{
                 'title': 'Morning Market Update: Global cues positive',
@@ -85,8 +90,6 @@ class NewsAggregator:
                 'source': 'Omkar Market Intelligence',
                 'time': now.strftime('%H:%M IST')
             }]
-        
-        # Mid-day news
         elif 11 <= hour <= 14:
             return [{
                 'title': 'Sector Watch: Banking stocks showing strength',
@@ -94,8 +97,6 @@ class NewsAggregator:
                 'source': 'Omkar Scanner',
                 'time': now.strftime('%H:%M IST')
             }]
-        
-        # Evening news
         elif 15 <= hour <= 17:
             return [{
                 'title': 'Closing Bell: Markets end near day\'s high',
@@ -103,8 +104,6 @@ class NewsAggregator:
                 'source': 'Omkar TradeDesk',
                 'time': now.strftime('%H:%M IST')
             }]
-        
-        # US Market news
         else:
             return [{
                 'title': 'US Futures steady ahead of key data',
@@ -129,10 +128,16 @@ class NewsAggregator:
     
     def post_news(self):
         """Fetch and post news to relevant channels"""
+        print("\n=== STARTING NEWS POSTING ===")
         news_items = self.fetch_news()
+        print(f"📰 Total news items: {len(news_items)}")
         
-        for item in news_items:
+        for i, item in enumerate(news_items, 1):
+            print(f"\n--- News Item {i} ---")
+            print(f"Title: {item['title'][:50]}...")
+            
             sectors = self.determine_sector(item)
+            print(f"Affected sectors: {sectors}")
             
             # Determine channels
             channels_to_post = set()
@@ -147,6 +152,8 @@ class NewsAggregator:
                     channels_to_post.add('currency')
                 else:
                     channels_to_post.update(['education', 'nifty'])
+            
+            print(f"Posting to channels: {channels_to_post}")
             
             # Create message
             message = f"""
@@ -164,9 +171,17 @@ class NewsAggregator:
             
             # Post to each channel
             for channel in channels_to_post:
-                self.poster.send_message(channel, message)
-                logger.info(f"News posted to {channel}")
+                print(f"  → Posting to {channel}...")
+                result = self.poster.send_message(channel, message)
+                if result.get('success'):
+                    print(f"    ✅ Success")
+                else:
+                    print(f"    ❌ Failed: {result.get('error')}")
+        
+        print("\n=== NEWS POSTING COMPLETE ===")
 
 if __name__ == "__main__":
+    print("🚀 Starting News Aggregator...")
     news = NewsAggregator()
     news.post_news()
+    print("🏁 News Aggregator finished")
