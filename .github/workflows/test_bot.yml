@@ -1,0 +1,24 @@
+name: 🤖 Test New Bot
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test Bot Connection
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          echo "Testing bot token..."
+          curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe"
+          
+      - name: Send Test Message
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHANNEL_EDUCATION: ${{ secrets.CHANNEL_EDUCATION }}
+        run: |
+          MESSAGE="🧪 **Test Message**%0A%0ABot is working!%0ATime: $(date)"
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d "chat_id=${CHANNEL_EDUCATION}&text=${MESSAGE}&parse_mode=Markdown"
