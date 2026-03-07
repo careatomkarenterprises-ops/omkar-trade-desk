@@ -7,53 +7,47 @@ import random
 from datetime import datetime
 from src.telegram.poster import TelegramPoster
 
+logger = logging.getLogger(__name__)
+
 class MarketingContent:
-    """
-    Generate and post marketing content
-    """
-    
     def __init__(self):
+        print("\n📢 MarketingContent Initializing...")
         self.poster = TelegramPoster()
         self.razorpay_link = os.getenv('RAZORPAY_LINK', 'https://rzp.io/l/omkar_pro')
         
-        # Educational tips
         self.educational_tips = [
-            "📚 **Trading Tip:** Volume precedes price. Always look for volume spikes before breakouts.",
-            "📚 **Risk Management:** Never risk more than 2% on a single trade.",
-            "📚 **Psychology:** Trading is 10% strategy and 90% discipline.",
-            "📚 **Trend Following:** The trend is your friend. Don't fight it.",
-            "📚 **Support & Resistance:** Price tends to reverse at key levels.",
-            "📚 **Moving Averages:** 20 EMA acts as dynamic support in uptrends.",
-            "📚 **Breakout Trading:** Wait for volume confirmation before entering.",
-            "📚 **Stop Loss:** A trade without SL is like driving without brakes.",
-            "📚 **Position Sizing:** Calculate size based on stop loss, not greed.",
-            "📚 **Market Phases:** Know if we're in accumulation or distribution."
+            "📚 **Trading Tip:** Volume precedes price. Always look for volume spikes before breakouts."
         ]
         
-        # Marketing hooks
         self.marketing_hooks = [
-            "🚀 **Stop guessing, start knowing!** Our scanner finds patterns automatically.",
-            "💰 **Time is money.** Let our AI scan 100 stocks while you focus on trading.",
-            "📈 **Missed today's move?** Never miss another pattern with real-time alerts.",
-            "🎯 **90% of traders miss volume patterns.** Don't be one of them.",
-            "⚡ **Real-time alerts** on your phone. Entry, SL, Target - all automated.",
-            "🏦 **Institutional-grade analysis** at retail prices.",
-            "📊 **Multi-asset coverage:** Nifty, Bank Nifty, Gold, Crude, Forex.",
-            "🔔 **Get alerts before breakout.** Not after. Be first.",
-            "💎 **The difference between winners and losers?** Our scanner.",
-            "📱 **Trade on the go.** Alerts work anywhere, anytime."
+            "🚀 **Stop guessing, start knowing!** Our scanner finds patterns automatically."
         ]
+        print("  └─ ✅ MarketingContent initialized")
+    
+    def send_test_message(self):
+        """Send a test message to verify"""
+        print("\n🧪 SENDING TEST MESSAGE FROM MARKETING...")
+        test_msg = f"""
+🧪 **MARKETING TEST MESSAGE**
+
+If you see this, the marketing workflow is working!
+
+✅ GitHub Actions
+✅ Telegram Bot
+✅ Channel Access
+
+⏰ {datetime.now().strftime('%H:%M IST')}
+"""
+        return self.poster.send_message('education', test_msg)
     
     def post_educational(self):
         """Post educational tip"""
         tip = random.choice(self.educational_tips)
-        self.poster.send_message('education', tip)
-        logger.info("Educational tip posted")
+        return self.poster.send_message('education', tip)
     
     def post_promotion(self):
         """Post promotional content"""
         hook = random.choice(self.marketing_hooks)
-        
         message = f"""
 {hook}
 
@@ -68,42 +62,30 @@ class MarketingContent:
 ━━━━━━━━━━━━━━━━━━━━
 🔥 Limited time offer
 """
-        self.poster.send_message('education', message)
-        logger.info("Promotion posted")
-    
-    def post_results_showcase(self):
-        """Post sample results from today"""
-        message = f"""
-📊 **TODAY'S SCANNER RESULTS**
-
-Our scanner detected patterns in:
-• Selected banking stocks
-• Gold (volume spike)
-• USD/INR (support bounce)
-
-📈 **Real-time alerts available**
-
-👉 [Try Scanner Free]({self.razorpay_link})
-"""
-        self.poster.send_message('education', message)
-        logger.info("Results showcase posted")
+        return self.poster.send_message('education', message)
     
     def run(self):
-        """Run marketing tasks based on time"""
-        hour = datetime.now().hour
+        """Run marketing tasks"""
+        print("\n=== STARTING MARKETING ===")
         
-        if hour == 9:  # 9 AM
-            self.post_educational()
-        elif hour == 11:  # 11 AM
+        # Send test message first
+        test_result = self.send_test_message()
+        
+        if test_result.get('success'):
+            print("✅ Test successful, sending actual content...")
+            # Then send regular content
             self.post_promotion()
-        elif hour == 14:  # 2 PM
-            self.post_results_showcase()
-        elif hour == 16:  # 4 PM
-            self.post_educational()
+        else:
+            print("❌ Test failed, check logs above")
+        
+        print("\n=== MARKETING COMPLETE ===")
 
 if __name__ == "__main__":
     import logging
+    logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
     
+    print("🚀 Starting Marketing...")
     marketing = MarketingContent()
     marketing.run()
+    print("🏁 Marketing finished")
