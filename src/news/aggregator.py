@@ -9,7 +9,7 @@ from datetime import datetime
 import random
 from typing import List, Dict
 
-from src.telegram.poster import TelegramPoster  # ← This import must be correct
+from src.telegram.poster import TelegramPoster
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ class NewsAggregator:
     
     def __init__(self):
         print("\n📰 NewsAggregator Initializing...")
-        self.poster = TelegramPoster()  # ← This creates the poster instance
+        self.poster = TelegramPoster()
         self.api_key = os.getenv('NEWS_API_KEY')
         print(f"  ├─ NEWS_API_KEY exists: {'✅ YES' if self.api_key else '❌ NO'}")
         
@@ -33,6 +33,29 @@ class NewsAggregator:
             'economy': ['gdp', 'inflation', 'cpi', 'budget', 'economy']
         }
         print("  └─ ✅ NewsAggregator initialized")
+    
+    def send_test_message(self):
+        """Send a test message to verify Telegram connection"""
+        print("\n🧪 SENDING TEST MESSAGE...")
+        test_msg = f"""
+🧪 **TEST MESSAGE**
+
+This is a test from GitHub Actions.
+If you see this, Telegram is working!
+
+✅ System is live
+✅ Bot is connected
+✅ Channels are accessible
+
+⏰ {datetime.now().strftime('%H:%M IST')}
+"""
+        
+        result = self.poster.send_message('education', test_msg)
+        if result.get('success'):
+            print("  ✅ Test message sent successfully!")
+        else:
+            print(f"  ❌ Test failed: {result.get('error')}")
+        return result
     
     def fetch_news(self) -> List[Dict]:
         """Fetch real news from NewsAPI"""
@@ -55,10 +78,15 @@ class NewsAggregator:
             print(f"  ├─ Response status: {response.status_code}")
             
             if response.status_code == 200:
-                articles = response.json().get('articles', [])
+                data = response.json()
+                articles = data.get('articles', [])
                 print(f"  ├─ Found {len(articles)} articles")
-                news_list = []
                 
+                if len(articles) == 0:
+                    print("  ├─ No articles found, using fallback")
+                    return self.generate_fallback_news()
+                
+                news_list = []
                 for article in articles:
                     if article['title'] and '[Removed]' not in article['title']:
                         news_list.append({
@@ -132,6 +160,11 @@ class NewsAggregator:
         news_items = self.fetch_news()
         print(f"📰 Total news items: {len(news_items)}")
         
+        if len(news_items) == 0:
+            print("\n⚠️ No news found - sending test message instead")
+            self.send_test_message()
+            return
+        
         for i, item in enumerate(news_items, 1):
             print(f"\n--- News Item {i} ---")
             print(f"Title: {item['title'][:50]}...")
@@ -139,7 +172,6 @@ class NewsAggregator:
             sectors = self.determine_sector(item)
             print(f"Affected sectors: {sectors}")
             
-            # Determine channels
             channels_to_post = set()
             for sector in sectors:
                 if sector == 'banking':
@@ -155,7 +187,6 @@ class NewsAggregator:
             
             print(f"Posting to channels: {channels_to_post}")
             
-            # Create message
             message = f"""
 📰 **MARKET NEWS UPDATE**
 
@@ -169,7 +200,6 @@ class NewsAggregator:
 📊 **Affected:** {', '.join(sectors)}
 """
             
-            # Post to each channel
             for channel in channels_to_post:
                 print(f"  → Posting to {channel}...")
                 result = self.poster.send_message(channel, message)
@@ -185,26 +215,3 @@ if __name__ == "__main__":
     news = NewsAggregator()
     news.post_news()
     print("🏁 News Aggregator finished")
-
-def send_test_message(self):
-    """Send a test message to verify Telegram connection"""
-    print("\n🧪 SENDING TEST MESSAGE...")
-    test_msg = """
-🧪 **TEST MESSAGE**
-
-This is a test from GitHub Actions.
-If you see this, Telegram is working!
-
-✅ System is live
-✅ Bot is connected
-✅ Channels are accessible
-
-⏰ """ + datetime.now().strftime('%H:%M IST')
-    
-    # Send to education channel
-    result = self.poster.send_message('education', test_msg)
-    if result.get('success'):
-        print("  ✅ Test message sent successfully!")
-    else:
-        print(f"  ❌ Test failed: {result.get('error')}")
-    return result
