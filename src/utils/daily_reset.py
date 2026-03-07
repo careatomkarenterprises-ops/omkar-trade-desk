@@ -1,7 +1,8 @@
 """
 Daily Reset - Clean up data files
 """
-import os
+
+import os  # ← THIS WAS MISSING!
 import json
 from pathlib import Path
 from datetime import datetime
@@ -46,6 +47,7 @@ class DailyReset:
     
     def send_daily_summary(self):
         """Send daily summary to education channel"""
+        razorpay_link = os.getenv('RAZORPAY_LINK', 'https://rzp.io/l/omkar_pro')
         message = f"""
 📊 **Daily Reset Complete**
 
@@ -55,7 +57,7 @@ class DailyReset:
 
 🟢 Scanner will run at 9:15 AM
 
-👉 [Join Premium]({os.getenv('RAZORPAY_LINK', 'https://rzp.io/l/omkar_pro')})
+👉 [Join Premium]({razorpay_link})
 """
         self.poster.send_message('education', message)
         logger.info("Daily summary sent")
