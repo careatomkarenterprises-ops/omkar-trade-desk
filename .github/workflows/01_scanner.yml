@@ -32,9 +32,10 @@ jobs:
         run: |
           python -m src.scanner.core
 
-      - name: Upload scan logs
-        uses: actions/upload-artifact@v3
-        with:
-          name: scan-logs
-          path: data/
-          retention-days: 7
+- name: Upload scan logs
+  uses: actions/upload-artifact@v4  # ← UPDATED to v4
+  with:
+    name: scan-logs
+    path: data/
+    retention-days: 7
+    if-no-files-found: warn  # ← New optional parameter
