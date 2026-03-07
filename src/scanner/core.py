@@ -20,7 +20,7 @@ from src.telegram.poster import TelegramPoster
 from src.utils.logger import setup_logger
 
 # Setup logging
-logger = setup_logger('scanner')
+logger = logging.getLogger(__name__)
 
 class OmkarScanner:
     """
@@ -29,6 +29,7 @@ class OmkarScanner:
     
     def __init__(self):
         # Initialize components
+        print("\n🔍 OmkarScanner Initializing...")
         self.fetcher = DataFetcher()
         self.detector = PatternDetector()
         self.poster = TelegramPoster()
@@ -41,34 +42,67 @@ class OmkarScanner:
         # Load existing patterns log
         self.load_patterns_log()
         
-        logger.info("Omkar Scanner initialized - Ready for auto mode")
+        print("  └─ ✅ OmkarScanner initialized")
     
     def load_patterns_log(self):
-    """Load patterns from previous runs with error handling"""
-    if self.patterns_log.exists():
-        try:
-            with open(self.patterns_log, 'r') as f:
-                content = f.read().strip()
-                if content:  # If file has content
-                    self.patterns_history = json.loads(content)
-                else:  # If file is empty
-                    self.patterns_history = {
-                        'date': datetime.now().strftime('%Y-%m-%d'),
-                        'patterns': []
-                    }
-        except json.JSONDecodeError:
-            # If JSON is corrupted, create new
-            print("⚠️ Patterns log corrupted, creating new one")
+        """Load patterns from previous runs with error handling"""
+        if self.patterns_log.exists():
+            try:
+                with open(self.patterns_log, 'r') as f:
+                    content = f.read().strip()
+                    if content:  # If file has content
+                        self.patterns_history = json.loads(content)
+                    else:  # If file is empty
+                        self.patterns_history = {
+                            'date': datetime.now().strftime('%Y-%m-%d'),
+                            'patterns': []
+                        }
+            except json.JSONDecodeError:
+                # If JSON is corrupted, create new
+                print("  ⚠️ Patterns log corrupted, creating new one")
+                self.patterns_history = {
+                    'date': datetime.now().strftime('%Y-%m-%d'),
+                    'patterns': []
+                }
+        else:
             self.patterns_history = {
                 'date': datetime.now().strftime('%Y-%m-%d'),
                 'patterns': []
             }
-    else:
-        self.patterns_history = {
-            'date': datetime.now().strftime('%Y-%m-%d'),
-            'patterns': []
-        }
+        print(f"  ├─ Loaded {len(self.patterns_history.get('patterns', []))} historical patterns")
+    
+    def save_patterns_log(self):
+        """Save patterns to log"""
+        with open(self.patterns_log, 'w') as f:
+            json.dump(self.patterns_history, f, indent=2)
+    
+    def scan_nifty_stocks(self) -> List[Dict]:
+        """Scan all Nifty stocks for patterns"""
+        patterns_found = []
         
+        for symbol in self.fetcher.nifty_stocks.keys():
+            try:
+                logger.info(f"Scanning {symbol}...")
+                data = self.fetcher.get_stock_data(symbol)
+                
+                if data is not None:
+                    pattern = self.detector.analyze(symbol, data)
+                    
+                    if pattern:
+                        patterns_found.append(pattern)
+                        logger.info(f"✅ Pattern found in {symbol}: {pattern['primary_pattern']}")
+                        
+                        # Determine channel
+                        channel = self.get_channel_for_stock(symbol)
+                        
+                        # Post to Telegram
+                        self.poster.post_pattern(channel, pattern)
+                        
+            except Exception as e:
+                logger.error(f"Error scanning {symbol}: {e}")
+        
+        return patterns_found
+    
     def scan_indices(self) -> List[Dict]:
         """Scan indices for patterns"""
         patterns_found = []
@@ -120,31 +154,31 @@ class OmkarScanner:
     
     def run(self):
         """Main execution function"""
-        logger.info("=" * 60)
-        logger.info(f"Starting scanner run at {datetime.now()}")
-        logger.info("=" * 60)
+        print("\n" + "="*60)
+        print(f"🔍 Starting scanner run at {datetime.now()}")
+        print("="*60)
         
         all_patterns = []
         
         # Run all scans
-        logger.info("\n📊 Scanning Nifty stocks...")
+        print("\n📊 Scanning Nifty stocks...")
         stock_patterns = self.scan_nifty_stocks()
         all_patterns.extend(stock_patterns)
         
-        logger.info(f"\n📈 Found {len(stock_patterns)} stock patterns")
+        print(f"\n📈 Found {len(stock_patterns)} stock patterns")
         
-        logger.info("\n📉 Scanning indices...")
+        print("\n📉 Scanning indices...")
         index_patterns = self.scan_indices()
         all_patterns.extend(index_patterns)
         
-        logger.info(f"\n🪙 Scanning commodities...")
+        print("\n🪙 Scanning commodities...")
         commodity_patterns = self.scan_commodities()
         all_patterns.extend(commodity_patterns)
         
         # Log summary
-        logger.info("=" * 60)
-        logger.info(f"SCAN COMPLETE - Total patterns: {len(all_patterns)}")
-        logger.info("=" * 60)
+        print("\n" + "="*60)
+        print(f"📊 SCAN COMPLETE - Total patterns: {len(all_patterns)}")
+        print("="*60)
         
         # Save to history
         self.patterns_history['patterns'].extend(all_patterns)
@@ -172,5 +206,7 @@ Top patterns:
             self.poster.send_message('education', summary)
 
 if __name__ == "__main__":
+    print("🚀 Starting Scanner...")
     scanner = OmkarScanner()
     scanner.run()
+    print("🏁 Scanner finished")
