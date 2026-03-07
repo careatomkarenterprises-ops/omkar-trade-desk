@@ -1,5 +1,5 @@
 """
-Telegram Poster - Sends messages to channels
+Telegram Poster - Sends messages and photos to channels
 """
 
 import os
@@ -12,38 +12,9 @@ logger = logging.getLogger(__name__)
 
 class TelegramPoster:
     """
-    Post messages to Telegram channels
+    Post messages and photos to Telegram channels
     """
-
-    def send_photo(self, channel: str, photo_path: str, caption: str = "") -> Dict:
-    """Send a photo to Telegram channel"""
-    try:
-        chat_id = self.channels.get(channel)
-        if not chat_id:
-            return {'success': False, 'error': 'Unknown channel'}
-        
-        url = f"{self.base_url}/sendPhoto"
-        
-        with open(photo_path, 'rb') as photo:
-            files = {'photo': photo}
-            data = {
-                'chat_id': chat_id,
-                'caption': caption + self.disclaimer,
-                'parse_mode': 'Markdown'
-            }
-            response = requests.post(url, files=files, data=data, timeout=30)
-        
-        if response.status_code == 200:
-            logger.info(f"Photo sent to {channel}")
-            return {'success': True, 'data': response.json()}
-        else:
-            logger.error(f"Failed: {response.text}")
-            return {'success': False, 'error': response.text}
-            
-    except Exception as e:
-        logger.error(f"Error sending photo: {e}")
-        return {'success': False, 'error': str(e)}
-        
+    
     def __init__(self):
         # Print EVERYTHING for debugging
         print("\n" + "="*60)
@@ -108,7 +79,7 @@ class TelegramPoster:
             else:
                 print(f"❌ MISSING")
         
-        # Test channel access
+        # Test channel access (education channel)
         print(f"\n📌 Testing channel access (education channel):")
         if self.channels.get('education'):
             test_channel = self.channels['education']
@@ -198,8 +169,71 @@ class TelegramPoster:
             logger.error(f"Error sending message: {e}")
             return {'success': False, 'error': str(e)}
     
+    def send_photo(self, channel: str, photo_path: str, caption: str = "") -> Dict:
+        """
+        Send a photo to Telegram channel with optional caption
+        """
+        print(f"\n📸 SENDING PHOTO TO: {channel}")
+        print("-"*40)
+        
+        try:
+            chat_id = self.channels.get(channel)
+            if not chat_id:
+                print(f"  ❌ Unknown channel: {channel}")
+                return {'success': False, 'error': 'Unknown channel'}
+            
+            print(f"  ├─ Chat ID: {chat_id[:5]}...{chat_id[-5:]}")
+            print(f"  ├─ Photo path: {photo_path}")
+            print(f"  ├─ Caption length: {len(caption)} chars")
+            
+            # Check if file exists
+            if not os.path.exists(photo_path):
+                print(f"  ❌ Photo file not found: {photo_path}")
+                return {'success': False, 'error': 'Photo file not found'}
+            
+            print(f"  ├─ File size: {os.path.getsize(photo_path)} bytes")
+            
+            url = f"{self.base_url}/sendPhoto"
+            
+            with open(photo_path, 'rb') as photo:
+                files = {'photo': photo}
+                data = {
+                    'chat_id': chat_id,
+                    'caption': caption + self.disclaimer,
+                    'parse_mode': 'Markdown'
+                }
+                
+                print(f"  ├─ Uploading photo...")
+                response = requests.post(url, files=files, data=data, timeout=30)
+            
+            print(f"  ├─ Response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                result = response.json()
+                print(f"  ├─ Telegram API response OK: {result.get('ok')}")
+                if result.get('ok'):
+                    print(f"  ├─ Message ID: {result.get('result', {}).get('message_id')}")
+                    print(f"  ├─ Photo sent successfully!")
+                    print(f"  └─ ✅ PHOTO SENT SUCCESSFULLY!")
+                    logger.info(f"Photo sent to {channel}")
+                    return {'success': True, 'data': result}
+                else:
+                    error_desc = result.get('description', 'Unknown error')
+                    print(f"  └─ ❌ Telegram error: {error_desc}")
+                    return {'success': False, 'error': error_desc}
+            else:
+                print(f"  └─ ❌ HTTP error: {response.text}")
+                return {'success': False, 'error': response.text}
+                
+        except Exception as e:
+            print(f"  └─ ❌ Exception: {str(e)}")
+            logger.error(f"Error sending photo: {e}")
+            return {'success': False, 'error': str(e)}
+    
     def post_pattern(self, channel: str, pattern: Dict) -> Dict:
-        """Post a pattern detection alert"""
+        """
+        Post a pattern detection alert
+        """
         print(f"\n🔍 Posting pattern to {channel}")
         message = f"""
 🔍 **PATTERN DETECTED - Omkar Scanner**
@@ -217,7 +251,9 @@ class TelegramPoster:
         return self.send_message(channel, message)
     
     def post_market_update(self, update: str) -> Dict:
-        """Post market update"""
+        """
+        Post market update to education channel
+        """
         print(f"\n📊 Posting market update")
         message = f"""
 📊 **MARKET UPDATE**
@@ -231,7 +267,9 @@ class TelegramPoster:
         return self.send_message('education', message)
     
     def post_promotion(self) -> Dict:
-        """Post promotional content"""
+        """
+        Post promotional content with payment link
+        """
         print(f"\n📢 Posting promotion")
         razorpay_link = os.getenv('RAZORPAY_LINK', 'https://rzp.io/l/omkar_pro')
         
@@ -251,4 +289,3 @@ class TelegramPoster:
 ✨ Join 100+ serious traders
 """
         return self.send_message('education', message)
-
