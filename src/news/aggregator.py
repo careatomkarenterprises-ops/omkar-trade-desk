@@ -185,3 +185,26 @@ if __name__ == "__main__":
     news = NewsAggregator()
     news.post_news()
     print("🏁 News Aggregator finished")
+
+def send_test_message(self):
+    """Send a test message to verify Telegram connection"""
+    print("\n🧪 SENDING TEST MESSAGE...")
+    test_msg = """
+🧪 **TEST MESSAGE**
+
+This is a test from GitHub Actions.
+If you see this, Telegram is working!
+
+✅ System is live
+✅ Bot is connected
+✅ Channels are accessible
+
+⏰ """ + datetime.now().strftime('%H:%M IST')
+    
+    # Send to education channel
+    result = self.poster.send_message('education', test_msg)
+    if result.get('success'):
+        print("  ✅ Test message sent successfully!")
+    else:
+        print(f"  ❌ Test failed: {result.get('error')}")
+    return result
