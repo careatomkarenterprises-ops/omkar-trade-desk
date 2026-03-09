@@ -1,8 +1,8 @@
-name: 📰 News Alerts - Every 15 Minutes
+name: 📰 News Alerts - Every 30 Minutes
 
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '*/30 * * * *'  # Every 30 minutes (reduced from 15 to avoid spam)
   workflow_dispatch:
 
 jobs:
@@ -25,9 +25,7 @@ jobs:
           PYTHONPATH: .
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
-          # ALL CHANNEL SECRETS
           CHANNEL_EDUCATION: ${{ secrets.CHANNEL_EDUCATION }}
-          CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
           CHANNEL_NIFTY: ${{ secrets.CHANNEL_NIFTY }}
           CHANNEL_BANKNIFTY: ${{ secrets.CHANNEL_BANKNIFTY }}
           CHANNEL_COMMODITY: ${{ secrets.CHANNEL_COMMODITY }}
