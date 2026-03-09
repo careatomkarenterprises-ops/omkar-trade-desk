@@ -1,10 +1,8 @@
-# Core Data Processing
+# Core
 pandas==2.0.3
 numpy==1.24.3
 yfinance==0.2.28
 requests==2.31.0
-
-# Telegram
 python-telegram-bot==20.3
 
 # Date/Time
@@ -14,14 +12,12 @@ pytz==2023.3
 # Utilities
 python-dotenv==1.0.0
 cachetools==5.3.1
-
-# Logging
 colorlog==6.7.0
+schedule==1.2.0
 
-# News API
+# News
 newsapi-python==0.2.7
 
-# For potential future use
-schedule==1.2.0
-matplotlib>=3.5.0
-mplfinance>=0.12.7
+# Charting (optional - for future)
+# matplotlib>=3.5.0
+# mplfinance>=0.12.7
