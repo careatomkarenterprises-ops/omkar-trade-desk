@@ -88,9 +88,9 @@ class OmkarScanner:
                 if data is not None:
                     pattern = self.detector.analyze(symbol, data)
                     
-                    if pattern:
+                    if pattern and pattern.get('has_pattern', False):
                         patterns_found.append(pattern)
-                        logger.info(f"✅ Pattern found in {symbol}: {pattern['primary_pattern']}")
+                        logger.info(f"✅ Pattern found in {symbol}: {pattern['primary_pattern']} (Strength: {pattern['strength']})")
                         
                         # Determine channel
                         channel = self.get_channel_for_stock(symbol)
@@ -113,10 +113,11 @@ class OmkarScanner:
                 data = self.fetcher.get_index_data(idx)
                 if data is not None:
                     pattern = self.detector.analyze(idx, data)
-                    if pattern:
+                    if pattern and pattern.get('has_pattern', False):
                         patterns_found.append(pattern)
                         channel = 'nifty' if 'NIFTY' in idx else 'banknifty'
                         self.poster.post_pattern(channel, pattern)
+                        logger.info(f"✅ Pattern found in {idx}")
             except Exception as e:
                 logger.error(f"Error scanning {idx}: {e}")
         
@@ -132,9 +133,10 @@ class OmkarScanner:
                 data = self.fetcher.get_commodity_data(comm)
                 if data is not None:
                     pattern = self.detector.analyze(comm, data)
-                    if pattern:
+                    if pattern and pattern.get('has_pattern', False):
                         patterns_found.append(pattern)
                         self.poster.post_pattern('commodity', pattern)
+                        logger.info(f"✅ Pattern found in {comm}")
             except Exception as e:
                 logger.error(f"Error scanning {comm}: {e}")
         
@@ -178,6 +180,12 @@ class OmkarScanner:
         # Log summary
         print("\n" + "="*60)
         print(f"📊 SCAN COMPLETE - Total patterns: {len(all_patterns)}")
+        if all_patterns:
+            print("\nPatterns found:")
+            for p in all_patterns:
+                print(f"  • {p['symbol']}: {p['primary_pattern']} ({p['strength']*100:.0f}%)")
+        else:
+            print("\n  No patterns detected in this scan")
         print("="*60)
         
         # Save to history
@@ -189,17 +197,19 @@ class OmkarScanner:
         
         self.save_patterns_log()
         
-        # Send summary to education channel
+        # Send summary to education channel if patterns found
         if all_patterns:
             summary = f"""
 📊 **Scanner Summary - {datetime.now().strftime('%d %b %Y, %H:%M')}**
 
 🔍 Total patterns detected: {len(all_patterns)}
 
-Top patterns:
 """
-            for p in all_patterns[:3]:
+            for p in all_patterns[:5]:  # Show top 5
                 summary += f"• {p['symbol']}: {p['primary_pattern']} ({p['strength']*100:.0f}%)\n"
+            
+            if len(all_patterns) > 5:
+                summary += f"• ... and {len(all_patterns) - 5} more\n"
             
             summary += "\n👉 Full access: omkar.in/scanner"
             
