@@ -135,19 +135,19 @@ class DataFetcher:
     
     def get_stock_data(self, symbol: str) -> Optional[pd.DataFrame]:
         """Get stock data with default parameters"""
-        return self.fetch_data(symbol, period="1mo", interval="15m")
+        return self.fetch_data(symbol, period="5d", interval="15m")
     
     def get_index_data(self, index_name: str) -> Optional[pd.DataFrame]:
         """Get index data"""
-        return self.fetch_data(index_name, period="1mo", interval="15m")
+        return self.fetch_data(index_name, period="5d", interval="15m")
     
     def get_commodity_data(self, commodity: str) -> Optional[pd.DataFrame]:
         """Get commodity data"""
-        return self.fetch_data(commodity, period="1mo", interval="1h")
+        return self.fetch_data(commodity, period="5d", interval="1h")
     
     def get_forex_data(self, pair: str) -> Optional[pd.DataFrame]:
         """Get forex data"""
-        return self.fetch_data(pair, period="1mo", interval="1h")
+        return self.fetch_data(pair, period="5d", interval="1h")
     
     def get_all_indices(self) -> Dict[str, pd.DataFrame]:
         """Fetch all major indices"""
@@ -168,3 +168,44 @@ class DataFetcher:
             if data is not None:
                 result[comm] = data
         return result
+    
+    def get_market_summary(self) -> Dict:
+        """Get quick market summary for educational posts"""
+        summary = {}
+        
+        # Get Nifty
+        nifty = self.get_index_data('NIFTY 50')
+        if nifty is not None:
+            summary['nifty'] = {
+                'price': round(nifty['Close'].iloc[-1], 2),
+                'change': round(nifty['Close'].iloc[-1] - nifty['Open'].iloc[0], 2),
+                'change_pct': round(((nifty['Close'].iloc[-1] - nifty['Open'].iloc[0]) / nifty['Open'].iloc[0]) * 100, 2)
+            }
+        
+        # Get Bank Nifty
+        bank = self.get_index_data('BANK NIFTY')
+        if bank is not None:
+            summary['banknifty'] = {
+                'price': round(bank['Close'].iloc[-1], 2),
+                'change': round(bank['Close'].iloc[-1] - bank['Open'].iloc[0], 2),
+                'change_pct': round(((bank['Close'].iloc[-1] - bank['Open'].iloc[0]) / bank['Open'].iloc[0]) * 100, 2)
+            }
+        
+        # Get Gold
+        gold = self.get_commodity_data('GOLD')
+        if gold is not None:
+            summary['gold'] = {
+                'price': round(gold['Close'].iloc[-1], 2),
+                'change': round(gold['Close'].iloc[-1] - gold['Open'].iloc[0], 2),
+                'change_pct': round(((gold['Close'].iloc[-1] - gold['Open'].iloc[0]) / gold['Open'].iloc[0]) * 100, 2)
+            }
+        
+        # Get USD/INR
+        usdinr = self.get_forex_data('USDINR')
+        if usdinr is not None:
+            summary['usdinr'] = {
+                'rate': round(usdinr['Close'].iloc[-1], 3),
+                'change': round(usdinr['Close'].iloc[-1] - usdinr['Open'].iloc[0], 3)
+            }
+        
+        return summary
