@@ -46,7 +46,7 @@ class PatternDetector:
                         valley_price = closes[-5 + valley_idx]
                         current_price = closes[-1]
                         
-                        if current_price > valley_price * 1.01:  # At least 1% up
+                        if current_price > valley_price * 1.005:  # At least 0.5% up
                             strength = min((current_price / valley_price - 1) * 100, 95) / 100
                             
                             return {
@@ -64,7 +64,7 @@ class PatternDetector:
             logger.error(f"Error in V-pattern detection: {e}")
             return {'detected': False}
     
-    def detect_volume_spike(self, data: pd.DataFrame, threshold: float = 2.0) -> Dict:
+    def detect_volume_spike(self, data: pd.DataFrame, threshold: float = 1.8) -> Dict:
         """
         Detect volume spike patterns
         """
@@ -104,7 +104,7 @@ class PatternDetector:
             prev_price = data['Close'].iloc[-2]
             
             # Check if we're near support and bouncing
-            near_support = current_price <= recent_low * 1.02
+            near_support = current_price <= recent_low * 1.015
             bouncing = current_price > prev_price
             
             if near_support and bouncing:
@@ -151,6 +151,53 @@ class PatternDetector:
             logger.error(f"Error in breakout detection: {e}")
             return {'detected': False}
     
+    def detect_trend_strength(self, data: pd.DataFrame) -> Dict:
+        """
+        Detect trend strength using moving averages
+        """
+        try:
+            if len(data) < 50:
+                return {'trend': 'neutral', 'strength': 0.5}
+            
+            sma_20 = data['Close'].rolling(20).mean().iloc[-1]
+            sma_50 = data['Close'].rolling(50).mean().iloc[-1]
+            current = data['Close'].iloc[-1]
+            
+            if current > sma_20 > sma_50:
+                return {
+                    'trend': 'bullish',
+                    'strength': 0.8,
+                    'description': 'Strong uptrend - price above both MAs'
+                }
+            elif current < sma_20 < sma_50:
+                return {
+                    'trend': 'bearish',
+                    'strength': 0.8,
+                    'description': 'Strong downtrend - price below both MAs'
+                }
+            elif current > sma_20:
+                return {
+                    'trend': 'bullish',
+                    'strength': 0.6,
+                    'description': 'Weak uptrend - consolidating'
+                }
+            elif current < sma_20:
+                return {
+                    'trend': 'bearish',
+                    'strength': 0.6,
+                    'description': 'Weak downtrend - consolidating'
+                }
+            else:
+                return {
+                    'trend': 'neutral',
+                    'strength': 0.5,
+                    'description': 'No clear trend - range bound'
+                }
+            
+        except Exception as e:
+            logger.error(f"Error in trend detection: {e}")
+            return {'trend': 'neutral', 'strength': 0.5}
+    
     def analyze(self, symbol: str, data: pd.DataFrame) -> Optional[Dict]:
         """
         Complete analysis of a symbol
@@ -181,8 +228,28 @@ class PatternDetector:
         if breakout['detected']:
             patterns.append(breakout)
         
+        # Get trend
+        trend = self.detect_trend_strength(data)
+        
+        # Calculate volume ratio
+        avg_vol = data['Volume'].iloc[-20:].mean() if len(data) >= 20 else data['Volume'].mean()
+        current_vol = data['Volume'].iloc[-1]
+        volume_ratio = current_vol / avg_vol if avg_vol > 0 else 1
+        
         if not patterns:
-            return None
+            return {
+                'symbol': symbol,
+                'time': datetime.now().strftime('%H:%M IST'),
+                'date': datetime.now().strftime('%d %b %Y'),
+                'price': round(data['Close'].iloc[-1], 2),
+                'patterns': [],
+                'primary_pattern': 'No Pattern',
+                'strength': 0.3,
+                'trend': trend['trend'],
+                'trend_description': trend['description'],
+                'volume_ratio': round(volume_ratio, 2),
+                'has_pattern': False
+            }
         
         # Get best pattern (highest strength)
         best_pattern = max(patterns, key=lambda x: x.get('strength', 0))
@@ -195,5 +262,8 @@ class PatternDetector:
             'patterns': patterns,
             'primary_pattern': best_pattern['pattern'],
             'strength': best_pattern.get('strength', 0.7),
-            'volume_ratio': round(data['Volume'].iloc[-1] / data['Volume'].iloc[-20:].mean(), 2)
+            'trend': trend['trend'],
+            'trend_description': trend['description'],
+            'volume_ratio': round(volume_ratio, 2),
+            'has_pattern': True
         }
