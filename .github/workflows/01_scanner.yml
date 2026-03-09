@@ -2,7 +2,7 @@ name: 🔍 Omkar Scanner - Every 30 Minutes
 
 on:
   schedule:
-    - cron: '*/30 3-10 * * 1-5'
+    - cron: '*/30 3-10 * * 1-5'  # 9:00 AM to 3:30 PM IST
   workflow_dispatch:
 
 jobs:
@@ -28,7 +28,6 @@ jobs:
         env:
           PYTHONPATH: .
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          # ALL CHANNEL SECRETS - ADDED EVERYTHING
           CHANNEL_EDUCATION: ${{ secrets.CHANNEL_EDUCATION }}
           CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
           CHANNEL_NIFTY: ${{ secrets.CHANNEL_NIFTY }}
