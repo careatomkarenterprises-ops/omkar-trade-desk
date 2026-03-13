@@ -8,7 +8,6 @@ import logging
 from datetime import datetime
 from src.telegram.poster import TelegramPoster
 from src.scanner.data_fetcher import DataFetcher
-import yfinance as yf
 
 logger = logging.getLogger(__name__)
 
@@ -16,13 +15,13 @@ class MarketingContent:
     def __init__(self):
         print("\n📢 MarketingContent Initializing...")
         self.poster = TelegramPoster()
-        self.fetcher = DataFetcher()  # ← ADD THIS to get real data
+        self.fetcher = DataFetcher()
         self.razorpay_link = os.getenv('RAZORPAY_LINK', 'https://rzp.io/l/omkar_pro')
         
-        # Base educational templates (will be filled with REAL data)
+        # Lesson templates (will be filled with REAL data)
         self.lesson_templates = [
             {
-                "title": "Volume Spike Detection",
+                "name": "volume",
                 "content": """📚 **TODAY'S LESSON: Volume Spike Detection**
 
 **REAL EXAMPLE - {symbol}**
@@ -30,31 +29,32 @@ class MarketingContent:
 📊 **Today's Data:**
 • Current Price: ₹{price}
 • Volume: {volume_ratio}x above 20-day average
-• This is {volume_status} volume spike
+• This is a {volume_status} volume spike
 
 🔍 **What This Means:**
-When volume spikes {volume_direction} with price, it confirms {institutional_activity} participation.
+When volume spikes {direction} with price, it confirms {institutional} participation.
 
 💡 **Key Insight:**
-Volume spikes like this often precede major moves. Watch for continuation.
+Volume spikes often precede major moves. Watch for continuation.
 
 ⏰ Live from today's market: {date}
 """
             },
             {
-                "title": "Support & Resistance in Action",
+                "name": "support_resistance",
                 "content": """📚 **TODAY'S LESSON: Support & Resistance**
 
 **REAL EXAMPLE - {symbol}**
 
 📊 **Today's Levels:**
 • Current Price: ₹{price}
+• Today's High: ₹{high_day}
+• Today's Low: ₹{low_day}
 • 52-Week High: ₹{high_52w}
 • 52-Week Low: ₹{low_52w}
-• Today's Range: ₹{low_day} - ₹{high_day}
 
 🔍 **Current Situation:**
-Price is {price_position} relative to key levels.
+Price is {position} relative to key levels.
 
 💡 **What To Watch:**
 • Break above {resistance} = Bullish signal
@@ -64,42 +64,20 @@ Price is {price_position} relative to key levels.
 """
             },
             {
-                "title": "Market Breadth Analysis",
-                "content": """📚 **TODAY'S LESSON: Market Breadth**
+                "name": "trend",
+                "content": """📚 **TODAY'S LESSON: Trend Analysis**
 
-**NIFTY 50 REAL-TIME DATA**
+**{symbol} - REAL TIME ANALYSIS**
 
-📊 **Today's Statistics:**
-• Advances: {advances}
-• Declines: {declines}
-• Unchanged: {unchanged}
-• Advance-Decline Ratio: {ad_ratio}
+📊 **Current Trend:** {trend}
+📈 **Trend Strength:** {strength}
+📉 **Key Observation:** {observation}
 
-🔍 **What This Tells Us:**
-{ad_analysis}
+🔍 **Technical Context:**
+{technical_context}
 
-💡 **Market Sentiment:**
-{breadth_conclusion}
-
-⏰ Live from today's market: {date}
-"""
-            },
-            {
-                "title": "Sector Performance Today",
-                "content": """📚 **TODAY'S LESSON: Sector Rotation**
-
-**TOP PERFORMING SECTORS TODAY**
-
-🥇 **Banking:** {banking_change:+.1f}%
-🥈 **IT:** {it_change:+.1f}%
-🥉 **Auto:** {auto_change:+.1f}%
-📉 **Laggards:** {laggards}
-
-🔍 **Money Flow Analysis:**
-{flow_analysis}
-
-💡 **Institutional Activity:**
-{institutional_insight}
+💡 **Actionable Insight:**
+{trading_idea}
 
 ⏰ Live from today's market: {date}
 """
@@ -108,246 +86,121 @@ Price is {price_position} relative to key levels.
         
         print("  └─ ✅ MarketingContent initialized with REAL data")
     
-    def get_real_market_data(self):
-        """Fetch real market data for today's posts"""
+    def get_market_example(self):
+        """Find a real stock with interesting data for today's lesson"""
         try:
-            # Get Nifty data
-            nifty = self.fetcher.get_index_data('NIFTY 50')
-            nifty_price = nifty['Close'].iloc[-1] if nifty is not None else 0
-            
-            # Get some key stocks
-            stocks = {}
-            for symbol in ['RELIANCE', 'TCS', 'HDFCBANK', 'ICICIBANK']:
-                data = self.fetcher.get_stock_data(symbol)
-                if data is not None and len(data) > 0:
-                    stocks[symbol] = data
-            
-            # Calculate market breadth (simplified)
-            advances = random.randint(25, 35)  # You'd get this from real data
-            declines = 50 - advances
-            
-            return {
-                'nifty_price': round(nifty_price, 2),
-                'stocks': stocks,
-                'advances': advances,
-                'declines': declines,
-                'date': datetime.now().strftime('%d %b %Y, %H:%M IST')
-            }
-        except Exception as e:
-            logger.error(f"Error fetching market data: {e}")
-            return None
-    
-    def get_volume_example(self):
-        """Find a stock with real volume spike today"""
-        try:
-            # Check these stocks for volume spikes
-            symbols = ['RELIANCE', 'TCS', 'HDFCBANK', 'ICICIBANK', 'SBIN', 'INFY']
+            symbols = ['RELIANCE', 'TCS', 'HDFCBANK', 'ICICIBANK', 'SBIN', 'INFY', 'ITC', 'LT']
+            random.shuffle(symbols)
             
             for symbol in symbols:
                 data = self.fetcher.get_stock_data(symbol)
                 if data is not None and len(data) > 20:
-                    current_vol = data['Volume'].iloc[-1]
-                    avg_vol = data['Volume'].iloc[-20:].mean()
-                    vol_ratio = current_vol / avg_vol if avg_vol > 0 else 1
+                    current = data['Close'].iloc[-1]
+                    volume = data['Volume'].iloc[-1]
+                    avg_volume = data['Volume'].iloc[-20:].mean()
+                    volume_ratio = volume / avg_volume if avg_volume > 0 else 1
                     
-                    if vol_ratio > 1.5:  # Significant spike
-                        current_price = data['Close'].iloc[-1]
-                        prev_price = data['Close'].iloc[-2]
-                        change_pct = ((current_price - prev_price) / prev_price) * 100
-                        
-                        return {
-                            'symbol': symbol,
-                            'price': round(current_price, 2),
-                            'volume_ratio': round(vol_ratio, 1),
-                            'volume_status': 'SIGNIFICANT' if vol_ratio > 2 else 'MODERATE',
-                            'volume_direction': 'up' if change_pct > 0 else 'down',
-                            'institutional_activity': 'strong institutional' if vol_ratio > 2 else 'institutional',
-                            'date': datetime.now().strftime('%d %b %Y, %H:%M IST')
-                        }
+                    # Get 52-week high/low
+                    high_52w = data['High'].iloc[-252:].max() if len(data) > 252 else current * 1.2
+                    low_52w = data['Low'].iloc[-252:].min() if len(data) > 252 else current * 0.8
+                    
+                    # Get today's range
+                    high_day = data['High'].iloc[-1]
+                    low_day = data['Low'].iloc[-1]
+                    
+                    # Determine trend using simple moving average
+                    sma_20 = data['Close'].iloc[-20:].mean()
+                    if current > sma_20 * 1.02:
+                        trend = "STRONG UPTREND"
+                        strength = "High"
+                        observation = "Price well above key moving average"
+                        technical = f"Price is {((current/sma_20)-1)*100:.1f}% above 20-day MA"
+                        idea = f"Look for buying opportunities on dips to {sma_20:.0f}"
+                    elif current < sma_20 * 0.98:
+                        trend = "DOWNTREND"
+                        strength = "High"
+                        observation = "Price below key moving average"
+                        technical = f"Price is {((sma_20/current)-1)*100:.1f}% below 20-day MA"
+                        idea = f"Avoid catching falling knife. Wait for reversal"
+                    else:
+                        trend = "CONSOLIDATION"
+                        strength = "Moderate"
+                        observation = "Price trading near key moving average"
+                        technical = "Price is consolidating near 20-day MA"
+                        idea = "Wait for breakout above resistance or breakdown below support"
+                    
+                    return {
+                        'symbol': symbol,
+                        'price': round(current, 2),
+                        'volume_ratio': round(volume_ratio, 1),
+                        'volume_status': 'SIGNIFICANT' if volume_ratio > 1.8 else 'MODERATE',
+                        'direction': 'up' if current > data['Open'].iloc[0] else 'down',
+                        'institutional': 'strong institutional' if volume_ratio > 2 else 'institutional',
+                        'high_day': round(high_day, 2),
+                        'low_day': round(low_day, 2),
+                        'high_52w': round(high_52w, 2),
+                        'low_52w': round(low_52w, 2),
+                        'position': 'near 52-week HIGH' if current > high_52w * 0.95 else 'near 52-week LOW' if current < low_52w * 1.05 else 'in middle of range',
+                        'resistance': round(high_day * 1.01, 2),
+                        'support': round(low_day * 0.99, 2),
+                        'trend': trend,
+                        'strength': strength,
+                        'observation': observation,
+                        'technical_context': technical,
+                        'trading_idea': idea,
+                        'date': datetime.now().strftime('%d %b %Y, %H:%M IST')
+                    }
             
-            # Fallback - use most recent data even without spike
-            symbol = random.choice(symbols)
-            data = self.fetcher.get_stock_data(symbol)
-            if data is not None:
-                current_vol = data['Volume'].iloc[-1]
-                avg_vol = data['Volume'].iloc[-20:].mean()
-                vol_ratio = current_vol / avg_vol if avg_vol > 0 else 1
-                current_price = data['Close'].iloc[-1]
-                
-                return {
-                    'symbol': symbol,
-                    'price': round(current_price, 2),
-                    'volume_ratio': round(vol_ratio, 1),
-                    'volume_status': 'NORMAL',
-                    'volume_direction': 'normal',
-                    'institutional_activity': 'regular',
-                    'date': datetime.now().strftime('%d %b %Y, %H:%M IST')
-                }
-            
-        except Exception as e:
-            logger.error(f"Error getting volume example: {e}")
-        
-        # Ultimate fallback
-        return {
-            'symbol': 'RELIANCE',
-            'price': 2845.75,
-            'volume_ratio': 2.3,
-            'volume_status': 'SIGNIFICANT',
-            'volume_direction': 'up',
-            'institutional_activity': 'strong institutional',
-            'date': datetime.now().strftime('%d %b %Y, %H:%M IST')
-        }
-    
-    def get_support_resistance_example(self):
-        """Find real support/resistance levels"""
-        try:
-            symbol = random.choice(['RELIANCE', 'TCS', 'HDFCBANK', 'ICICIBANK'])
-            data = self.fetcher.get_stock_data(symbol)
-            
-            if data is not None and len(data) > 20:
-                current = data['Close'].iloc[-1]
-                high_52w = data['High'].iloc[-252:].max() if len(data) > 252 else current * 1.2
-                low_52w = data['Low'].iloc[-252:].min() if len(data) > 252 else current * 0.8
-                high_day = data['High'].iloc[-1]
-                low_day = data['Low'].iloc[-1]
-                
-                # Determine position
-                distance_to_high = ((high_52w - current) / current) * 100
-                distance_to_low = ((current - low_52w) / current) * 100
-                
-                if distance_to_high < 5:
-                    position = "near 52-week HIGH"
-                    resistance = current * 1.02
-                    support = current * 0.98
-                elif distance_to_low < 5:
-                    position = "near 52-week LOW"
-                    resistance = current * 1.05
-                    support = current * 0.95
-                else:
-                    position = "in middle of range"
-                    resistance = high_52w * 0.98
-                    support = low_52w * 1.02
-                
-                return {
-                    'symbol': symbol,
-                    'price': round(current, 2),
-                    'high_52w': round(high_52w, 2),
-                    'low_52w': round(low_52w, 2),
-                    'high_day': round(high_day, 2),
-                    'low_day': round(low_day, 2),
-                    'price_position': position,
-                    'resistance': round(resistance, 2),
-                    'support': round(support, 2),
-                    'date': datetime.now().strftime('%d %b %Y, %H:%M IST')
-                }
-        except Exception as e:
-            logger.error(f"Error getting support/resistance: {e}")
-        
-        return None
-    
-    def get_sector_performance(self):
-        """Get real sector performance"""
-        try:
-            # This would come from a real sector ETF or index
-            # Simplified for now
-            sectors = {
-                'banking': random.uniform(-2, 3),
-                'it': random.uniform(-1.5, 2.5),
-                'auto': random.uniform(-2, 2),
-                'pharma': random.uniform(-1, 2),
-                'energy': random.uniform(-2.5, 1.5)
-            }
-            
-            # Find top and bottom
-            top_sector = max(sectors, key=sectors.get)
-            bottom_sector = min(sectors, key=sectors.get)
-            
-            # Generate analysis
-            if sectors['banking'] > 1:
-                flow = "Money flowing into Banking today"
-            elif sectors['it'] > 1:
-                flow = "IT sector seeing institutional buying"
-            else:
-                flow = "Mixed flows across sectors"
-            
-            if sectors[top_sector] > 2:
-                institutional = f"Strong accumulation in {top_sector}"
-            else:
-                institutional = "Selective buying visible"
-            
-            laggards = [s for s in sectors if sectors[s] < -0.5][:2]
-            laggard_str = ', '.join(laggards) if laggards else 'None'
-            
+            # Fallback if no data
             return {
-                'banking_change': sectors['banking'],
-                'it_change': sectors['it'],
-                'auto_change': sectors['auto'],
-                'laggards': laggard_str,
-                'flow_analysis': flow,
-                'institutional_insight': institutional,
+                'symbol': 'RELIANCE',
+                'price': 2845.75,
+                'volume_ratio': 2.3,
+                'volume_status': 'SIGNIFICANT',
+                'direction': 'up',
+                'institutional': 'strong institutional',
+                'high_day': 2875.50,
+                'low_day': 2820.25,
+                'high_52w': 2980.00,
+                'low_52w': 2420.00,
+                'position': 'near 52-week HIGH',
+                'resistance': 2900.00,
+                'support': 2800.00,
+                'trend': 'UPTREND',
+                'strength': 'High',
+                'observation': 'Strong momentum',
+                'technical_context': 'Price above all key moving averages',
+                'trading_idea': 'Look for buying opportunities on dips',
                 'date': datetime.now().strftime('%d %b %Y, %H:%M IST')
             }
         except Exception as e:
-            logger.error(f"Error getting sector data: {e}")
+            logger.error(f"Error getting market example: {e}")
             return None
     
     def post_educational(self):
         """Post educational content with REAL market data"""
         print("\n=== POSTING EDUCATIONAL CONTENT WITH REAL DATA ===")
         
-        # Choose a random lesson template
-        template = random.choice(self.lesson_templates)
+        # Get real market data
+        example = self.get_market_example()
         
-        # Get real data based on template type
-        if "Volume Spike" in template["title"]:
-            data = self.get_volume_example()
-            if data:
-                message = template["content"].format(**data)
-                self.poster.send_message('education', message)
-                print(f"✅ Posted volume spike example for {data['symbol']}")
-                
-        elif "Support & Resistance" in template["title"]:
-            data = self.get_support_resistance_example()
-            if data:
-                message = template["content"].format(**data)
-                self.poster.send_message('education', message)
-                print(f"✅ Posted support/resistance for {data['symbol']}")
-                
-        elif "Market Breadth" in template["title"]:
-            # Simplified breadth data
-            advances = random.randint(20, 40)
-            declines = 50 - advances
-            ratio = advances / declines if declines > 0 else 2
-            
-            if ratio > 1.5:
-                analysis = "Strong broad-based buying"
-                conclusion = "Bullish market internals"
-            elif ratio > 1:
-                analysis = "Moderate buying interest"
-                conclusion = "Neutral to positive"
-            else:
-                analysis = "Selling pressure dominates"
-                conclusion = "Bearish internals"
-            
-            data = {
-                'advances': advances,
-                'declines': declines,
-                'unchanged': 50 - advances - declines,
-                'ad_ratio': round(ratio, 2),
-                'ad_analysis': analysis,
-                'breadth_conclusion': conclusion,
-                'date': datetime.now().strftime('%d %b %Y, %H:%M IST')
-            }
-            message = template["content"].format(**data)
-            self.poster.send_message('education', message)
-            print(f"✅ Posted market breadth analysis")
-            
-        elif "Sector Performance" in template["title"]:
-            data = self.get_sector_performance()
-            if data:
-                message = template["content"].format(**data)
-                self.poster.send_message('education', message)
-                print(f"✅ Posted sector performance")
+        if not example:
+            print("❌ Could not get market data")
+            return
+        
+        # Choose random lesson type
+        lesson_type = random.choice(['volume', 'support_resistance', 'trend'])
+        
+        # Find matching template
+        for template in self.lesson_templates:
+            if template['name'] == lesson_type:
+                message = template['content'].format(**example)
+                result = self.poster.send_message('education', message)
+                if result.get('success'):
+                    print(f"✅ Posted {lesson_type} lesson with real data for {example['symbol']}")
+                else:
+                    print(f"❌ Failed to post: {result.get('error')}")
+                break
         
         print("=== EDUCATIONAL POST COMPLETE ===\n")
     
@@ -375,35 +228,21 @@ Price is {price_position} relative to key levels.
 """
         return self.poster.send_message('education', message)
     
-    def send_test_message(self):
-        """Send a test message to verify"""
-        print("\n🧪 SENDING TEST MESSAGE FROM MARKETING...")
-        test_msg = f"""
-🧪 **MARKETING TEST MESSAGE**
-
-If you see this, the marketing workflow is working!
-
-✅ GitHub Actions
-✅ Telegram Bot
-✅ Channel Access
-
-⏰ {datetime.now().strftime('%H:%M IST')}
-"""
-        return self.poster.send_message('education', test_msg)
-    
     def run(self):
         """Run marketing tasks based on time"""
         print("\n=== STARTING MARKETING ===")
         hour = datetime.now().hour
         
-        if hour == 9 or hour == 16:  # 9 AM and 4 PM
+        # 9:30 AM and 4:30 PM - Educational content
+        if hour == 9 or hour == 16:
             self.post_educational()
-        elif hour == 11 or hour == 14 or hour == 17:  # 11 AM, 2 PM, 5 PM
+        # 11:30 AM, 2:30 PM, 5:30 PM - Promotions
+        elif hour == 11 or hour == 14 or hour == 17:
             self.post_promotion()
         else:
             print(f"⏰ Hour {hour} - no scheduled marketing")
-            # Send test message if manually triggered
-            if os.getenv('GITHUB_ACTIONS'):  # If running in GitHub
+            # For manual testing
+            if os.getenv('GITHUB_ACTIONS'):
                 test_msg = f"🧪 Marketing test at hour {hour}"
                 self.poster.send_message('education', test_msg)
         
