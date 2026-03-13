@@ -2,7 +2,7 @@
 Daily Reset - Clean up data files
 """
 
-import os  # ← THIS WAS MISSING!
+import os
 import json
 from pathlib import Path
 from datetime import datetime
@@ -45,6 +45,21 @@ class DailyReset:
                 shutil.copy(patterns_file, backup)
                 logger.info(f"Created backup: {backup}")
     
+    def reset_posted_news(self):
+        """Reset posted news tracker (keep only last 7 days)"""
+        posted_file = self.data_dir / 'posted_news.json'
+        if posted_file.exists():
+            try:
+                with open(posted_file, 'r') as f:
+                    news = json.load(f)
+                # Keep only last 50 items
+                if len(news) > 50:
+                    with open(posted_file, 'w') as f:
+                        json.dump(news[-50:], f)
+                    logger.info("Trimmed posted news tracker")
+            except:
+                pass
+    
     def send_daily_summary(self):
         """Send daily summary to education channel"""
         razorpay_link = os.getenv('RAZORPAY_LINK', 'https://rzp.io/l/omkar_pro')
@@ -53,9 +68,12 @@ class DailyReset:
 
 ✅ Cache cleaned
 ✅ Logs rotated
+✅ News tracker trimmed
 ✅ System ready for {datetime.now().strftime('%d %b %Y')}
 
 🟢 Scanner will run at 9:15 AM
+🟢 News updates every 30 minutes
+🟢 Educational content at 9:30 AM & 4:30 PM
 
 👉 [Join Premium]({razorpay_link})
 """
@@ -67,6 +85,7 @@ class DailyReset:
         logger.info("Starting daily reset...")
         self.cleanup_cache()
         self.rotate_logs()
+        self.reset_posted_news()
         self.send_daily_summary()
         logger.info("Daily reset complete")
 
