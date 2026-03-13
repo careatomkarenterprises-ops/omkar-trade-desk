@@ -29,7 +29,6 @@ class TelegramPoster:
             print(f"  ├─ Length: {len(self.bot_token)} characters")
             print(f"  ├─ First 10 chars: {self.bot_token[:10]}...")
             print(f"  ├─ Last 10 chars: ...{self.bot_token[-10:]}")
-            print(f"  ├─ Full token (masked): {self.bot_token[:5]}...{self.bot_token[-5:]}")
         
         if not self.bot_token:
             print("  └─ ❌ FATAL: No token found!")
@@ -46,7 +45,6 @@ class TelegramPoster:
             print(f"  ├─ Response status: {test_response.status_code}")
             if test_response.status_code == 200:
                 bot_info = test_response.json()
-                print(f"  ├─ Response OK: {bot_info.get('ok')}")
                 if bot_info.get('ok'):
                     bot_user = bot_info.get('result', {}).get('username', 'unknown')
                     print(f"  ├─ Bot username: @{bot_user}")
@@ -84,18 +82,14 @@ class TelegramPoster:
         if self.channels.get('education'):
             test_channel = self.channels['education']
             try:
-                # Try to get chat info
                 get_chat_url = f"{self.base_url}/getChat"
                 payload = {'chat_id': test_channel}
                 chat_response = requests.post(get_chat_url, json=payload, timeout=10)
-                print(f"  ├─ getChat status: {chat_response.status_code}")
                 if chat_response.status_code == 200:
                     chat_data = chat_response.json()
                     if chat_data.get('ok'):
                         chat_info = chat_data.get('result', {})
-                        print(f"  ├─ Chat type: {chat_info.get('type', 'unknown')}")
                         print(f"  ├─ Chat title: {chat_info.get('title', 'unknown')}")
-                        print(f"  ├─ Chat username: @{chat_info.get('username', 'unknown')}")
                         print(f"  └─ ✅ Bot has access to this channel!")
                     else:
                         print(f"  └─ ❌ Chat error: {chat_data.get('description')}")
@@ -121,18 +115,11 @@ class TelegramPoster:
         """
         Send message to a Telegram channel
         """
-        print(f"\n📤 SENDING MESSAGE TO: {channel}")
-        print("-"*40)
-        
         try:
             chat_id = self.channels.get(channel)
             if not chat_id:
-                print(f"  ❌ Unknown channel: {channel}")
+                print(f"❌ Unknown channel: {channel}")
                 return {'success': False, 'error': 'Unknown channel'}
-            
-            print(f"  ├─ Chat ID: {chat_id[:5]}...{chat_id[-5:]}")
-            print(f"  ├─ Message length: {len(message)} chars")
-            print(f"  ├─ First 100 chars: {message[:100].replace(chr(10), ' ')}...")
             
             url = f"{self.base_url}/sendMessage"
             payload = {
@@ -142,30 +129,20 @@ class TelegramPoster:
                 'disable_web_page_preview': True
             }
             
-            print(f"  ├─ Making API request...")
             response = requests.post(url, json=payload, timeout=15)
-            
-            print(f"  ├─ Response status: {response.status_code}")
             
             if response.status_code == 200:
                 result = response.json()
-                print(f"  ├─ Telegram API response OK: {result.get('ok')}")
                 if result.get('ok'):
-                    print(f"  ├─ Message ID: {result.get('result', {}).get('message_id')}")
-                    print(f"  ├─ Date: {result.get('result', {}).get('date')}")
-                    print(f"  └─ ✅ MESSAGE SENT SUCCESSFULLY!")
+                    print(f"✅ Message sent to {channel}")
                     logger.info(f"Message sent to {channel}")
                     return {'success': True, 'data': result}
                 else:
-                    error_desc = result.get('description', 'Unknown error')
-                    print(f"  └─ ❌ Telegram error: {error_desc}")
-                    return {'success': False, 'error': error_desc}
+                    return {'success': False, 'error': result.get('description')}
             else:
-                print(f"  └─ ❌ HTTP error: {response.text}")
                 return {'success': False, 'error': response.text}
                 
         except Exception as e:
-            print(f"  └─ ❌ Exception: {str(e)}")
             logger.error(f"Error sending message: {e}")
             return {'success': False, 'error': str(e)}
     
@@ -173,25 +150,14 @@ class TelegramPoster:
         """
         Send a photo to Telegram channel with optional caption
         """
-        print(f"\n📸 SENDING PHOTO TO: {channel}")
-        print("-"*40)
-        
         try:
             chat_id = self.channels.get(channel)
             if not chat_id:
-                print(f"  ❌ Unknown channel: {channel}")
                 return {'success': False, 'error': 'Unknown channel'}
-            
-            print(f"  ├─ Chat ID: {chat_id[:5]}...{chat_id[-5:]}")
-            print(f"  ├─ Photo path: {photo_path}")
-            print(f"  ├─ Caption length: {len(caption)} chars")
             
             # Check if file exists
             if not os.path.exists(photo_path):
-                print(f"  ❌ Photo file not found: {photo_path}")
                 return {'success': False, 'error': 'Photo file not found'}
-            
-            print(f"  ├─ File size: {os.path.getsize(photo_path)} bytes")
             
             url = f"{self.base_url}/sendPhoto"
             
@@ -202,31 +168,19 @@ class TelegramPoster:
                     'caption': caption + self.disclaimer,
                     'parse_mode': 'Markdown'
                 }
-                
-                print(f"  ├─ Uploading photo...")
                 response = requests.post(url, files=files, data=data, timeout=30)
-            
-            print(f"  ├─ Response status: {response.status_code}")
             
             if response.status_code == 200:
                 result = response.json()
-                print(f"  ├─ Telegram API response OK: {result.get('ok')}")
                 if result.get('ok'):
-                    print(f"  ├─ Message ID: {result.get('result', {}).get('message_id')}")
-                    print(f"  ├─ Photo sent successfully!")
-                    print(f"  └─ ✅ PHOTO SENT SUCCESSFULLY!")
                     logger.info(f"Photo sent to {channel}")
                     return {'success': True, 'data': result}
                 else:
-                    error_desc = result.get('description', 'Unknown error')
-                    print(f"  └─ ❌ Telegram error: {error_desc}")
-                    return {'success': False, 'error': error_desc}
+                    return {'success': False, 'error': result.get('description')}
             else:
-                print(f"  └─ ❌ HTTP error: {response.text}")
                 return {'success': False, 'error': response.text}
                 
         except Exception as e:
-            print(f"  └─ ❌ Exception: {str(e)}")
             logger.error(f"Error sending photo: {e}")
             return {'success': False, 'error': str(e)}
     
@@ -234,13 +188,13 @@ class TelegramPoster:
         """
         Post a pattern detection alert
         """
-        print(f"\n🔍 Posting pattern to {channel}")
         message = f"""
 🔍 **PATTERN DETECTED - Omkar Scanner**
 
 🎯 **{pattern['symbol']}**
 📊 **Pattern:** {pattern['primary_pattern']}
 📈 **Strength:** {pattern['strength']*100:.0f}%
+📊 **Trend:** {pattern.get('trend', 'neutral').upper()}
 
 💰 **Price:** ₹{pattern['price']}
 📊 **Volume:** {pattern['volume_ratio']}x avg
@@ -254,7 +208,6 @@ class TelegramPoster:
         """
         Post market update to education channel
         """
-        print(f"\n📊 Posting market update")
         message = f"""
 📊 **MARKET UPDATE**
 
@@ -266,12 +219,12 @@ class TelegramPoster:
 """
         return self.send_message('education', message)
     
-    def post_promotion(self) -> Dict:
+    def post_promotion(self, razorpay_link: str = None) -> Dict:
         """
         Post promotional content with payment link
         """
-        print(f"\n📢 Posting promotion")
-        razorpay_link = os.getenv('RAZORPAY_LINK', 'https://rzp.io/l/omkar_pro')
+        if not razorpay_link:
+            razorpay_link = os.getenv('RAZORPAY_LINK', 'https://rzp.io/l/omkar_pro')
         
         message = f"""
 📢 **Omkar Scanner Premium**
@@ -279,7 +232,7 @@ class TelegramPoster:
 ✅ Real-time pattern detection
 ✅ Multi-asset coverage
 ✅ 30-min updates during market hours
-✅ Educational content
+✅ Educational content daily
 
 🔥 **Limited Offer:** ₹999/month
 
