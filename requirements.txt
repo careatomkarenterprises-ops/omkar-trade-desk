@@ -17,7 +17,3 @@ schedule==1.2.0
 
 # News
 newsapi-python==0.2.7
-
-# Charting (optional - for future)
-# matplotlib>=3.5.0
-# mplfinance>=0.12.7
