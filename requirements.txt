@@ -17,3 +17,6 @@ schedule==1.2.0
 
 # News
 newsapi-python==0.2.7
+
+# Zerodha Kite Connect
+kiteconnect>=5.0.0
