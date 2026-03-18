@@ -2,7 +2,7 @@ name: 📰 News Alerts - Every 30 Minutes
 
 on:
   schedule:
-    - cron: '*/30 * * * *'  # Every 30 minutes
+    - cron: '*/30 * * * *'  # Every 30 minutes (reduced from 15 to avoid spam)
   workflow_dispatch:
 
 jobs:
