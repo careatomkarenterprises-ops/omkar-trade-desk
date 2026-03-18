@@ -20,7 +20,7 @@ class ZerodhaFetcher:
     
     def __init__(self):
         self.api_key = os.getenv('ZERODHA_API_KEY')
-        self.access_token = os.getenv('ZERODHA_ACCESS_TOKEN')
+        self.access_token = os.getenv('KITE_ACCESS_TOKEN')
         
         if not self.api_key or not self.access_token:
             logger.error("Zerodha credentials missing!")
