@@ -17,7 +17,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.scanner.data_fetcher import DataFetcher
 from src.scanner.patterns import PatternDetector
 from src.telegram.poster import TelegramPoster
-from src.utils.logger import setup_logger
 
 # Setup logging
 logger = logging.getLogger(__name__)
