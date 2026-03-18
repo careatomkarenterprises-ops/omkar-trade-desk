@@ -1,58 +1,41 @@
 """
-Data Fetcher - Yahoo Finance Only
-NO ZERODHA TOKEN NEEDED - 100% AUTOMATED
+Data Fetcher - Yahoo Finance Only with Retry Logic
 """
 
 import yfinance as yf
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 import time
 import logging
-from typing import Dict, Optional, List
-import json
+from typing import Optional, Dict
 from pathlib import Path
+import random
 
 logger = logging.getLogger(__name__)
 
 class DataFetcher:
     """
-    Fetch market data from Yahoo Finance
-    No authentication required - works 24/7 automatically
+    Fetch market data from Yahoo Finance with retry logic
     """
     
     def __init__(self):
         self.cache_dir = Path("data/cache")
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.cache_duration = 300  # 5 minutes cache
-        self.request_delay = 0.5  # Rate limiting delay
+        self.cache_duration = 600  # 10 minutes cache (increased from 5)
+        self.request_delay = 1.0  # 1 second delay between requests (increased)
+        self.max_retries = 3  # Number of retry attempts
         
-        # Symbol mappings for Yahoo Finance
+        # Symbol mappings (same as before)
         self.symbol_map = {
-            # Indices
             'NIFTY 50': '^NSEI',
             'BANK NIFTY': '^NSEBANK',
-            'SENSEX': '^BSESN',
-            'NIFTY IT': '^CNXIT',
-            
-            # Commodities
             'GOLD': 'GC=F',
             'SILVER': 'SI=F',
             'CRUDEOIL': 'CL=F',
-            'NATURALGAS': 'NG=F',
-            
-            # Forex
             'USDINR': 'INR=X',
-            'EURINR': 'EURINR=X',
-            'GBPINR': 'GBPINR=X',
-            'JPYINR': 'JPYINR=X',
-            
-            # US Markets
-            'DOW': '^DJI',
-            'S&P500': '^GSPC',
-            'NASDAQ': '^IXIC'
         }
         
-        # Nifty 50 stocks (top ones)
+        # Reduced stock list to prevent rate limiting
         self.nifty_stocks = {
             'RELIANCE': 'RELIANCE.NS',
             'TCS': 'TCS.NS',
@@ -60,50 +43,21 @@ class DataFetcher:
             'INFY': 'INFY.NS',
             'ICICIBANK': 'ICICIBANK.NS',
             'SBIN': 'SBIN.NS',
-            'BHARTIARTL': 'BHARTIARTL.NS',
             'ITC': 'ITC.NS',
             'LT': 'LT.NS',
-            'SUNPHARMA': 'SUNPHARMA.NS',
-            'AXISBANK': 'AXISBANK.NS',
-            'KOTAKBANK': 'KOTAKBANK.NS',
-            'HCLTECH': 'HCLTECH.NS',
-            'TATASTEEL': 'TATASTEEL.NS',
-            'MARUTI': 'MARUTI.NS',
-            'TITAN': 'TITAN.NS',
-            'WIPRO': 'WIPRO.NS',
-            'ONGC': 'ONGC.NS',
-            'NTPC': 'NTPC.NS',
-            'POWERGRID': 'POWERGRID.NS'
         }
         
-        logger.info("DataFetcher initialized - No authentication required")
+        logger.info("DataFetcher initialized with retry logic")
     
-    def get_yahoo_symbol(self, symbol: str) -> str:
-        """Convert common symbol names to Yahoo Finance symbols"""
-        # Check if it's a special symbol
-        if symbol in self.symbol_map:
-            return self.symbol_map[symbol]
-        
-        # Check if it's a Nifty stock
-        if symbol in self.nifty_stocks:
-            return self.nifty_stocks[symbol]
-        
-        # Default: add .NS for NSE stocks
-        if not symbol.endswith(('.NS', '.BO', '=F', '^')):
-            return f"{symbol}.NS"
-        
-        return symbol
-    
-    def fetch_data(self, symbol: str, period: str = "1mo", interval: str = "15m") -> Optional[pd.DataFrame]:
+    def fetch_data_with_retry(self, symbol: str, period: str = "5d", interval: str = "15m", attempt: int = 1) -> Optional[pd.DataFrame]:
         """
-        Fetch data from Yahoo Finance
-        No token needed - works automatically
+        Fetch data with retry logic
         """
         try:
             # Get proper Yahoo symbol
             yahoo_symbol = self.get_yahoo_symbol(symbol)
             
-            # Check cache
+            # Check cache first
             cache_file = self.cache_dir / f"{yahoo_symbol}_{period}_{interval}.parquet"
             if cache_file.exists():
                 modified_time = datetime.fromtimestamp(cache_file.stat().st_mtime)
@@ -111,11 +65,11 @@ class DataFetcher:
                     logger.debug(f"Using cached data for {symbol}")
                     return pd.read_parquet(cache_file)
             
-            # Rate limiting
-            time.sleep(self.request_delay)
+            # Add jitter to delay to avoid rate limiting
+            time.sleep(self.request_delay + random.uniform(0, 0.5))
             
             # Fetch from Yahoo Finance
-            logger.info(f"Fetching {symbol} as {yahoo_symbol}")
+            logger.info(f"Fetching {symbol} as {yahoo_symbol} (attempt {attempt})")
             ticker = yf.Ticker(yahoo_symbol)
             data = ticker.history(period=period, interval=interval)
             
@@ -126,86 +80,31 @@ class DataFetcher:
             # Cache the data
             data.to_parquet(cache_file)
             logger.info(f"Successfully fetched {symbol} - {len(data)} rows")
-            
             return data
             
         except Exception as e:
-            logger.error(f"Error fetching {symbol}: {e}")
-            return None
+            logger.error(f"Error fetching {symbol} (attempt {attempt}): {e}")
+            
+            # Retry logic
+            if attempt < self.max_retries:
+                wait_time = 5 * attempt  # Exponential backoff: 5s, 10s, 15s
+                logger.info(f"Retrying {symbol} in {wait_time} seconds...")
+                time.sleep(wait_time)
+                return self.fetch_data_with_retry(symbol, period, interval, attempt + 1)
+            else:
+                logger.error(f"Failed to fetch {symbol} after {self.max_retries} attempts")
+                return None
+    
+    def get_yahoo_symbol(self, symbol: str) -> str:
+        """Convert common symbol names to Yahoo Finance symbols"""
+        if symbol in self.symbol_map:
+            return self.symbol_map[symbol]
+        if symbol in self.nifty_stocks:
+            return self.nifty_stocks[symbol]
+        if not symbol.endswith(('.NS', '.BO', '=F', '^')):
+            return f"{symbol}.NS"
+        return symbol
     
     def get_stock_data(self, symbol: str) -> Optional[pd.DataFrame]:
-        """Get stock data with default parameters"""
-        return self.fetch_data(symbol, period="5d", interval="15m")
-    
-    def get_index_data(self, index_name: str) -> Optional[pd.DataFrame]:
-        """Get index data"""
-        return self.fetch_data(index_name, period="5d", interval="15m")
-    
-    def get_commodity_data(self, commodity: str) -> Optional[pd.DataFrame]:
-        """Get commodity data"""
-        return self.fetch_data(commodity, period="5d", interval="1h")
-    
-    def get_forex_data(self, pair: str) -> Optional[pd.DataFrame]:
-        """Get forex data"""
-        return self.fetch_data(pair, period="5d", interval="1h")
-    
-    def get_all_indices(self) -> Dict[str, pd.DataFrame]:
-        """Fetch all major indices"""
-        indices = ['NIFTY 50', 'BANK NIFTY', 'SENSEX']
-        result = {}
-        for idx in indices:
-            data = self.get_index_data(idx)
-            if data is not None:
-                result[idx] = data
-        return result
-    
-    def get_all_commodities(self) -> Dict[str, pd.DataFrame]:
-        """Fetch all commodities"""
-        commodities = ['GOLD', 'SILVER', 'CRUDEOIL']
-        result = {}
-        for comm in commodities:
-            data = self.get_commodity_data(comm)
-            if data is not None:
-                result[comm] = data
-        return result
-    
-    def get_market_summary(self) -> Dict:
-        """Get quick market summary for educational posts"""
-        summary = {}
-        
-        # Get Nifty
-        nifty = self.get_index_data('NIFTY 50')
-        if nifty is not None:
-            summary['nifty'] = {
-                'price': round(nifty['Close'].iloc[-1], 2),
-                'change': round(nifty['Close'].iloc[-1] - nifty['Open'].iloc[0], 2),
-                'change_pct': round(((nifty['Close'].iloc[-1] - nifty['Open'].iloc[0]) / nifty['Open'].iloc[0]) * 100, 2)
-            }
-        
-        # Get Bank Nifty
-        bank = self.get_index_data('BANK NIFTY')
-        if bank is not None:
-            summary['banknifty'] = {
-                'price': round(bank['Close'].iloc[-1], 2),
-                'change': round(bank['Close'].iloc[-1] - bank['Open'].iloc[0], 2),
-                'change_pct': round(((bank['Close'].iloc[-1] - bank['Open'].iloc[0]) / bank['Open'].iloc[0]) * 100, 2)
-            }
-        
-        # Get Gold
-        gold = self.get_commodity_data('GOLD')
-        if gold is not None:
-            summary['gold'] = {
-                'price': round(gold['Close'].iloc[-1], 2),
-                'change': round(gold['Close'].iloc[-1] - gold['Open'].iloc[0], 2),
-                'change_pct': round(((gold['Close'].iloc[-1] - gold['Open'].iloc[0]) / gold['Open'].iloc[0]) * 100, 2)
-            }
-        
-        # Get USD/INR
-        usdinr = self.get_forex_data('USDINR')
-        if usdinr is not None:
-            summary['usdinr'] = {
-                'rate': round(usdinr['Close'].iloc[-1], 3),
-                'change': round(usdinr['Close'].iloc[-1] - usdinr['Open'].iloc[0], 3)
-            }
-        
-        return summary
+        """Get stock data with retry logic"""
+        return self.fetch_data_with_retry(symbol, period="5d", interval="15m")
