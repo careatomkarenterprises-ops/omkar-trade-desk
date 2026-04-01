@@ -16,7 +16,6 @@ class TelegramPoster:
     """
     
     def __init__(self):
-        # Print EVERYTHING for debugging
         print("\n" + "="*60)
         print("🔍 TELEGRAM POSTER INITIALIZATION")
         print("="*60)
@@ -100,12 +99,14 @@ class TelegramPoster:
         else:
             print(f"  └─ ❌ No education channel ID configured")
         
+        # ✅ ENHANCED DISCLAIMER with SEBI compliance
         self.disclaimer = """
-        
 ━━━━━━━━━━━━━━━━━━━━
-📚 **OMKAR ENTERPRISES**
+📚 **OMKAR ENTERPRISES** (A Division of TRFSK OMKAR SERVICES PVT LTD)
 ⚠️ Educational purpose only. Not investment advice.
-📊 Market investments are subject to risks."""
+⚖️ We are NOT SEBI registered. No trading recommendations.
+📊 Market investments are subject to risks.
+"""
         
         print("\n" + "="*60)
         print("✅ TelegramPoster initialization complete")
@@ -155,7 +156,6 @@ class TelegramPoster:
             if not chat_id:
                 return {'success': False, 'error': 'Unknown channel'}
             
-            # Check if file exists
             if not os.path.exists(photo_path):
                 return {'success': False, 'error': 'Photo file not found'}
             
@@ -186,7 +186,7 @@ class TelegramPoster:
     
     def post_pattern(self, channel: str, pattern: Dict) -> Dict:
         """
-        Post a pattern detection alert
+        Post a pattern detection alert to specific channel
         """
         message = f"""
 🔍 **PATTERN DETECTED - Omkar Scanner**
@@ -206,7 +206,7 @@ class TelegramPoster:
     
     def post_market_update(self, update: str) -> Dict:
         """
-        Post market update to education channel
+        Post market update to education channel only
         """
         message = f"""
 📊 **MARKET UPDATE**
@@ -221,7 +221,7 @@ class TelegramPoster:
     
     def post_promotion(self, razorpay_link: str = None) -> Dict:
         """
-        Post promotional content with payment link
+        Post promotional content to education channel only
         """
         if not razorpay_link:
             razorpay_link = os.getenv('RAZORPAY_LINK', 'https://rzp.io/l/omkar_pro')
