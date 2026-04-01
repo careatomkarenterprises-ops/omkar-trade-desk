@@ -1,11 +1,13 @@
 """
-Marketing Content - Automated promotional posts
-ONLY posts to @OmkarEducation channel
+Marketing Content - Automated promotional posts with REAL market data
+Loads F&O stocks from CSV file
 """
 
 import os
 import random
 import logging
+import csv
+from pathlib import Path
 from datetime import datetime
 from typing import Dict, Optional
 import pandas as pd
@@ -26,87 +28,8 @@ class MarketingContent:
         self.fetcher = DataFetcher()
         self.razorpay_link = os.getenv('RAZORPAY_LINK', 'https://rzp.io/l/omkar_pro')
         
-        # Stock list
-       # Replace your current stock_list with this complete F&O list
-
-self.stock_list = [
-    # NIFTY 50 (F&O Eligible)
-    'RELIANCE', 'TCS', 'HDFCBANK', 'ICICIBANK', 'INFY', 'SBIN', 'BHARTIARTL', 'ITC',
-    'LT', 'SUNPHARMA', 'AXISBANK', 'KOTAKBANK', 'HCLTECH', 'TATASTEEL', 'MARUTI',
-    'TITAN', 'WIPRO', 'ONGC', 'NTPC', 'POWERGRID', 'M&M', 'ULTRACEMCO', 'BAJFINANCE',
-    'ADANIPORTS', 'HINDALCO', 'DIVISLAB', 'GRASIM', 'DRREDDY', 'EICHERMOT', 'COALINDIA',
-    'BRITANNIA', 'ASIANPAINT', 'HEROMOTOCO', 'UPL', 'SHREECEM', 'BAJAJFINSV', 'TECHM',
-    'NESTLEIND', 'BPCL', 'HINDUNILVR', 'CIPLA', 'APOLLOHOSP', 'ADANIENT', 'SBILIFE',
-    'JSWSTEEL', 'HDFCLIFE', 'BAJAJ-AUTO', 'INDUSINDBK', 'TATAMOTORS', 'TATACONSUM',
-    
-    # NIFTY NEXT 50 (F&O Eligible)
-    'HINDZINC', 'PIDILITIND', 'ICICIPRULI', 'DABUR', 'MARICO', 'VEDL', 'BERGEPAINT',
-    'HAL', 'SIEMENS', 'DIXON', 'TRENT', 'ZOMATO', 'SRTRANSFIN', 'INDIAMART', 'PAGEIND',
-    'COLPAL', 'GODREJCP', 'AMBUJACEM', 'ACC', 'JINDALSTEL', 'TORNTPHARM', 'ABB',
-    'HAVELLS', 'BANKBARODA', 'CANBK', 'PNB', 'UNIONBANK', 'INDUSINDBK', 'FEDERALBNK',
-    'IDFCFIRSTB', 'BANDHANBNK', 'RBLBANK', 'MUTHOOTFIN', 'CHOLAFIN', 'BAJAJHLDNG',
-    'HDFCAMC', 'LICI', 'MAXHEALTH', 'METROPOLIS', 'ALKEM', 'BIOCON', 'LAURUSLABS',
-    'AUROPHARMA', 'GLENMARK', 'LUPIN', 'MANKIND', 'ZYDUSLIFE', 'ABBOTINDIA', 'PFIZER',
-    
-    # MIDCAP F&O Stocks
-    'NATIONALUM', 'HINDCOPPER', 'SAIL', 'NMDC', 'MOTHERSON', 'BOSCHLTD', 'TVSMOTOR',
-    'ASHOKLEY', 'EXIDEIND', 'AMARAJABAT', 'BALKRISIND', 'MRF', 'CEAT', 'APOLLOTYRE',
-    'CUMMINSIND', 'L&T', 'KEC', 'VOLTAS', 'WHIRLPOOL', 'CROMPTON', 'HAVELLS', 'VGUARD',
-    'NAUKRI', 'JUBLFOOD', 'RESTAURANT', 'DELHIVERY', 'ADANIGREEN', 'ADANIPOWER',
-    'NTPC', 'PFC', 'RECLTD', 'IREDA', 'IEX', 'POWERGRID', 'CONCOR', 'ADANIENT',
-    'GMRINFRA', 'IRCTC', 'RAILTEL', 'IRCON', 'NBCC', 'RVNL', 'INDIACEM', 'ULTRACEMCO',
-    'RAMCOCEM', 'DALBHARAT', 'JKTYRE', 'CEAT', 'NATIONALUM', 'HINDALCO', 'VEDL',
-    
-    # BANKING & FINANCE F&O
-    'HDFCBANK', 'ICICIBANK', 'SBIN', 'KOTAKBANK', 'AXISBANK', 'INDUSINDBK', 'YESBANK',
-    'BANKBARODA', 'PNB', 'CANBK', 'UNIONBANK', 'FEDERALBNK', 'IDFCFIRSTB', 'RBLBANK',
-    'BANDHANBNK', 'SOUTHBANK', 'UCOBANK', 'IOB', 'CENTRALBK', 'INDIANB', 'MAHABANK',
-    'SBI', 'HDFC', 'BAJFINANCE', 'BAJAJFINSV', 'CHOLAFIN', 'MUTHOOTFIN', 'LICHSGFIN',
-    'PEL', 'HDFCAMC', 'ICICIPRULI', 'SBILIFE', 'HDFCLIFE', 'MAXHEALTH', 'STARHEALTH',
-    
-    # IT F&O Stocks
-    'TCS', 'INFY', 'HCLTECH', 'WIPRO', 'TECHM', 'LTIM', 'LTTS', 'MPHASIS', 'COFORGE',
-    'PERSISTENT', 'MINDTREE', 'LTI', 'BSOFT', 'OFSS', 'INTELLECT', 'ORACLEFS',
-    
-    # AUTO F&O Stocks
-    'MARUTI', 'TATAMOTORS', 'M&M', 'BAJAJ-AUTO', 'EICHERMOT', 'HEROMOTOCO', 'TVSMOTOR',
-    'ASHOKLEY', 'MOTHERSON', 'BOSCHLTD', 'APOLLOTYRE', 'MRF', 'BALKRISIND', 'CEAT',
-    'EXIDEIND', 'AMARAJABAT', 'SUNTV', 'ZEEL', 'PVRINOX',
-    
-    # ENERGY & OIL & GAS F&O
-    'RELIANCE', 'ONGC', 'BPCL', 'IOC', 'HPCL', 'GAIL', 'GUJGAS', 'PETRONET', 'OIL',
-    'MGL', 'IGL', 'ADANIGREEN', 'ADANIPOWER', 'NTPC', 'POWERGRID', 'TATAPOWER',
-    'JSWENERGY', 'TORNTPOWER', 'NHPC', 'SJVN', 'IRFC', 'PFC', 'RECLTD',
-    
-    # METALS & MINING F&O
-    'TATASTEEL', 'JSWSTEEL', 'HINDALCO', 'VEDL', 'NATIONALUM', 'HINDCOPPER', 'SAIL',
-    'NMDC', 'MOIL', 'JINDALSTEL', 'JINDALSAW', 'APLAPOLLO', 'RATNAMANI', 'SANDUR',
-    
-    # PHARMA F&O
-    'SUNPHARMA', 'DRREDDY', 'CIPLA', 'DIVISLAB', 'BIOCON', 'AUROPHARMA', 'GLENMARK',
-    'LUPIN', 'ALKEM', 'LAURUSLABS', 'TORNTPHARM', 'ZYDUSLIFE', 'ABBOTINDIA', 'PFIZER',
-    'SANOFI', 'GSK', 'NATCOPHARM', 'JBCHEPHARM', 'IPCALAB', 'GRANULES', 'SYNGENE',
-    
-    # CONSUMER GOODS F&O
-    'ITC', 'HINDUNILVR', 'NESTLEIND', 'BRITANNIA', 'TITAN', 'DABUR', 'MARICO', 'GODREJCP',
-    'COLPAL', 'PGHH', 'EMAMILTD', 'VBL', 'VARUNBEV', 'UBL', 'RADICO', 'UNSPICES',
-    
-    # REALTY & INFRA F&O
-    'DLF', 'GODREJPROP', 'OBEROIRLTY', 'PRESTIGE', 'BRIGADE', 'SOBHA', 'MACROTECH',
-    'LODHA', 'NBCC', 'IRB', 'GMRINFRA', 'L&T', 'KEC', 'NCC', 'RAMCOCEM', 'ULTRACEMCO',
-    
-    # TELECOM & MEDIA F&O
-    'BHARTIARTL', 'RELIANCE', 'VI', 'IDEA', 'SUNTV', 'ZEEL', 'NETWORK18', 'TV18BRDCST',
-    
-    # AVIATION & TRANSPORT
-    'INDIGO', 'SPICEJET', 'CONCOR', 'DELHIVERY', 'BLUEDART', 'GATI', 'TCI',
-    
-    # NEW AGE & TECH
-    'ZOMATO', 'SWIGGY', 'PAYTM', 'NYKA', 'POLYCAB', 'DIXON', 'SYMPHONY', 'CROMPTON',
-    'HAVELLS', 'VGUARD', 'WHIRLPOOL', 'VOLTAS', 'BLUESTARCO'
-]
-
-print("  ├─ Stock list: {} stocks loaded".format(len(self.stock_list)))
+        # Load F&O stocks from CSV
+        self.stock_list = self.load_stock_list()
         
         # Lesson templates
         self.lesson_templates = [
@@ -177,6 +100,40 @@ Price is {position} relative to key levels.
         print("  ├─ Stock list: {} stocks loaded".format(len(self.stock_list)))
         print("  └─ ✅ MarketingContent initialized (Education channel only)")
     
+    def load_stock_list(self):
+        """Load F&O stocks from CSV file"""
+        try:
+            stock_file = Path('data/fno_stocks.csv')
+            
+            if stock_file.exists():
+                stocks = []
+                with open(stock_file, 'r') as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        stocks.append(row['symbol'])
+                
+                if stocks:
+                    print(f"  ├─ Loaded {len(stocks)} stocks from {stock_file}")
+                    return stocks
+                else:
+                    print(f"  ├─ CSV file empty, using default stock list")
+                    return self.get_default_stocks()
+            else:
+                print(f"  ├─ CSV file not found: {stock_file}")
+                print(f"  ├─ Using default stock list")
+                return self.get_default_stocks()
+                
+        except Exception as e:
+            logger.error(f"Error loading stock list: {e}")
+            return self.get_default_stocks()
+    
+    def get_default_stocks(self):
+        """Fallback default stock list"""
+        return [
+            'RELIANCE', 'TCS', 'HDFCBANK', 'ICICIBANK', 'INFY', 'SBIN', 'ITC', 'LT',
+            'SUNPHARMA', 'AXISBANK', 'KOTAKBANK', 'HCLTECH', 'MARUTI', 'TITAN', 'WIPRO'
+        ]
+    
     def format_volume(self, volume: int) -> str:
         """Format volume in lakhs/crores"""
         if volume >= 10000000:
@@ -199,8 +156,9 @@ Price is {position} relative to key levels.
             return 50.0
     
     def get_market_example(self) -> Optional[Dict]:
-        """Find a real stock with interesting data"""
+        """Find a real stock with interesting data for today's lesson"""
         try:
+            # Shuffle for randomness
             random.shuffle(self.stock_list)
             
             for symbol in self.stock_list:
@@ -210,6 +168,7 @@ Price is {position} relative to key levels.
                     if data is None or len(data) < 30:
                         continue
                     
+                    # Check data source
                     data_source = getattr(data, 'attrs', {}).get('source', 'yahoo')
                     is_zerodha = data_source == 'zerodha'
                     is_mock = data_source == 'mock'
@@ -228,57 +187,59 @@ Price is {position} relative to key levels.
                     sma_20 = data['Close'].rolling(20).mean().iloc[-1]
                     rsi = self.calculate_rsi(data)
                     
+                    # Determine trend
                     if current > sma_20 * 1.02 and rsi > 60:
                         trend = "STRONG UPTREND"
                         strength = 8
-                        observation = "Strong bullish momentum"
-                        technical = f"Price {((current/sma_20)-1)*100:.1f}% above 20-day MA"
+                        observation = "Strong bullish momentum with institutional participation"
+                        technical = f"Price is {((current/sma_20)-1)*100:.1f}% above 20-day MA"
                         idea = f"Look for buying opportunities on dips"
                     elif current < sma_20 * 0.98 and rsi < 40:
                         trend = "STRONG DOWNTREND"
                         strength = 8
-                        observation = "Strong selling pressure"
-                        technical = f"Price {((sma_20/current)-1)*100:.1f}% below 20-day MA"
-                        idea = "Wait for reversal confirmation"
+                        observation = "Strong selling pressure visible"
+                        technical = f"Price is {((sma_20/current)-1)*100:.1f}% below 20-day MA"
+                        idea = "Avoid catching falling knife. Wait for reversal confirmation."
                     elif current > sma_20:
                         trend = "UPTREND"
                         strength = 6
-                        observation = "Gradual uptrend"
+                        observation = "Gradual uptrend with moderate participation"
                         technical = "Price above key moving average"
-                        idea = "Accumulate on dips"
+                        idea = f"Accumulate on dips"
                     elif current < sma_20:
                         trend = "DOWNTREND"
                         strength = 6
-                        observation = "Downward pressure"
+                        observation = "Downward pressure with intermittent bounces"
                         technical = "Price below key moving average"
-                        idea = "Wait for reversal"
+                        idea = "Wait for reversal confirmation"
                     else:
                         trend = "CONSOLIDATION"
                         strength = 4
-                        observation = "Range-bound action"
-                        technical = "Price consolidating"
-                        idea = "Wait for breakout"
+                        observation = "Range-bound action with no clear direction"
+                        technical = "Price consolidating near moving average"
+                        idea = "Wait for breakout above resistance or breakdown below support"
                     
                     # Volume status
                     if volume_ratio > 2.0:
                         volume_status = "SIGNIFICANT (2x+)"
                         institutional = "strong institutional"
-                        key_insight = f"Volume {volume_ratio:.1f}x average indicates major institutional activity"
+                        key_insight = f"Volume {volume_ratio:.1f}x average indicates major institutional activity. This often precedes sustained moves."
                     elif volume_ratio > 1.5:
                         volume_status = "ABOVE AVERAGE"
                         institutional = "institutional"
-                        key_insight = "Above-average volume suggests active participation"
+                        key_insight = f"Above-average volume suggests active participation. Watch for follow-through."
                     else:
                         volume_status = "NORMAL"
                         institutional = "normal"
-                        key_insight = "Volume is within normal range"
+                        key_insight = "Volume is within normal range. Wait for confirmation."
                     
+                    # Position description
                     if current > high_52w * 0.95:
-                        position = f"near 52-week HIGH"
+                        position = f"near 52-week HIGH (within {(1 - current/high_52w)*100:.1f}%)"
                     elif current < low_52w * 1.05:
-                        position = f"near 52-week LOW"
+                        position = f"near 52-week LOW (within {(current/low_52w - 1)*100:.1f}%)"
                     else:
-                        position = "in middle of range"
+                        position = f"mid-range ({(current-low_52w)/(high_52w-low_52w)*100:.1f}% from low)"
                     
                     # Data source badge
                     if is_zerodha:
@@ -286,7 +247,7 @@ Price is {position} relative to key levels.
                         note = ""
                     elif is_mock:
                         source_badge = "🟡 [Simulated Data]"
-                        note = "\n⚠️ **Note:** Using simulated data - live APIs temporarily unavailable"
+                        note = "\n⚠️ **Note:** Using simulated data - live APIs temporarily unavailable."
                     else:
                         source_badge = "🟢 [Yahoo Finance]"
                         note = ""
@@ -318,8 +279,10 @@ Price is {position} relative to key levels.
                         'date': datetime.now().strftime('%d %b %Y, %H:%M IST')
                     }
                 except Exception as e:
+                    logger.debug(f"Error processing {symbol}: {e}")
                     continue
             
+            # Fallback
             return self.get_fallback_data()
             
         except Exception as e:
@@ -350,7 +313,7 @@ Price is {position} relative to key levels.
             'support': round(price * 0.98, 2),
             'trend': 'UPTREND',
             'strength': 6,
-            'observation': 'Price showing strength',
+            'observation': 'Price showing strength with institutional participation',
             'technical_context': 'Technical indicators suggest bullish momentum',
             'trading_idea': f'Look for buying opportunities near {round(price * 0.98, 2)}',
             'rsi': 65,
@@ -382,7 +345,6 @@ Price is {position} relative to key levels.
         for template in self.lesson_templates:
             if template['name'] == lesson_type:
                 message = template['content'].format(**example)
-                # ✅ ONLY send to education channel
                 result = self.poster.send_message('education', message)
                 if result.get('success'):
                     print(f"✅ Posted {lesson_type} lesson to @OmkarEducation")
@@ -419,7 +381,6 @@ Price is {position} relative to key levels.
 ━━━━━━━━━━━━━━━━━━━━
 ✨ Join 100+ serious traders who never miss a move
 """
-        # ✅ ONLY send to education channel
         return self.poster.send_message('education', message)
     
     def run(self):
