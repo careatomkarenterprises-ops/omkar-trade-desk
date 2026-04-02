@@ -1,6 +1,5 @@
 """
-Smart News Aggregator - EXTREME FILTERING
-Only posts news that ACTUALLY matters to Indian traders
+Smart News Aggregator - Persistent duplicate prevention + daily limit
 """
 
 import os
@@ -8,6 +7,7 @@ import json
 import requests
 import logging
 import hashlib
+import re
 from datetime import datetime, timedelta
 from typing import List, Dict, Tuple
 from pathlib import Path
@@ -18,43 +18,27 @@ logger = logging.getLogger(__name__)
 
 class NewsAggregator:
     """
-    Smart news filter - posts ONLY high-impact, Indian-market relevant news
+    Fetch and post news with cross‑run duplicate prevention and daily limit.
     """
     
-    # INDIAN MARKET ONLY - No international news unless impactful
+    # Keywords that MUST be present for a news to be considered (Indian market focus)
     INDIAN_KEYWORDS = [
-        'nifty', 'sensex', 'bank nifty', 'indian market', 'india', 'rupee', 
+        'nifty', 'sensex', 'bank nifty', 'indian market', 'india', 'rupee',
         'rbi', 'sebi', 'modi', 'finance minister', 'indian economy',
-        'bse', 'nse', 'indian stock', 'indian rupee', 'india\'s'
+        'bse', 'nse', 'indian stock', 'indian rupee'
     ]
     
-    # HIGH IMPACT KEYWORDS - Only news containing these will be posted
     HIGH_IMPACT_KEYWORDS = [
-        # Central Bank & Policy
         'rbi', 'repo rate', 'interest rate', 'mpc', 'monetary policy',
         'fed', 'federal reserve', 'rate cut', 'rate hike', 'crr', 'slr',
-        
-        # Economic Data
-        'gdp', 'inflation', 'cpi', 'wpi', 'iip', 'industrial production',
-        'trade deficit', 'current account', 'fiscal deficit',
-        
-        # Government Policy
+        'gdp', 'inflation', 'cpi', 'wpi', 'iip', 'trade deficit',
         'budget', 'finance minister', 'nirmala sitharaman', 'tax', 'gst',
-        'sebi', 'new policy',
-        
-        # Market Moving
         'nifty', 'sensex', 'bank nifty', 'all-time high', '52-week high',
         '52-week low', 'fii', 'dii', 'fpi', 'institutional buying',
-        'bulk deal', 'block deal', 'results', 'earnings',
-        
-        # Commodities
         'crude oil', 'brent crude', 'gold price', 'silver price',
-        
-        # Banking
-        'npa', 'bad loan', 'credit growth', 'deposit growth'
+        'npa', 'bad loan', 'credit growth'
     ]
     
-    # SECTORS
     SECTOR_KEYWORDS = {
         'banking': ['rbi', 'bank', 'npa', 'npas', 'bank nifty', 'sbi', 'hdfc', 'icici'],
         'it': ['tcs', 'infosys', 'wipro', 'hcl', 'tech', 'software', 'it services'],
@@ -63,7 +47,6 @@ class NewsAggregator:
         'economy': ['gdp', 'inflation', 'budget', 'economy', 'fiscal']
     }
     
-    # CHANNEL MAPPING
     CHANNEL_MAP = {
         'banking': ['banknifty', 'fno'],
         'it': ['nifty', 'fno'],
@@ -73,51 +56,54 @@ class NewsAggregator:
     }
     
     def __init__(self):
-        print("\n📰 Extreme News Filter Initializing...")
+        print("\n📰 Persistent News Aggregator Initializing...")
         self.poster = TelegramPoster()
         self.api_key = os.getenv('NEWS_API_KEY')
         
-        # Track posted news by content hash (not just title)
-        self.posted_file = Path('data/posted_news.json')
+        self.data_dir = Path('data')
+        self.data_dir.mkdir(exist_ok=True)
+        self.posted_file = self.data_dir / 'posted_news.json'
+        self.daily_counter_file = self.data_dir / 'daily_post_count.json'
+        
         self.posted_hashes = set()
         self.load_posted_news()
         
-        # Track daily post count
-        self.daily_post_file = Path('data/daily_post_count.json')
         self.daily_count = 0
         self.load_daily_count()
         
-        print("  ├─ INDIAN MARKET ONLY filter: ENABLED")
-        print("  ├─ MAX 8 posts per day limit")
-        print("  └─ ✅ Extreme News Filter initialized")
+        print("  ├─ Cross‑run duplicate prevention: ENABLED (cache)")
+        print("  ├─ Daily post limit: 8 posts/day")
+        print("  └─ ✅ Persistent News Aggregator initialized")
     
     def load_posted_news(self):
-        """Load previously posted news by hash"""
+        """Load previously posted news hashes from cache file."""
         if self.posted_file.exists():
             try:
                 with open(self.posted_file, 'r') as f:
-                    content = f.read().strip()
-                    if content:
-                        self.posted_hashes = set(json.load(f))
-                        print(f"  ├─ Loaded {len(self.posted_hashes)} posted news hashes")
+                    data = json.load(f)
+                    self.posted_hashes = set(data)
+                    print(f"  ├─ Loaded {len(self.posted_hashes)} previously posted news hashes")
             except:
                 self.posted_hashes = set()
+        else:
+            self.posted_hashes = set()
     
     def save_posted_news(self):
-        """Save posted news hashes"""
+        """Save posted news hashes to cache file."""
         try:
-            hashes_list = list(self.posted_hashes)[-500:]  # Keep last 500
+            # Keep only last 500 to avoid file bloat
+            hashes_list = list(self.posted_hashes)[-500:]
             with open(self.posted_file, 'w') as f:
                 json.dump(hashes_list, f)
-        except:
-            pass
+        except Exception as e:
+            logger.error(f"Error saving posted news: {e}")
     
     def load_daily_count(self):
-        """Load today's post count"""
+        """Load today's post count from cache file."""
         today = datetime.now().strftime('%Y-%m-%d')
-        if self.daily_post_file.exists():
+        if self.daily_counter_file.exists():
             try:
-                with open(self.daily_post_file, 'r') as f:
+                with open(self.daily_counter_file, 'r') as f:
                     data = json.load(f)
                     if data.get('date') == today:
                         self.daily_count = data.get('count', 0)
@@ -127,11 +113,12 @@ class NewsAggregator:
                 self.daily_count = 0
         else:
             self.daily_count = 0
+        print(f"  ├─ Today's post count: {self.daily_count}/8")
     
     def save_daily_count(self):
-        """Save today's post count"""
+        """Save today's post count to cache file."""
         try:
-            with open(self.daily_post_file, 'w') as f:
+            with open(self.daily_counter_file, 'w') as f:
                 json.dump({
                     'date': datetime.now().strftime('%Y-%m-%d'),
                     'count': self.daily_count
@@ -139,95 +126,85 @@ class NewsAggregator:
         except:
             pass
     
-    def get_content_hash(self, title: str, description: str) -> str:
-        """Create unique hash for news content (ignores source variations)"""
-        # Normalize the content
-        import re
-        normalized = title.lower()
-        # Remove common variations
-        normalized = re.sub(r'[^\w\s]', '', normalized)
-        # Get first 100 chars as key
-        content_key = normalized[:100]
-        return hashlib.md5(content_key.encode()).hexdigest()
+    def normalize_text(self, text: str) -> str:
+        """
+        Normalize news title to ignore small wording differences.
+        Example: "RBI says banks cannot offer NDF contracts" and
+                 "RBI tightens rules governing FX derivatives" will become similar.
+        """
+        text = text.lower()
+        # Remove punctuation
+        text = re.sub(r'[^\w\s]', '', text)
+        # Remove extra spaces
+        text = re.sub(r'\s+', ' ', text).strip()
+        # Remove common stop words that don't change meaning
+        stop_words = {'a', 'an', 'the', 'and', 'or', 'but', 'of', 'to', 'for', 'on', 'at', 'by', 'with', 'without'}
+        words = text.split()
+        words = [w for w in words if w not in stop_words]
+        # Keep only first 80 characters (sufficient for deduplication)
+        normalized = ' '.join(words)[:80]
+        return normalized
     
-    def is_duplicate_content(self, title: str, description: str) -> bool:
-        """Check if same content already posted (even from different sources)"""
-        content_hash = self.get_content_hash(title, description)
+    def get_content_hash(self, title: str) -> str:
+        """Generate a hash of the normalized title for duplicate detection."""
+        normalized = self.normalize_text(title)
+        return hashlib.md5(normalized.encode()).hexdigest()
+    
+    def is_duplicate(self, title: str) -> bool:
+        """Check if similar news has already been posted."""
+        content_hash = self.get_content_hash(title)
         if content_hash in self.posted_hashes:
             return True
         self.posted_hashes.add(content_hash)
         self.save_posted_news()
         return False
     
-    def is_indian_market_news(self, title: str, description: str) -> bool:
-        """Check if news is relevant to Indian markets"""
-        text = (title + ' ' + description).lower()
-        for keyword in self.INDIAN_KEYWORDS:
-            if keyword in text:
-                return True
-        return False
-    
     def is_high_impact(self, title: str, description: str) -> Tuple[bool, int, str]:
-        """Check if news is HIGH IMPACT for Indian traders"""
+        """Check if news is relevant to Indian markets and has sufficient impact."""
         text = (title + ' ' + description).lower()
         
-        # MUST be Indian market news
-        if not self.is_indian_market_news(title, description):
+        # Must contain at least one Indian market keyword
+        if not any(kw in text for kw in self.INDIAN_KEYWORDS):
             return False, 0, None
         
         impact_score = 0
-        matched_keyword = None
-        
-        for keyword in self.HIGH_IMPACT_KEYWORDS:
-            if keyword in text:
-                if keyword in ['rbi', 'repo rate', 'fed', 'rate cut']:
+        matched = None
+        for kw in self.HIGH_IMPACT_KEYWORDS:
+            if kw in text:
+                if kw in ['rbi', 'repo rate', 'fed', 'rate cut', 'rate hike']:
                     impact_score = 10
-                elif keyword in ['gdp', 'inflation', 'budget', 'nifty', 'sensex']:
+                elif kw in ['gdp', 'inflation', 'budget', 'nifty', 'sensex']:
                     impact_score = 9
-                elif keyword in ['crude oil', 'gold price', 'rupee']:
+                elif kw in ['crude oil', 'gold price', 'rupee']:
                     impact_score = 8
-                elif keyword in ['fii', 'dii', 'results', 'earnings']:
+                elif kw in ['fii', 'dii', 'results', 'earnings']:
                     impact_score = 7
                 else:
                     impact_score = max(impact_score, 6)
-                matched_keyword = keyword
+                matched = kw
                 break
         
-        # Only post if impact score >= 7 (VERY HIGH threshold)
-        return impact_score >= 7, impact_score, matched_keyword
-    
-    def is_todays_news(self, published_at: str) -> bool:
-        """Check if news is from today"""
-        try:
-            pub_date = datetime.fromisoformat(published_at.replace('Z', '+00:00'))
-            today = datetime.now().date()
-            return pub_date.date() == today
-        except:
-            return True
+        # Only post if impact >= 7
+        return impact_score >= 7, impact_score, matched
     
     def can_post_today(self) -> bool:
-        """Check if we haven't exceeded daily limit"""
-        if self.daily_count >= 8:  # Max 8 posts per day total
-            print(f"  ├─ Daily limit reached ({self.daily_count}/8), skipping")
-            return False
-        return True
+        """Check if daily limit (8 posts) has been reached."""
+        return self.daily_count < 8
     
     def increment_daily_count(self):
-        """Increment daily post counter"""
+        """Increment daily post counter and save."""
         self.daily_count += 1
         self.save_daily_count()
     
     def fetch_filtered_news(self) -> List[Dict]:
-        """Fetch and filter ONLY high-impact Indian market news"""
-        print("\n📡 Fetching news...")
-        
+        """Fetch news from NewsAPI and filter for high‑impact Indian market stories."""
+        print("\n📡 Fetching news from NewsAPI...")
         if not self.api_key or self.api_key == 'YOUR_API_KEY_HERE':
-            print("  ├─ No API key")
+            print("  ├─ No valid API key")
             return []
         
         try:
             from_date = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d")
-            
             url = "https://newsapi.org/v2/everything"
             params = {
                 'q': '(India OR Nifty OR RBI OR rupee) AND (market OR economy OR stock)',
@@ -237,117 +214,74 @@ class NewsAggregator:
                 'language': 'en',
                 'pageSize': 50
             }
-            
             response = requests.get(url, params=params, timeout=15)
-            
             if response.status_code != 200:
                 print(f"  ├─ API error: {response.status_code}")
                 return []
             
             data = response.json()
             articles = data.get('articles', [])
-            print(f"  ├─ Found {len(articles)} total articles")
+            print(f"  ├─ Total articles: {len(articles)}")
             
-            high_impact_news = []
-            
-            for article in articles:
-                if not article['title'] or '[Removed]' in article['title']:
+            filtered = []
+            for art in articles:
+                if not art['title'] or '[Removed]' in art['title']:
+                    continue
+                # Skip duplicates based on normalized title
+                if self.is_duplicate(art['title']):
+                    print(f"  ├─ ⏭️ DUPLICATE: {art['title'][:60]}...")
                     continue
                 
-                # Check for duplicate content (same news from different sources)
-                if self.is_duplicate_content(article['title'], article.get('description', '')):
-                    print(f"  ├─ ⏭️ DUPLICATE: {article['title'][:50]}...")
-                    continue
-                
-                # Check if high impact for Indian markets
-                is_impactful, impact_score, matched = self.is_high_impact(
-                    article['title'], 
-                    article.get('description', '')
-                )
-                
+                is_impactful, score, match = self.is_high_impact(art['title'], art.get('description', ''))
                 if is_impactful and self.can_post_today():
-                    print(f"  ├─ ✅ HIGH IMPACT: {article['title'][:60]}... (Score: {impact_score})")
-                    high_impact_news.append({
-                        'title': article['title'],
-                        'description': article.get('description', 'Market update'),
-                        'source': article['source']['name'],
+                    print(f"  ├─ ✅ IMPACT {score}: {art['title'][:60]}...")
+                    filtered.append({
+                        'title': art['title'],
+                        'description': art.get('description', 'Market update')[:400],
+                        'source': art['source']['name'],
                         'time': datetime.now().strftime('%H:%M IST'),
-                        'impact_score': impact_score,
-                        'matched_keyword': matched,
-                        'published': article.get('publishedAt', '')
+                        'impact_score': score,
+                        'matched_keyword': match
                     })
                     self.increment_daily_count()
                 else:
-                    print(f"  ├─ ⏭️ LOW IMPACT: {article['title'][:50]}...")
+                    print(f"  ├─ ⏭️ LOW IMPACT: {art['title'][:60]}...")
             
-            return high_impact_news
-            
+            return filtered
         except Exception as e:
             print(f"  ├─ Error: {e}")
             return []
     
     def determine_sector(self, news_item: Dict) -> List[str]:
-        """Determine affected sectors"""
         text = (news_item['title'] + ' ' + news_item['description']).lower()
-        affected = []
-        
+        sectors = []
         for sector, keywords in self.SECTOR_KEYWORDS.items():
-            if any(keyword in text for keyword in keywords):
-                affected.append(sector)
-        
-        if not affected:
-            affected.append('economy')
-        
-        return list(set(affected))
-    
-    def calculate_urgency(self, impact_score: int) -> str:
-        """Determine urgency level"""
-        if impact_score >= 9:
-            return "🔴 URGENT - Market Moving"
-        elif impact_score >= 8:
-            return "🟠 IMPORTANT - Watch Closely"
-        else:
-            return "🟡 NOTEWORTHY - Be Aware"
+            if any(kw in text for kw in keywords):
+                sectors.append(sector)
+        return list(set(sectors)) if sectors else ['economy']
     
     def post_news(self):
-        """Post ONLY high-impact news to channels"""
         print("\n" + "="*60)
-        print("=== EXTREME NEWS FILTERING ACTIVE ===")
+        print("=== PERSISTENT NEWS FILTER ACTIVE ===")
         print("="*60)
         
-        # Reset daily counter if needed
-        self.load_daily_count()
-        
-        news_items = self.fetch_filtered_news()
-        
-        if not news_items:
-            print("\n📭 No high-impact Indian market news found.")
-            print("   (Better no news than spam news)")
+        items = self.fetch_filtered_news()
+        if not items:
+            print("\n📭 No high‑impact Indian market news found.")
+            print("   (Better no news than spam.)")
             return
         
-        print(f"\n📰 Posting {len(news_items)} high-impact items (Daily limit: {self.daily_count}/8)\n")
-        
-        for item in news_items:
-            print(f"--- IMPACT: {item['impact_score']}/10 ---")
-            print(f"Title: {item['title'][:80]}...")
-            
+        print(f"\n📰 Posting {len(items)} item(s) (Daily total: {self.daily_count}/8)\n")
+        for item in items:
             sectors = self.determine_sector(item)
-            urgency = self.calculate_urgency(item['impact_score'])
-            
-            channels_to_post = set()
-            for sector in sectors:
-                if sector in self.CHANNEL_MAP:
-                    for ch in self.CHANNEL_MAP[sector]:
-                        channels_to_post.add(ch)
-            
-            # Limit to MAX 2 channels per news (avoid spam)
-            channels_to_post = list(channels_to_post)[:2]
-            
-            print(f"Urgency: {urgency}")
-            print(f"Channels: {channels_to_post}")
+            urgency = "🔴 URGENT" if item['impact_score'] >= 9 else "🟠 IMPORTANT" if item['impact_score'] >= 8 else "🟡 NOTEWORTHY"
+            channels = set()
+            for s in sectors:
+                channels.update(self.CHANNEL_MAP.get(s, []))
+            channels = list(channels)[:2]  # Max 2 channels per story
             
             message = f"""
-{urgency}
+{urgency} - Market Moving
 
 📰 **MARKET NEWS UPDATE**
 
@@ -360,20 +294,18 @@ class NewsAggregator:
 📊 **Impact:** {item['impact_score']}/10
 🎯 **Sector:** {', '.join(sectors)}
 """
-            
-            for channel in channels_to_post:
-                result = self.poster.send_message(channel, message)
-                if result.get('success'):
-                    print(f"  ✅ Posted to {channel}")
+            for ch in channels:
+                res = self.poster.send_message(ch, message)
+                if res.get('success'):
+                    print(f"  ✅ Posted to {ch}")
                 else:
-                    print(f"  ❌ Failed to {channel}")
-            
+                    print(f"  ❌ Failed to {ch}")
             print()
         
         print("=== POSTING COMPLETE ===")
 
 if __name__ == "__main__":
-    print("🚀 Starting Extreme News Filter...")
+    print("🚀 Starting Persistent News Aggregator...")
     news = NewsAggregator()
     news.post_news()
     print("🏁 Finished")
