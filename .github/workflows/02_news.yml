@@ -17,7 +17,7 @@ jobs:
         with:
           python-version: '3.10'
       
-      # ✅ Restore posted news cache from previous runs
+      # Restore posted news cache from previous runs (prevents duplicate news)
       - name: Restore posted news cache
         uses: actions/cache@v4
         with:
@@ -26,7 +26,7 @@ jobs:
           restore-keys: |
             posted-news-
       
-      # ✅ Restore daily post count cache
+      # Restore daily post count cache (enforces daily limit across runs)
       - name: Restore daily count cache
         uses: actions/cache@v4
         with:
