@@ -16,7 +16,25 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-          
+      
+      # ✅ Restore posted news cache from previous runs
+      - name: Restore posted news cache
+        uses: actions/cache@v4
+        with:
+          path: data/posted_news.json
+          key: posted-news-${{ github.run_id }}
+          restore-keys: |
+            posted-news-
+      
+      # ✅ Restore daily post count cache
+      - name: Restore daily count cache
+        uses: actions/cache@v4
+        with:
+          path: data/daily_post_count.json
+          key: daily-count-${{ github.run_id }}
+          restore-keys: |
+            daily-count-
+      
       - name: Install dependencies
         run: pip install -r requirements.txt
       
