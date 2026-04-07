@@ -99,13 +99,14 @@ class TelegramPoster:
         else:
             print(f"  └─ ❌ No education channel ID configured")
         
-        # ✅ ENHANCED DISCLAIMER with SEBI compliance
-        self.disclaimer = """
+       self.disclaimer = """
+
 ━━━━━━━━━━━━━━━━━━━━
-📚 **OMKAR ENTERPRISES** (A Division of TRFSK OMKAR SERVICES PVT LTD)
-⚠️ Educational purpose only. Not investment advice.
-⚖️ We are NOT SEBI registered. No trading recommendations.
-📊 Market investments are subject to risks.
+📚 *Omkar Market Intelligence*
+
+⚠️ This platform provides AI-based market insights for educational purposes only.
+❗ We do NOT provide investment advice or recommendations.
+📊 Market investments are subject to risk.
 """
         
         print("\n" + "="*60)
