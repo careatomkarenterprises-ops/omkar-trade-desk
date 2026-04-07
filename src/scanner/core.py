@@ -99,10 +99,23 @@ Volume: {p.get('volume_ratio',1)}x
 
         patterns = self.scan_market()
 
-        if not patterns:
-            print("❌ No patterns found")
-            return
+if not patterns:
+    print("❌ No patterns found")
 
+    test_message = f"""
+🚀 *AI Market Scanner*
+
+📅 {datetime.now().strftime('%d %b %Y | %H:%M')}
+
+⚠️ No strong patterns detected in current scan.
+
+📊 System is running successfully.
+"""
+
+    self.poster.send_message('education', test_message)
+
+    return
+    
         # Sort by score
         patterns_sorted = sorted(patterns, key=lambda x: x['score'], reverse=True)
 
