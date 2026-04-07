@@ -1,5 +1,5 @@
 """
-Omkar Scanner Core - Optimized Business Version
+Omkar Scanner Core - Business Optimized Version
 """
 
 import os
@@ -19,17 +19,17 @@ logger = logging.getLogger(__name__)
 class OmkarScanner:
 
     def __init__(self):
-        print("\n🔍 OmkarScanner Initializing...")
+        print("\n🔍 Initializing Omkar Scanner...")
         self.fetcher = DataFetcher()
         self.detector = PatternDetector()
         self.poster = TelegramPoster()
-        print("  └─ ✅ Scanner Ready")
+        print("✅ System Ready\n")
 
-    # ✅ SCORE SYSTEM
+    # ✅ SCORING SYSTEM
     def calculate_score(self, pattern: Dict) -> int:
         score = 0
 
-        # Strength weight (0–50)
+        # Strength weight (max 50)
         score += pattern.get('strength', 0) * 50
 
         # Volume boost
@@ -58,62 +58,63 @@ class OmkarScanner:
                         patterns.append(pattern)
 
             except Exception as e:
-                logger.error(f"Error scanning {symbol}: {e}")
+                logger.error(f"{symbol} error: {e}")
 
         return patterns
 
-    # ✅ SEND CLEAN TELEGRAM MESSAGE
+    # ✅ CLEAN TELEGRAM OUTPUT
     def send_summary(self, patterns: List[Dict], channel: str):
 
         if not patterns:
             return
 
         message = f"""
-🚀 *AI Market Scanner*
+🚀 *AI Market Intelligence Scanner*
 
 📅 {datetime.now().strftime('%d %b %Y | %H:%M')}
 
-🔥 *Top Opportunities Today:*
+🔥 *Top High-Momentum Candidates:*
 """
 
         for p in patterns:
             message += f"""
 🎯 {p['symbol']}
 Score: {p['score']}/100
-Pattern: {p['primary_pattern']}
+Insight: {p['primary_pattern']}
 Trend: {p.get('trend','neutral').upper()}
+Volume: {p.get('volume_ratio',1)}x
 """
 
         message += """
 
 ━━━━━━━━━━━━━━━━━━
-⚠️ Educational purpose only
+⚠️ Educational insights only
 """
 
         self.poster.send_message(channel, message)
 
-    # ✅ MAIN RUN
+    # ✅ MAIN EXECUTION
     def run(self):
-        print("\n🚀 Running Optimized Scanner...\n")
+        print("🚀 Running Scanner...\n")
 
-        all_patterns = self.scan_market()
+        patterns = self.scan_market()
 
-        if not all_patterns:
+        if not patterns:
             print("❌ No patterns found")
             return
 
         # Sort by score
-        sorted_patterns = sorted(all_patterns, key=lambda x: x['score'], reverse=True)
+        patterns_sorted = sorted(patterns, key=lambda x: x['score'], reverse=True)
 
-        # FREE vs PREMIUM
-        top_5 = sorted_patterns[:5]
-        free_2 = sorted_patterns[:2]
+        # Free vs Premium
+        free_patterns = patterns_sorted[:2]
+        premium_patterns = patterns_sorted[:5]
 
-        # Send messages
-        self.send_summary(free_2, 'education')   # FREE CHANNEL
-        self.send_summary(top_5, 'premium')      # PREMIUM CHANNEL
+        # Send outputs
+        self.send_summary(free_patterns, 'education')
+        self.send_summary(premium_patterns, 'premium')
 
-        print(f"✅ Sent {len(top_5)} premium & {len(free_2)} free alerts")
+        print(f"✅ Sent {len(free_patterns)} FREE & {len(premium_patterns)} PREMIUM alerts\n")
 
 
 if __name__ == "__main__":
