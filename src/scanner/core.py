@@ -1,135 +1,99 @@
-"""
-Omkar Scanner Core - Business Optimized Version
-"""
-
-import os
-import sys
-import logging
-from datetime import datetime
-from typing import Dict, List
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from src.scanner.data_fetcher import DataFetcher
-from src.scanner.patterns import PatternDetector
-from src.telegram.poster import TelegramPoster
-
-logger = logging.getLogger(__name__)
-
-class OmkarScanner:
-
-    def __init__(self):
-        print("\n🔍 Initializing Omkar Scanner...")
-        self.fetcher = DataFetcher()
-        self.detector = PatternDetector()
-        self.poster = TelegramPoster()
-        print("✅ System Ready\n")
-
-    # ✅ SCORING SYSTEM
-    def calculate_score(self, pattern: Dict) -> int:
-        score = 0
-
-        # Strength weight (max 50)
-        score += pattern.get('strength', 0) * 50
-
-        # Volume boost
-        if pattern.get('volume_ratio', 1) > 2:
-            score += 20
-
-        # Trend boost
-        if pattern.get('trend') == 'bullish':
-            score += 15
-
-        return min(100, int(score))
-
-    # ✅ SCAN MARKET
-    def scan_market(self) -> List[Dict]:
-        patterns = []
-
-        for symbol in self.fetcher.nifty_stocks.keys():
-            try:
-                data = self.fetcher.get_stock_data(symbol)
-
-                if data:
-                    pattern = self.detector.analyze(symbol, data)
-
-                    if pattern and pattern.get('has_pattern'):
-                        pattern['score'] = self.calculate_score(pattern)
-                        patterns.append(pattern)
-
-            except Exception as e:
-                logger.error(f"{symbol} error: {e}")
-
-        return patterns
-
-    # ✅ CLEAN TELEGRAM OUTPUT
-    def send_summary(self, patterns: List[Dict], channel: str):
-
-        if not patterns:
-            return
-
-        message = f"""
-🚀 *AI Market Intelligence Scanner*
-
-📅 {datetime.now().strftime('%d %b %Y | %H:%M')}
-
-🔥 *Top High-Momentum Candidates:*
-"""
-
-        for p in patterns:
-            message += f"""
-🎯 {p['symbol']}
-Score: {p['score']}/100
-Insight: {p['primary_pattern']}
-Trend: {p.get('trend','neutral').upper()}
-Volume: {p.get('volume_ratio',1)}x
-"""
-
-        message += """
-
-━━━━━━━━━━━━━━━━━━
-⚠️ Educational insights only
-"""
-
-        self.poster.send_message(channel, message)
-
-    # ✅ MAIN EXECUTION
-    def run(self):
-        print("🚀 Running Scanner...\n")
-
-        patterns = self.scan_market()
-
-if not patterns:
-    print("❌ No patterns found")
-
-    test_message = f"""
-🚀 *AI Market Scanner*
-
-📅 {datetime.now().strftime('%d %b %Y | %H:%M')}
-
-⚠️ No strong patterns detected in current scan.
-
-📊 System is running successfully.
-"""
-
-    self.poster.send_message('education', test_message)
-
-    return
-    
-        # Sort by score
-        patterns_sorted = sorted(patterns, key=lambda x: x['score'], reverse=True)
-
-        # Free vs Premium
-        free_patterns = patterns_sorted[:2]
-        premium_patterns = patterns_sorted[:5]
-
-        # Send outputs
-        self.send_summary(free_patterns, 'education')
-        self.send_summary(premium_patterns, 'premium')
-
-        print(f"✅ Sent {len(free_patterns)} FREE & {len(premium_patterns)} PREMIUM alerts\n")
+import datetime
+import random
 
 
+def fetch_market_data():
+    """
+    Dummy market data generator (replace with real API later)
+    """
+    stocks = [
+        {"symbol": "RELIANCE", "price": random.uniform(2400, 2600)},
+        {"symbol": "TCS", "price": random.uniform(3200, 3500)},
+        {"symbol": "HDFCBANK", "price": random.uniform(1400, 1600)},
+        {"symbol": "INFY", "price": random.uniform(1300, 1500)},
+        {"symbol": "ICICIBANK", "price": random.uniform(900, 1100)},
+    ]
+    return stocks
+
+
+def calculate_score(stock):
+    """
+    Simple scoring logic (you can upgrade this later)
+    """
+    price = stock.get("price", 0)
+
+    # Example logic
+    score = 0
+
+    if price > 2000:
+        score += 2
+    if price % 2 == 0:
+        score += 1
+
+    return score
+
+
+def scan_market():
+    """
+    Main scanner logic
+    """
+    data = fetch_market_data()
+    patterns = []
+
+    for stock in data:
+        score = calculate_score(stock)
+
+        patterns.append({
+            "symbol": stock.get("symbol"),
+            "price": stock.get("price"),
+            "score": score
+        })
+
+    # ✅ SAFE SORTING (NO ERROR)
+    if patterns:
+        patterns_sorted = sorted(
+            patterns,
+            key=lambda x: x.get("score", 0),
+            reverse=True
+        )
+    else:
+        patterns_sorted = []
+
+    return patterns_sorted
+
+
+def print_results(results):
+    """
+    Print scanner results
+    """
+    print("\n🔍 Omkar Market Scanner Results")
+    print(f"⏰ Time: {datetime.datetime.now()}")
+    print("-" * 40)
+
+    if not results:
+        print("No data found")
+        return
+
+    for item in results:
+        print(
+            f"{item.get('symbol')} | "
+            f"Price: {round(item.get('price', 0), 2)} | "
+            f"Score: {item.get('score')}"
+        )
+
+
+def main():
+    """
+    Entry point
+    """
+    try:
+        results = scan_market()
+        print_results(results)
+
+    except Exception as e:
+        print("❌ Error in scanner:", str(e))
+
+
+# ✅ IMPORTANT (THIS MAKES IT RUN)
 if __name__ == "__main__":
-    scanner = OmkarScanner()
-    scanner.run()
+    main()
