@@ -1,5 +1,5 @@
 """
-Smart News Aggregator - Event‑based deduplication + Freshness filter
+Smart News Aggregator - Event‑based deduplication + Extended Freshness
 """
 
 import os
@@ -7,7 +7,6 @@ import json
 import requests
 import logging
 import hashlib
-import re
 from datetime import datetime, timedelta
 from typing import List, Dict, Tuple
 from pathlib import Path
@@ -18,14 +17,14 @@ logger = logging.getLogger(__name__)
 
 class NewsAggregator:
     """
-    Fetch and post news with event‑based duplicate prevention and 6‑hour freshness.
+    Fetch and post news with event‑based duplicate prevention and 18‑hour freshness.
     """
     
     # Keywords that MUST be present for Indian market relevance
     INDIAN_KEYWORDS = [
         'nifty', 'sensex', 'bank nifty', 'indian market', 'india', 'rupee',
         'rbi', 'sebi', 'modi', 'finance minister', 'indian economy',
-        'bse', 'nse', 'indian stock', 'indian rupee'
+        'bse', 'nse', 'indian stock', 'indian rupee', 'trent', 'reliance'
     ]
     
     HIGH_IMPACT_KEYWORDS = {
@@ -63,14 +62,14 @@ class NewsAggregator:
         self.posted_file = self.data_dir / 'posted_news.json'
         self.daily_counter_file = self.data_dir / 'daily_post_count.json'
         
-        self.posted_events = set()   # Stores hashes of core events
+        self.posted_events = set()   
         self.load_posted_news()
         
         self.daily_count = 0
         self.load_daily_count()
         
         print("  ├─ Event‑based deduplication: ENABLED")
-        print("  ├─ Freshness filter: only news from last 6 hours")
+        print("  ├─ Freshness filter: only news from last 18 hours") # Updated
         print("  ├─ Daily post limit: 8 posts/day")
         print("  └─ ✅ Ready")
     
@@ -88,6 +87,7 @@ class NewsAggregator:
     
     def save_posted_news(self):
         try:
+            # Keep last 500 to keep file small
             hashes_list = list(self.posted_events)[-500:]
             with open(self.posted_file, 'w') as f:
                 json.dump(hashes_list, f)
@@ -121,56 +121,39 @@ class NewsAggregator:
             pass
     
     def extract_event_key(self, title: str) -> str:
-        """
-        Extract the core event from a news title.
-        Example: "RBI bars banks from offering rupee non-deliverable derivatives"
-        becomes "rbi bars banks from offering rupee non-deliverable derivatives"
-        """
         text = title.lower()
-        # Remove common fluff
         fluff = ['source:', 'update:', 'live:', 'today', 'morning report', 'headlines']
         for f in fluff:
             text = text.replace(f, '')
-        # Keep only first 80 chars of the cleaned text (enough for event identity)
         return text[:80].strip()
     
     def get_event_hash(self, title: str) -> str:
-        """Generate a hash of the core event for deduplication."""
         event_key = self.extract_event_key(title)
         return hashlib.md5(event_key.encode()).hexdigest()
     
     def is_duplicate_event(self, title: str) -> bool:
-        """Check if the same event has already been posted."""
         event_hash = self.get_event_hash(title)
-        if event_hash in self.posted_events:
-            return True
-        self.posted_events.add(event_hash)
-        self.save_posted_news()
-        return False
+        return event_hash in self.posted_events
     
     def is_fresh(self, published_at: str) -> bool:
-        """Check if article was published in the last 6 hours."""
+        """Check if article was published in the last 18 hours."""
         try:
-            # Handle ISO format with Z
             pub_time = datetime.fromisoformat(published_at.replace('Z', '+00:00'))
             now = datetime.now().astimezone()
             age = now - pub_time
-            return age.total_seconds() <= 6 * 3600  # 6 hours
+            return age.total_seconds() <= 18 * 3600  # Increased to 18 hours
         except:
-            # If date parsing fails, assume fresh (better to include than exclude)
             return True
     
     def calculate_impact(self, title: str, description: str) -> Tuple[int, str]:
-        """Return impact score (7-10) and matched keyword."""
         text = (title + ' ' + description).lower()
         for score, keywords in self.HIGH_IMPACT_KEYWORDS.items():
             for kw in keywords:
                 if kw in text:
                     return score, kw
-        return 7, 'general'  # Minimum impact
+        return 7, 'general'
     
     def is_relevant(self, title: str, description: str) -> bool:
-        """Check if news is about Indian markets."""
         text = (title + ' ' + description).lower()
         return any(kw in text for kw in self.INDIAN_KEYWORDS)
     
@@ -183,22 +166,26 @@ class NewsAggregator:
     
     def fetch_filtered_news(self) -> List[Dict]:
         print("\n📡 Fetching fresh news from NewsAPI...")
-        if not self.api_key or self.api_key == 'YOUR_API_KEY_HERE':
-            print("  ├─ No valid API key")
+        if not self.api_key:
+            print("  ├─ No valid API key found in environment")
             return []
         
         try:
-            # Only look at last 24 hours, but we will filter to 6 hours later
             from_date = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
             url = "https://newsapi.org/v2/everything"
+            
+            # Optimized Query for Indian Markets
+            query = '("Indian stock market" OR Nifty50 OR "RBI" OR "Sensex")'
+            
             params = {
-                'q': '(India OR Nifty OR RBI OR rupee) AND (market OR economy OR stock)',
+                'q': query,
                 'from': from_date,
-                'sortBy': 'publishedAt',   # NEWEST FIRST
+                'sortBy': 'publishedAt',
                 'apiKey': self.api_key,
                 'language': 'en',
                 'pageSize': 50
             }
+            
             response = requests.get(url, params=params, timeout=15)
             if response.status_code != 200:
                 print(f"  ├─ API error: {response.status_code}")
@@ -213,28 +200,29 @@ class NewsAggregator:
                 if not art['title'] or '[Removed]' in art['title']:
                     continue
                 
-                # Skip if not relevant to Indian markets
+                # Check Relevancy
                 if not self.is_relevant(art['title'], art.get('description', '')):
-                    print(f"  ├─ ⏭️ NOT RELEVANT: {art['title'][:60]}...")
                     continue
                 
-                # Skip if older than 6 hours
+                # Check Freshness (18h)
                 if not self.is_fresh(art['publishedAt']):
-                    print(f"  ├─ ⏭️ OLD NEWS (>6h): {art['title'][:60]}...")
                     continue
                 
-                # Skip if same event already posted
+                # Check Deduplication (The hash memory)
                 if self.is_duplicate_event(art['title']):
-                    print(f"  ├─ ⏭️ DUPLICATE EVENT: {art['title'][:60]}...")
                     continue
                 
-                # Skip if daily limit reached
+                # Check Daily Limit
                 if not self.can_post_today():
                     print(f"  ├─ ⏭️ DAILY LIMIT REACHED ({self.daily_count}/8)")
                     break
                 
                 impact_score, matched = self.calculate_impact(art['title'], art.get('description', ''))
-                print(f"  ├─ ✅ IMPACT {impact_score}: {art['title'][:60]}...")
+                
+                # Add to memory before returning to prevent double-processing in one run
+                event_hash = self.get_event_hash(art['title'])
+                self.posted_events.add(event_hash)
+                
                 filtered.append({
                     'title': art['title'],
                     'description': art.get('description', 'Market update')[:400],
@@ -246,9 +234,11 @@ class NewsAggregator:
                 })
                 self.increment_daily_count()
             
+            self.save_posted_news() # Persist the new hashes to disk
             return filtered
+            
         except Exception as e:
-            print(f"  ├─ Error: {e}")
+            print(f"  ├─ Error during fetch: {e}")
             return []
     
     def determine_sector(self, news_item: Dict) -> List[str]:
@@ -266,18 +256,18 @@ class NewsAggregator:
         
         items = self.fetch_filtered_news()
         if not items:
-            print("\n📭 No fresh, high‑impact Indian market news found.")
-            print("   (This is normal – better no news than spam.)")
+            print("\n📭 No fresh, high‑impact news found in this cycle.")
             return
         
         print(f"\n📰 Posting {len(items)} item(s) (Daily total: {self.daily_count}/8)\n")
         for item in items:
             sectors = self.determine_sector(item)
             urgency = "🔴 URGENT" if item['impact_score'] >= 9 else "🟠 IMPORTANT" if item['impact_score'] >= 8 else "🟡 NOTEWORTHY"
+            
             channels = set()
             for s in sectors:
                 channels.update(self.CHANNEL_MAP.get(s, []))
-            channels = list(channels)[:2]  # Max 2 channels per story
+            channels = list(channels)[:2]  
             
             message = f"""
 {urgency} - Market Moving
