@@ -171,33 +171,42 @@ class NewsAggregator:
             return []
         
         try:
-            from_date = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
-            url = "https://newsapi.org/v2/everything"
-            
-            # Optimized Query for Indian Markets
-            query = '("Indian stock market" OR Nifty50 OR "RBI" OR "Sensex")'
-            
+            # TRY 1: Top Business Headlines for India (Higher Quality)
+            url = "https://newsapi.org/v2/top-headlines"
             params = {
-                'q': query,
-                'from': from_date,
-                'sortBy': 'publishedAt',
+                'country': 'in',
+                'category': 'business',
                 'apiKey': self.api_key,
-                'language': 'en',
-                'pageSize': 50
+                'pageSize': 30
             }
             
             response = requests.get(url, params=params, timeout=15)
-            if response.status_code != 200:
-                print(f"  ├─ API error: {response.status_code}")
-                return []
-            
             data = response.json()
             articles = data.get('articles', [])
+
+            # TRY 2: If Top Headlines is empty, use broad search
+            if not articles:
+                print("  ├─ Top headlines empty, trying broad search...")
+                url = "https://newsapi.org/v2/everything"
+                from_date = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
+                params = {
+                    'q': 'Nifty OR Sensex OR "Stock Market India"', # Broadened
+                    'from': from_date,
+                    'sortBy': 'publishedAt',
+                    'apiKey': self.api_key,
+                    'language': 'en',
+                    'pageSize': 50
+                }
+                response = requests.get(url, params=params, timeout=15)
+                data = response.json()
+                articles = data.get('articles', [])
+
             print(f"  ├─ Total articles fetched: {len(articles)}")
             
             filtered = []
             for art in articles:
-                if not art['title'] or '[Removed]' in art['title']:
+                # Basic cleanup
+                if not art['title'] or '[Removed]' in art['title'] or not art.get('description'):
                     continue
                 
                 # Check Relevancy
@@ -208,7 +217,7 @@ class NewsAggregator:
                 if not self.is_fresh(art['publishedAt']):
                     continue
                 
-                # Check Deduplication (The hash memory)
+                # Check Deduplication
                 if self.is_duplicate_event(art['title']):
                     continue
                 
@@ -219,7 +228,7 @@ class NewsAggregator:
                 
                 impact_score, matched = self.calculate_impact(art['title'], art.get('description', ''))
                 
-                # Add to memory before returning to prevent double-processing in one run
+                # Add to memory
                 event_hash = self.get_event_hash(art['title'])
                 self.posted_events.add(event_hash)
                 
@@ -234,7 +243,7 @@ class NewsAggregator:
                 })
                 self.increment_daily_count()
             
-            self.save_posted_news() # Persist the new hashes to disk
+            self.save_posted_news()
             return filtered
             
         except Exception as e:
