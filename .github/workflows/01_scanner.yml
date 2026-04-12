@@ -28,6 +28,12 @@ jobs:
         env:
           PYTHONPATH: .
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          
+          # ✅ ZERODHA CREDENTIALS - ADDED
+          ZERODHA_API_KEY: ${{ secrets.ZERODHA_API_KEY }}
+          KITE_ACCESS_TOKEN: ${{ secrets.KITE_ACCESS_TOKEN }}
+          
+          # Telegram Channels
           CHANNEL_EDUCATION: ${{ secrets.CHANNEL_EDUCATION }}
           CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
           CHANNEL_NIFTY: ${{ secrets.CHANNEL_NIFTY }}
@@ -37,6 +43,7 @@ jobs:
           CHANNEL_SWING: ${{ secrets.CHANNEL_SWING }}
           CHANNEL_INTRADAY: ${{ secrets.CHANNEL_INTRADAY }}
           CHANNEL_FNO: ${{ secrets.CHANNEL_FNO }}
+          
         run: |
           python -m src.scanner.core
 
