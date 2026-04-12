@@ -1,9 +1,9 @@
 import os
 import logging
 import pandas as pd
+import time
 from datetime import datetime
 
-# Import your custom modules
 from src.scanner.data_fetcher import DataFetcher
 from src.scanner.patterns import PatternDetector
 from src.telegram.poster import TelegramPoster
@@ -19,13 +19,11 @@ class OmkarTradeDesk:
     def __init__(self):
         logger.info("Initializing Omkar Trade Desk Core...")
         
-        # Initialize sub-modules
-        # DataFetcher now strictly uses Zerodha (Yahoo fallback removed)
+        # Initialize DataFetcher (This handles the Auto-Login)
         self.fetcher = DataFetcher()
         self.detector = PatternDetector()
         self.poster = TelegramPoster()
         
-        # Path to your F&O symbols list
         self.symbols_file = 'fno_stocks.csv'
 
     def get_fno_symbols(self):
@@ -42,40 +40,34 @@ class OmkarTradeDesk:
             return []
 
     def execute_scan(self):
-        """
-        Main scanner loop for Institutional Volume Price Box detection
-        """
-        logger.info("🚀 Starting Market Scan...")
-
-        # --- INTEGRATION: TECHNICAL ISSUE CHECK ---
+        """Main scanner loop for Institutional Volume Price Box detection"""
+        
+        # Check if login was successful
         if not self.fetcher.is_ready():
             error_msg = (
                 "⚠️ **System Alert: Technical Issue**\n\n"
                 "The live market data feed is currently experiencing a connection issue. "
-                "Our automated scanning is paused to ensure data accuracy.\n\n"
-                "🛠️ Our team is working to restore the connection. We will resume shortly."
+                "The automated login sequence failed. Check TOTP Secret.\n\n"
+                "🛠️ Restore connection manual check required."
             )
             logger.critical("Zerodha API not ready. Sending technical alert.")
             self.poster.send_message(channel='premium', message=error_msg)
-            return  # Stop execution to prevent processing wrong data
-        # ------------------------------------------
+            return 
 
+        logger.info("🚀 Starting Market Scan...")
         symbols = self.get_fno_symbols()
         matches_found = 0
 
         for symbol in symbols:
             try:
-                # Fetch data strictly from Zerodha
                 data = self.fetcher.get_stock_data(symbol) 
                 
                 if data is not None and not data.empty:
-                    # Run the Pattern Detector (lowercase columns ensured by fetcher)
                     result = self.detector.analyze(symbol, data)
                     
                     if result and result.get('has_pattern'):
-                        logger.info(f"✅ Pattern Found: {symbol} - {result['trigger']}")
+                        logger.info(f"✅ Pattern Found: {symbol}")
                         
-                        # Create a clean message for Telegram
                         message = (
                             f"🔍 **{result['trigger']}**\n\n"
                             f"🎫 **Symbol:** #{symbol}\n"
@@ -88,6 +80,9 @@ class OmkarTradeDesk:
                         self.poster.send_message(channel='premium', message=message)
                         matches_found += 1
                 
+                # Small delay to be gentle on the API
+                time.sleep(0.5)
+                
             except Exception as e:
                 logger.error(f"Error processing {symbol}: {e}")
                 continue
@@ -95,7 +90,6 @@ class OmkarTradeDesk:
         logger.info(f"🏁 Scan Complete. Found {matches_found} setups.")
 
 def main():
-    """Entry point for GitHub Actions"""
     try:
         scanner = OmkarTradeDesk()
         scanner.execute_scan()
