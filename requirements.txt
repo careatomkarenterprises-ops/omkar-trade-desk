@@ -20,3 +20,8 @@ newsapi-python==0.2.7
 
 # Zerodha Kite Connect
 kiteconnect>=5.0.0
+
+# Add these to your existing requirements.txt
+pyotp==2.9.0
+selenium==4.18.1
+webdriver-manager==4.0.1
