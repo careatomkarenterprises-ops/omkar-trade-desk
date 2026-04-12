@@ -1,91 +1,108 @@
 """
-Data Fetcher - Uses Zerodha API first, falls back to Yahoo Finance
+Zerodha Data Fetcher - Using your paid Kite Connect API
 """
 
 import os
 import logging
 import pandas as pd
-from datetime import datetime
-from typing import Optional, Dict
+from datetime import datetime, timedelta
+from kiteconnect import KiteConnect
+from typing import Optional, Dict, List
 import time
-
-from src.scanner.zerodha_fetcher import ZerodhaFetcher
-import yfinance as yf
 
 logger = logging.getLogger(__name__)
 
-class DataFetcher:
+class ZerodhaFetcher:
     """
-    Fetch market data - Zerodha first, Yahoo as fallback
+    Fetch market data using Zerodha Kite Connect API
+    Requires paid subscription (₹500/month)
     """
     
     def __init__(self):
-        self.use_zerodha = False
-        self.zerodha = None
+        self.api_key = os.getenv('ZERODHA_API_KEY')
+        self.access_token = os.getenv('KITE_ACCESS_TOKEN')
         
-        # Try to initialize Zerodha
+        if not self.api_key or not self.access_token:
+            logger.error("Zerodha credentials missing!")
+            raise ValueError("ZERODHA_API_KEY and ZERODHA_ACCESS_TOKEN required")
+        
+        # Initialize Kite Connect
+        self.kite = KiteConnect(api_key=self.api_key)
+        self.kite.set_access_token(self.access_token)
+        
+        # Cache for instrument tokens
+        self.instrument_cache = {}
+        self.cache_file = 'data/zerodha_instruments.csv'
+        self.load_instruments()
+        
+        logger.info("✅ ZerodhaFetcher initialized with paid API")
+    
+    def load_instruments(self):
+        """Load instrument list (updated daily)"""
         try:
-            self.zerodha = ZerodhaFetcher()
-            self.use_zerodha = True
-            logger.info("✅ Using Zerodha API for market data")
+            if os.path.exists(self.cache_file):
+                mod_time = datetime.fromtimestamp(os.path.getmtime(self.cache_file))
+                if mod_time.date() == datetime.now().date():
+                    return
+            
+            instruments = self.kite.instruments()
+            df = pd.DataFrame(instruments)
+            os.makedirs('data', exist_ok=True)
+            df.to_csv(self.cache_file, index=False)
+            logger.info(f"Loaded {len(df)} instruments")
         except Exception as e:
-            logger.warning(f"⚠️ Zerodha not available: {e}")
-            logger.info("Falling back to Yahoo Finance")
-            self.use_zerodha = False
-        
-        self.yahoo_delay = 1.0
-        self.nifty_stocks = {
-            'RELIANCE': 'RELIANCE.NS',
-            'TCS': 'TCS.NS',
-            'HDFCBANK': 'HDFCBANK.NS',
-            'INFY': 'INFY.NS',
-            'ICICIBANK': 'ICICIBANK.NS',
-        }
+            logger.error(f"Error loading instruments: {e}")
     
-    def get_stock_data(self, symbol: str) -> Optional[pd.DataFrame]:
-        """Get stock data - Zerodha first, then Yahoo"""
-        if self.use_zerodha:
-            try:
-                df = self.zerodha.get_historical_data(symbol, interval="15minute", days=5)
-                if df is not None and not df.empty:
-                    logger.info(f"✅ Got {symbol} data from Zerodha")
-                    return df
-            except Exception as e:
-                logger.warning(f"Zerodha failed for {symbol}, trying Yahoo: {e}")
-        
-        return self._get_yahoo_data(symbol)
-    
-    def _get_yahoo_data(self, symbol: str) -> Optional[pd.DataFrame]:
-        """Fallback to Yahoo Finance"""
+    def get_instrument_token(self, symbol: str, exchange: str = "NSE") -> Optional[str]:
+        """Get instrument token for a symbol"""
         try:
-            if symbol in self.nifty_stocks:
-                yahoo_symbol = self.nifty_stocks[symbol]
-            else:
-                yahoo_symbol = f"{symbol}.NS" if not symbol.endswith('.NS') else symbol
+            cache_key = f"{exchange}:{symbol}"
+            if cache_key in self.instrument_cache:
+                return self.instrument_cache[cache_key]
             
-            time.sleep(self.yahoo_delay)
-            ticker = yf.Ticker(yahoo_symbol)
-            data = ticker.history(period="5d", interval="15m")
+            df = pd.read_csv(self.cache_file)
+            match = df[(df['exchange'] == exchange) & (df['tradingsymbol'] == symbol)]
             
-            if not data.empty:
-                logger.info(f"✅ Got {symbol} from Yahoo (fallback)")
-                return data
+            if not match.empty:
+                token = str(match.iloc[0]['instrument_token'])
+                self.instrument_cache[cache_key] = token
+                return token
             return None
         except Exception as e:
-            logger.error(f"Yahoo error for {symbol}: {e}")
+            logger.error(f"Error getting token for {symbol}: {e}")
             return None
-
-    def get_current_price(self, symbol: str) -> Optional[float]:
-        """Get only current price"""
-        if self.use_zerodha:
-            try:
-                ltp_dict = self.zerodha.get_ltp([symbol])
-                if symbol in ltp_dict:
-                    return ltp_dict[symbol]
-            except:
-                pass
-        
-        data = self.get_stock_data(symbol)
-        if data is not None and not data.empty:
-            return data['Close'].iloc[-1]
-        return None
+    
+    def get_historical_data(self, symbol: str, interval: str = "day", days: int = 45) -> Optional[pd.DataFrame]:
+        """Get historical candle data from Zerodha"""
+        try:
+            token = self.get_instrument_token(symbol)
+            if not token: return None
+            
+            to_date = datetime.now()
+            from_date = to_date - timedelta(days=days)
+            
+            candles = self.kite.historical_data(
+                instrument_token=int(token),
+                from_date=from_date.strftime("%Y-%m-%d %H:%M:%S"),
+                to_date=to_date.strftime("%Y-%m-%d %H:%M:%S"),
+                interval=interval
+            )
+            
+            if candles:
+                df = pd.DataFrame(candles)
+                df.set_index('date', inplace=True)
+                return df
+            return None
+        except Exception as e:
+            logger.error(f"Historical data error for {symbol}: {e}")
+            return None
+    
+    def get_ltp(self, symbols: List[str]) -> Dict:
+        """Get only last traded prices"""
+        try:
+            formatted = [f"NSE:{s}" for s in symbols]
+            ltp_data = self.kite.ltp(formatted)
+            return {s: ltp_data[f"NSE:{s}"]['last_price'] for s in symbols if f"NSE:{s}" in ltp_data}
+        except Exception as e:
+            logger.error(f"LTP error: {e}")
+            return {}
