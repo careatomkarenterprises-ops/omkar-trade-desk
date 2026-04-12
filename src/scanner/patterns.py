@@ -1,6 +1,7 @@
 """
-Pattern Detection Engine - Volume Price Box (Professional Edition)
+Pattern Detection Engine - Institutional Silent Accumulation Edition
 """
+
 import pandas as pd
 import numpy as np
 import logging
@@ -10,102 +11,85 @@ logger = logging.getLogger(__name__)
 
 class PatternDetector:
     def __init__(self):
-        self.version = "3.1"
-        self.sma_period = 15
-        self.quiet_days = 6
-        logger.info(f"PatternDetector v{self.version} initialized with SMA pollution fix")
+        self.version = "3.0"
+        # Parameters for Institutional Footprint
+        self.vol_sma_period = 15      # 15-day Volume SMA
+        self.quiet_days = 6           # Days volume must stay below SMA
+        self.box_lookback = 6         # Period to determine Support/Resistance
+        self.surge_threshold = 1.8    # Volume must be 1.8x the SMA to trigger
 
     def detect_volume_price_box(self, data: pd.DataFrame) -> Dict:
         """
-        Logic:
-        1. Baseline: 15 SMA calculated PRIOR to the quiet period (No pollution).
-        2. Quiet Phase: 6 days where Volume < Baseline.
-        3. Explosion: Current Volume > Baseline.
-        4. Price: Breakout/Breakdown of 6-day range OR > 50% move.
+        Detects 6+ days of quiet volume (below 15 SMA) followed by 
+        a price breakout from the 'Box' on high volume.
         """
         try:
-            df = data.copy()
-            df.columns = [c.lower() for c in df.columns]
-            
-            # We need at least (15 SMA + 6 Quiet + 1 Trigger) = 22 days minimum
-            if len(df) < 25:
+            if len(data) < 20:
                 return {'detected': False}
 
-            # --- THE FIX: ISOLATE THE BASELINE ---
-            # Extract the 6 quiet days
-            quiet_window = df.iloc[-(self.quiet_days + 1):-1]
+            # 1. Calculate 15-day Volume SMA
+            data = data.copy()
+            data['vol_sma'] = data['volume'].rolling(window=self.vol_sma_period).mean()
             
-            # Extract the historical data BEFORE those 6 quiet days to calculate SMA
-            historical_for_sma = df.iloc[:-(self.quiet_days + 1)]
-            
-            # Get the last 15 days of that historical data
-            baseline_volumes = historical_for_sma['volume'].tail(self.sma_period)
-            baseline_sma = baseline_volumes.mean()
-            
-            if baseline_sma == 0: return {'detected': False}
+            # 2. Check the "Quiet Period" (Previous 6 days excluding today)
+            # We look at index -7 to -2
+            quiet_slice = data.iloc[-(self.quiet_days + 1): -1]
+            is_quiet = all(quiet_slice['volume'] < quiet_slice['vol_sma'])
 
-            # --- VALIDATION ---
-            # 1. Was it quiet? (Check against the clean baseline)
-            volume_was_quiet = all(quiet_window['volume'] < baseline_sma)
-            
-            # 2. Is there a spike today?
-            current_day = df.iloc[-1]
-            volume_spike = current_day['volume'] > baseline_sma
-            
-            if not (volume_was_quiet and volume_spike):
-                return {'detected': False}
+            # 3. Define the "Box" (High/Low of those 6 quiet days)
+            resistance = quiet_slice['high'].max()
+            support = quiet_slice['low'].min()
 
-            # --- PRICE ACTION BOX ---
-            resistance = quiet_window['high'].max()
-            support = quiet_window['low'].min()
-            range_height = resistance - support
-            
-            curr_close = current_day['close']
-            prev_close = df.iloc[-2]['close'] # Closing price of the last quiet day
-            move_dist = abs(curr_close - prev_close)
+            # 4. Check Today's Action (The Trigger)
+            current_bar = data.iloc[-1]
+            current_close = current_bar['close']
+            current_volume = current_bar['volume']
+            current_vol_sma = current_bar['vol_sma']
 
-            # --- TRIGGER DETERMINATION ---
-            trigger = None
-            if curr_close > resistance:
-                trigger = "🚀 BREAKOUT"
-            elif curr_close < support:
-                trigger = "📉 BREAKDOWN"
-            elif move_dist > (range_height * 0.5):
-                trigger = "⚡ 50% RANGE MOVE"
+            # Trigger Conditions:
+            # - Price breaks above Resistance OR below Support
+            # - Volume is significantly higher than the 15 SMA
+            breakout = current_close > resistance
+            breakdown = current_close < support
+            volume_surge = current_volume > (current_vol_sma * self.surge_threshold)
 
-            if trigger:
+            if (breakout or breakdown) and volume_surge:
+                trigger_type = "🚀 BOX BREAKOUT" if breakout else "📉 BOX BREAKDOWN"
+                surge_ratio = round(current_volume / current_vol_sma, 2)
+                
                 return {
                     'detected': True,
-                    'pattern': 'Volume Price Box',
-                    'trigger': trigger,
+                    'trigger': trigger_type,
                     'resistance': round(resistance, 2),
                     'support': round(support, 2),
-                    'surge_ratio': round(current_day['volume'] / baseline_sma, 2)
+                    'surge_ratio': surge_ratio,
+                    'strength': min(surge_ratio / 3, 1.0) # Normalized score
                 }
-                
+
             return {'detected': False}
 
         except Exception as e:
-            logger.error(f"Detection Error: {e}")
+            logger.error(f"Pattern Error: {e}")
             return {'detected': False}
 
     def analyze(self, symbol: str, data: pd.DataFrame) -> Optional[Dict]:
-        """Entry point for the scanner loop"""
+        """Main entry point for core.py"""
         if data is None or data.empty:
             return None
-            
+
+        # Run the specific Institutional Scanner
         res = self.detect_volume_price_box(data)
         
         if res['detected']:
             return {
                 'symbol': symbol,
-                'price': round(data.iloc[-1]['close'] if 'close' in data.columns else data.iloc[-1]['Close'], 2),
-                'pattern': res['pattern'],
+                'price': round(data['close'].iloc[-1], 2),
+                'has_pattern': True,
                 'trigger': res['trigger'],
                 'surge_ratio': res['surge_ratio'],
                 'resistance': res['resistance'],
                 'support': res['support'],
-                'has_pattern': True
+                'strength': res['strength']
             }
         
-        return None
+        return {'symbol': symbol, 'has_pattern': False}
