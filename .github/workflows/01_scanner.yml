@@ -29,9 +29,10 @@ jobs:
           PYTHONPATH: .
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           
-          # ✅ ZERODHA CREDENTIALS - ADDED
+          # ✅ Zerodha Credentials for Auto-Refresh
           ZERODHA_API_KEY: ${{ secrets.ZERODHA_API_KEY }}
-          KITE_ACCESS_TOKEN: ${{ secrets.KITE_ACCESS_TOKEN }}
+          ZERODHA_API_SECRET: ${{ secrets.ZERODHA_API_SECRET }}
+          ZERODHA_REQUEST_TOKEN: ${{ secrets.ZERODHA_REQUEST_TOKEN }}
           
           # Telegram Channels
           CHANNEL_EDUCATION: ${{ secrets.CHANNEL_EDUCATION }}
