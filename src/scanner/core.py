@@ -20,6 +20,7 @@ class OmkarTradeDesk:
         logger.info("Initializing Omkar Trade Desk Core...")
         
         # Initialize sub-modules
+        # DataFetcher now strictly uses Zerodha (Yahoo fallback removed)
         self.fetcher = DataFetcher()
         self.detector = PatternDetector()
         self.poster = TelegramPoster()
@@ -35,7 +36,6 @@ class OmkarTradeDesk:
                 return df['symbol'].tolist()
             else:
                 logger.error(f"Symbols file {self.symbols_file} not found!")
-                # Fallback to a small list if file is missing
                 return ["RELIANCE", "TCS", "HDFCBANK", "INFY"]
         except Exception as e:
             logger.error(f"Error loading symbols: {e}")
@@ -46,20 +46,32 @@ class OmkarTradeDesk:
         Main scanner loop for Institutional Volume Price Box detection
         """
         logger.info("🚀 Starting Market Scan...")
+
+        # --- INTEGRATION: TECHNICAL ISSUE CHECK ---
+        if not self.fetcher.is_ready():
+            error_msg = (
+                "⚠️ **System Alert: Technical Issue**\n\n"
+                "The live market data feed is currently experiencing a connection issue. "
+                "Our automated scanning is paused to ensure data accuracy.\n\n"
+                "🛠️ Our team is working to restore the connection. We will resume shortly."
+            )
+            logger.critical("Zerodha API not ready. Sending technical alert.")
+            self.poster.send_message(channel='premium', message=error_msg)
+            return  # Stop execution to prevent processing wrong data
+        # ------------------------------------------
+
         symbols = self.get_fno_symbols()
         matches_found = 0
 
         for symbol in symbols:
             try:
-                # 1. Fetch data (Uses Zerodha with Yahoo fallback)
-                # Requesting enough days to calculate 15 SMA + 6 day quiet period
+                # Fetch data strictly from Zerodha
                 data = self.fetcher.get_stock_data(symbol) 
                 
                 if data is not None and not data.empty:
-                    # 2. Run the refined Pattern Detector
+                    # Run the Pattern Detector (lowercase columns ensured by fetcher)
                     result = self.detector.analyze(symbol, data)
                     
-                    # 3. If institutional footprint is detected, post to Telegram
                     if result and result.get('has_pattern'):
                         logger.info(f"✅ Pattern Found: {symbol} - {result['trigger']}")
                         
@@ -73,7 +85,6 @@ class OmkarTradeDesk:
                             f"⚡ **Strength:** {'⭐' * int(result['strength'] * 5)}"
                         )
                         
-                        # Post specifically to the F&O channel
                         self.poster.send_message(channel='premium', message=message)
                         matches_found += 1
                 
