@@ -1,283 +1,58 @@
-"""
-Zerodha Data Fetcher - Fully Automated Token Refresh
-No Selenium, no daily manual updates!
-"""
+name: 🔍 Omkar Scanner - Every 30 Minutes
 
-import os
-import logging
-import pandas as pd
-from datetime import datetime, timedelta
-from kiteconnect import KiteConnect
-from typing import Optional, Dict, List
-import pickle
-import time
+on:
+  schedule:
+    - cron: '*/30 3-10 * * 1-5'
+  workflow_dispatch:
 
-logger = logging.getLogger(__name__)
+jobs:
+  scan:
+    name: Run Market Scanner
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-class ZerodhaFetcher:
-    """
-    Fetch market data with automatic token refresh
-    Uses request_token (one-time setup) to generate fresh access_tokens daily
-    """
-    
-    def __init__(self):
-        self.api_key = os.getenv('ZERODHA_API_KEY')
-        self.api_secret = os.getenv('ZERODHA_API_SECRET')
-        self.request_token = os.getenv('ZERODHA_REQUEST_TOKEN')  # One-time setup
-        
-        if not self.api_key or not self.api_secret:
-            logger.error("Zerodha credentials missing!")
-            raise ValueError("ZERODHA_API_KEY and ZERODHA_API_SECRET required")
-        
-        # Try to load saved session or create new
-        self.token_file = 'data/zerodha_session.pkl'
-        self.kite = None
-        self.access_token = None
-        
-        # Initialize connection
-        self._initialize_connection()
-        
-        # Setup data directory and cache
-        os.makedirs('data', exist_ok=True)
-        self.cache_file = 'data/zerodha_instruments.csv'
-        self.instrument_cache = {}
-        self.load_instruments()
-        
-        logger.info("✅ ZerodhaFetcher initialized with auto-refresh capability")
-    
-    def _initialize_connection(self):
-        """Initialize or refresh the connection"""
-        try:
-            # Try to load existing session
-            if self._load_session():
-                logger.info("✅ Loaded existing valid session")
-                return
-            
-            # Create new session if we have request_token
-            if self.request_token:
-                logger.info("Generating new access token from request_token...")
-                self._generate_access_token()
-                self._save_session()
-                return
-            
-            # No valid session and no request_token
-            logger.error("No valid session and no request_token found!")
-            logger.info("Please set ZERODHA_REQUEST_TOKEN secret (one-time setup)")
-            raise ValueError("Cannot initialize connection")
-            
-        except Exception as e:
-            logger.error(f"Connection initialization failed: {e}")
-            raise
-    
-    def _generate_access_token(self):
-        """Generate access token from request_token"""
-        try:
-            self.kite = KiteConnect(api_key=self.api_key)
-            session = self.kite.generate_session(
-                self.request_token, 
-                api_secret=self.api_secret
-            )
-            self.access_token = session["access_token"]
-            self.kite.set_access_token(self.access_token)
-            logger.info("✅ New access token generated successfully")
-        except Exception as e:
-            logger.error(f"Failed to generate access token: {e}")
-            raise
-    
-    def _save_session(self):
-        """Save session to disk for reuse"""
-        try:
-            session_data = {
-                'access_token': self.access_token,
-                'created_at': datetime.now().isoformat(),
-                'api_key': self.api_key
-            }
-            with open(self.token_file, 'wb') as f:
-                pickle.dump(session_data, f)
-            logger.info(f"Session saved to {self.token_file}")
-        except Exception as e:
-            logger.warning(f"Could not save session: {e}")
-    
-    def _load_session(self) -> bool:
-        """Load and validate existing session"""
-        try:
-            if not os.path.exists(self.token_file):
-                return False
-            
-            with open(self.token_file, 'rb') as f:
-                session_data = pickle.load(f)
-            
-            self.access_token = session_data['access_token']
-            self.kite = KiteConnect(api_key=self.api_key)
-            self.kite.set_access_token(self.access_token)
-            
-            # Validate token by making a test call
-            self.kite.profile()
-            logger.info("Session validation successful")
-            return True
-            
-        except Exception as e:
-            logger.warning(f"Session validation failed: {e}")
-            return False
-    
-    def refresh_if_needed(self):
-        """Check and refresh token if expired"""
-        try:
-            if not self.kite:
-                self._initialize_connection()
-                return
-            
-            # Test current token
-            self.kite.profile()
-            logger.debug("Token is valid")
-            
-        except Exception as e:
-            if "token" in str(e).lower() or "invalid" in str(e).lower():
-                logger.warning("Token expired, refreshing...")
-                if self.request_token:
-                    self._generate_access_token()
-                    self._save_session()
-                else:
-                    logger.error("Cannot refresh - no request_token available")
-            else:
-                logger.error(f"Unexpected error: {e}")
-    
-    def load_instruments(self):
-        """Load instrument list (updated daily)"""
-        try:
-            if not self.kite:
-                self.refresh_if_needed()
-            
-            if os.path.exists(self.cache_file):
-                mod_time = datetime.fromtimestamp(os.path.getmtime(self.cache_file))
-                if mod_time.date() == datetime.now().date():
-                    logger.info("Using cached instruments")
-                    return
-            
-            logger.info("Fetching fresh instrument list from Zerodha...")
-            instruments = self.kite.instruments()
-            
-            df = pd.DataFrame(instruments)
-            df.to_csv(self.cache_file, index=False)
-            logger.info(f"✅ Loaded {len(df)} instruments")
-            
-        except Exception as e:
-            logger.error(f"Error loading instruments: {e}")
-    
-    def get_instrument_token(self, symbol: str, exchange: str = "NSE") -> Optional[str]:
-        """Get instrument token for a symbol"""
-        try:
-            if not self.kite:
-                self.refresh_if_needed()
-            
-            cache_key = f"{exchange}:{symbol}"
-            if cache_key in self.instrument_cache:
-                return self.instrument_cache[cache_key]
-            
-            df = pd.read_csv(self.cache_file)
-            match = df[(df['exchange'] == exchange) & (df['tradingsymbol'] == symbol)]
-            
-            if not match.empty:
-                token = str(match.iloc[0]['instrument_token'])
-                self.instrument_cache[cache_key] = token
-                return token
-            
-            # Try with EQ suffix
-            if exchange == "NSE":
-                match = df[(df['exchange'] == exchange) & (df['tradingsymbol'] == f"{symbol}EQ")]
-                if not match.empty:
-                    token = str(match.iloc[0]['instrument_token'])
-                    self.instrument_cache[cache_key] = token
-                    return token
-            
-            logger.warning(f"No instrument token found for {exchange}:{symbol}")
-            return None
-            
-        except Exception as e:
-            logger.error(f"Error getting token for {symbol}: {e}")
-            return None
-    
-    def get_historical_data(self, symbol: str, interval: str = "day", days: int = 45) -> Optional[pd.DataFrame]:
-        """Get historical candle data"""
-        try:
-            self.refresh_if_needed()
-            
-            token = self.get_instrument_token(symbol)
-            if not token:
-                return None
-            
-            to_date = datetime.now()
-            from_date = to_date - timedelta(days=days)
-            from_str = from_date.strftime("%Y-%m-%d %H:%M:%S")
-            to_str = to_date.strftime("%Y-%m-%d %H:%M:%S")
-            
-            candles = self.kite.historical_data(
-                instrument_token=int(token),
-                from_date=from_str,
-                to_date=to_str,
-                interval=interval
-            )
-            
-            if candles:
-                df = pd.DataFrame(candles)
-                df = df.rename(columns={
-                    'date': 'Date',
-                    'open': 'Open',
-                    'high': 'High',
-                    'low': 'Low',
-                    'close': 'Close',
-                    'volume': 'Volume'
-                })
-                df.set_index('Date', inplace=True)
-                df.sort_index(inplace=True)
-                df.attrs['source'] = 'zerodha'
-                return df
-            
-            return None
-            
-        except Exception as e:
-            logger.error(f"Error fetching historical data for {symbol}: {e}")
-            return None
-    
-    def get_ltp(self, symbols: List[str]) -> Dict:
-        """Get last traded prices"""
-        try:
-            self.refresh_if_needed()
-            formatted = [f"NSE:{s}" for s in symbols]
-            ltp_data = self.kite.ltp(formatted)
-            
-            result = {}
-            for sym in symbols:
-                key = f"NSE:{sym}"
-                if key in ltp_data:
-                    result[sym] = ltp_data[key]['last_price']
-            return result
-            
-        except Exception as e:
-            logger.error(f"Error fetching LTP: {e}")
-            return {}
-    
-    def get_quote(self, symbol: str) -> Optional[Dict]:
-        """Get real-time quote"""
-        try:
-            self.refresh_if_needed()
-            quotes = self.kite.quote([f"NSE:{symbol}"])
-            
-            if quotes and f"NSE:{symbol}" in quotes:
-                quote = quotes[f"NSE:{symbol}"]
-                return {
-                    'symbol': symbol,
-                    'last_price': quote['last_price'],
-                    'volume': quote.get('volume', 0),
-                    'open': quote['ohlc']['open'],
-                    'high': quote['ohlc']['high'],
-                    'low': quote['ohlc']['low'],
-                    'close': quote['ohlc']['close'],
-                    'timestamp': quote['timestamp'],
-                    'source': 'zerodha'
-                }
-            return None
-            
-        except Exception as e:
-            logger.error(f"Error fetching quote: {e}")
-            return None
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Scanner
+        env:
+          PYTHONPATH: .
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          
+          # ✅ Zerodha Credentials for Auto-Refresh
+          ZERODHA_API_KEY: ${{ secrets.ZERODHA_API_KEY }}
+          ZERODHA_API_SECRET: ${{ secrets.ZERODHA_API_SECRET }}
+          ZERODHA_REQUEST_TOKEN: ${{ secrets.ZERODHA_REQUEST_TOKEN }}
+          
+          # Telegram Channels
+          CHANNEL_EDUCATION: ${{ secrets.CHANNEL_EDUCATION }}
+          CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
+          CHANNEL_NIFTY: ${{ secrets.CHANNEL_NIFTY }}
+          CHANNEL_BANKNIFTY: ${{ secrets.CHANNEL_BANKNIFTY }}
+          CHANNEL_COMMODITY: ${{ secrets.CHANNEL_COMMODITY }}
+          CHANNEL_CURRENCY: ${{ secrets.CHANNEL_CURRENCY }}
+          CHANNEL_SWING: ${{ secrets.CHANNEL_SWING }}
+          CHANNEL_INTRADAY: ${{ secrets.CHANNEL_INTRADAY }}
+          CHANNEL_FNO: ${{ secrets.CHANNEL_FNO }}
+          
+        run: |
+          python -m src.scanner.core
+
+      - name: Upload scan logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scan-logs
+          path: data/
+          retention-days: 7
+          if-no-files-found: warn
