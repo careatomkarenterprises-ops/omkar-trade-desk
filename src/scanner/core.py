@@ -1,99 +1,95 @@
-import datetime
-import random
+import os
+import logging
+import pandas as pd
+from datetime import datetime
 
+# Import your custom modules
+from src.scanner.data_fetcher import DataFetcher
+from src.scanner.patterns import PatternDetector
+from src.telegram.poster import TelegramPoster
 
-def fetch_market_data():
-    """
-    Dummy market data generator (replace with real API later)
-    """
-    stocks = [
-        {"symbol": "RELIANCE", "price": random.uniform(2400, 2600)},
-        {"symbol": "TCS", "price": random.uniform(3200, 3500)},
-        {"symbol": "HDFCBANK", "price": random.uniform(1400, 1600)},
-        {"symbol": "INFY", "price": random.uniform(1300, 1500)},
-        {"symbol": "ICICIBANK", "price": random.uniform(900, 1100)},
-    ]
-    return stocks
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
+class OmkarTradeDesk:
+    def __init__(self):
+        logger.info("Initializing Omkar Trade Desk Core...")
+        
+        # Initialize sub-modules
+        self.fetcher = DataFetcher()
+        self.detector = PatternDetector()
+        self.poster = TelegramPoster()
+        
+        # Path to your F&O symbols list
+        self.symbols_file = 'fno_stocks.csv'
 
-def calculate_score(stock):
-    """
-    Simple scoring logic (you can upgrade this later)
-    """
-    price = stock.get("price", 0)
+    def get_fno_symbols(self):
+        """Load symbols from the CSV file"""
+        try:
+            if os.path.exists(self.symbols_file):
+                df = pd.read_csv(self.symbols_file)
+                return df['symbol'].tolist()
+            else:
+                logger.error(f"Symbols file {self.symbols_file} not found!")
+                # Fallback to a small list if file is missing
+                return ["RELIANCE", "TCS", "HDFCBANK", "INFY"]
+        except Exception as e:
+            logger.error(f"Error loading symbols: {e}")
+            return []
 
-    # Example logic
-    score = 0
+    def execute_scan(self):
+        """
+        Main scanner loop for Institutional Volume Price Box detection
+        """
+        logger.info("🚀 Starting Market Scan...")
+        symbols = self.get_fno_symbols()
+        matches_found = 0
 
-    if price > 2000:
-        score += 2
-    if price % 2 == 0:
-        score += 1
+        for symbol in symbols:
+            try:
+                # 1. Fetch data (Uses Zerodha with Yahoo fallback)
+                # Requesting enough days to calculate 15 SMA + 6 day quiet period
+                data = self.fetcher.get_stock_data(symbol) 
+                
+                if data is not None and not data.empty:
+                    # 2. Run the refined Pattern Detector
+                    result = self.detector.analyze(symbol, data)
+                    
+                    # 3. If institutional footprint is detected, post to Telegram
+                    if result and result.get('has_pattern'):
+                        logger.info(f"✅ Pattern Found: {symbol} - {result['trigger']}")
+                        
+                        # Create a clean message for Telegram
+                        message = (
+                            f"🔍 **{result['trigger']}**\n\n"
+                            f"🎫 **Symbol:** #{symbol}\n"
+                            f"💰 **Price:** ₹{result['price']}\n"
+                            f"📊 **Volume Surge:** {result['surge_ratio']}x\n"
+                            f"📦 **Box Range:** {result['support']} - {result['resistance']}\n"
+                            f"⚡ **Strength:** {'⭐' * int(result['strength'] * 5)}"
+                        )
+                        
+                        # Post specifically to the F&O channel
+                        self.poster.send_message(channel='premium', message=message)
+                        matches_found += 1
+                
+            except Exception as e:
+                logger.error(f"Error processing {symbol}: {e}")
+                continue
 
-    return score
-
-
-def scan_market():
-    """
-    Main scanner logic
-    """
-    data = fetch_market_data()
-    patterns = []
-
-    for stock in data:
-        score = calculate_score(stock)
-
-        patterns.append({
-            "symbol": stock.get("symbol"),
-            "price": stock.get("price"),
-            "score": score
-        })
-
-    # ✅ SAFE SORTING (NO ERROR)
-    if patterns:
-        patterns_sorted = sorted(
-            patterns,
-            key=lambda x: x.get("score", 0),
-            reverse=True
-        )
-    else:
-        patterns_sorted = []
-
-    return patterns_sorted
-
-
-def print_results(results):
-    """
-    Print scanner results
-    """
-    print("\n🔍 Omkar Market Scanner Results")
-    print(f"⏰ Time: {datetime.datetime.now()}")
-    print("-" * 40)
-
-    if not results:
-        print("No data found")
-        return
-
-    for item in results:
-        print(
-            f"{item.get('symbol')} | "
-            f"Price: {round(item.get('price', 0), 2)} | "
-            f"Score: {item.get('score')}"
-        )
-
+        logger.info(f"🏁 Scan Complete. Found {matches_found} setups.")
 
 def main():
-    """
-    Entry point
-    """
+    """Entry point for GitHub Actions"""
     try:
-        results = scan_market()
-        print_results(results)
-
+        scanner = OmkarTradeDesk()
+        scanner.execute_scan()
     except Exception as e:
-        print("❌ Error in scanner:", str(e))
+        logger.critical(f"Critical System Failure: {e}")
 
-
-# ✅ IMPORTANT (THIS MAKES IT RUN)
 if __name__ == "__main__":
     main()
