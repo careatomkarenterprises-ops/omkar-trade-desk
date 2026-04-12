@@ -1,122 +1,111 @@
-import logging
+"""
+Pattern Detection Engine - Volume Price Box (Professional Edition)
+"""
 import pandas as pd
-from kiteconnect import KiteConnect
-import pyotp
-import time
-import os
-import json
+import numpy as np
+import logging
+from typing import Dict, Optional
 
-# --- LOGGING SETUP ---
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("OmkarAutomation")
+logger = logging.getLogger(__name__)
 
-class OmkarScannerV3:
-    def __init__(self, api_key, api_secret, totp_secret):
-        self.kite = KiteConnect(api_key=api_key)
-        self.api_secret = api_secret
-        self.totp_secret = totp_secret
+class PatternDetector:
+    def __init__(self):
+        self.version = "3.1"
         self.sma_period = 15
-        self.min_quiet_days = 6
+        self.quiet_days = 6
+        logger.info(f"PatternDetector v{self.version} initialized with SMA pollution fix")
 
-    def auto_login(self):
-        """Automated authentication using TOTP"""
+    def detect_volume_price_box(self, data: pd.DataFrame) -> Dict:
+        """
+        Logic:
+        1. Baseline: 15 SMA calculated PRIOR to the quiet period (No pollution).
+        2. Quiet Phase: 6 days where Volume < Baseline.
+        3. Explosion: Current Volume > Baseline.
+        4. Price: Breakout/Breakdown of 6-day range OR > 50% move.
+        """
         try:
-            # Note: For full automation in GitHub Actions, you'd usually use 
-            # a pre-generated access_token or a headless login flow.
-            # This follows your current TOTP structure.
-            totp = pyotp.TOTP(self.totp_secret).now()
-            logger.info(f"System generated TOTP: {totp}")
-            # Placeholder for your specific session generation logic
-            # session = self.kite.generate_session(request_token, api_secret=self.api_secret)
-            # self.kite.set_access_token(session["access_token"])
+            df = data.copy()
+            df.columns = [c.lower() for c in df.columns]
+            
+            # We need at least (15 SMA + 6 Quiet + 1 Trigger) = 22 days minimum
+            if len(df) < 25:
+                return {'detected': False}
+
+            # --- THE FIX: ISOLATE THE BASELINE ---
+            # Extract the 6 quiet days
+            quiet_window = df.iloc[-(self.quiet_days + 1):-1]
+            
+            # Extract the historical data BEFORE those 6 quiet days to calculate SMA
+            historical_for_sma = df.iloc[:-(self.quiet_days + 1)]
+            
+            # Get the last 15 days of that historical data
+            baseline_volumes = historical_for_sma['volume'].tail(self.sma_period)
+            baseline_sma = baseline_volumes.mean()
+            
+            if baseline_sma == 0: return {'detected': False}
+
+            # --- VALIDATION ---
+            # 1. Was it quiet? (Check against the clean baseline)
+            volume_was_quiet = all(quiet_window['volume'] < baseline_sma)
+            
+            # 2. Is there a spike today?
+            current_day = df.iloc[-1]
+            volume_spike = current_day['volume'] > baseline_sma
+            
+            if not (volume_was_quiet and volume_spike):
+                return {'detected': False}
+
+            # --- PRICE ACTION BOX ---
+            resistance = quiet_window['high'].max()
+            support = quiet_window['low'].min()
+            range_height = resistance - support
+            
+            curr_close = current_day['close']
+            prev_close = df.iloc[-2]['close'] # Closing price of the last quiet day
+            move_dist = abs(curr_close - prev_close)
+
+            # --- TRIGGER DETERMINATION ---
+            trigger = None
+            if curr_close > resistance:
+                trigger = "🚀 BREAKOUT"
+            elif curr_close < support:
+                trigger = "📉 BREAKDOWN"
+            elif move_dist > (range_height * 0.5):
+                trigger = "⚡ 50% RANGE MOVE"
+
+            if trigger:
+                return {
+                    'detected': True,
+                    'pattern': 'Volume Price Box',
+                    'trigger': trigger,
+                    'resistance': round(resistance, 2),
+                    'support': round(support, 2),
+                    'surge_ratio': round(current_day['volume'] / baseline_sma, 2)
+                }
+                
+            return {'detected': False}
+
         except Exception as e:
-            logger.error(f"Login failed: {e}")
+            logger.error(f"Detection Error: {e}")
+            return {'detected': False}
 
-    def fetch_data(self, token):
-        """Fetches daily data for the last 40 days"""
-        to_date = pd.Timestamp.now()
-        from_date = to_date - pd.Timedelta(days=40)
-        return pd.DataFrame(self.kite.historical_data(token, from_date, to_date, "day"))
-
-    def detect_volume_pattern(self, df):
-        """
-        Requirement:
-        1. Volume must be BELOW 15 SMA for at least 6 consecutive days.
-        2. Current Volume must cross ABOVE 15 SMA.
-        """
-        if len(df) < 20: return None
+    def analyze(self, symbol: str, data: pd.DataFrame) -> Optional[Dict]:
+        """Entry point for the scanner loop"""
+        if data is None or data.empty:
+            return None
+            
+        res = self.detect_volume_price_box(data)
         
-        # Calculate Volume SMA
-        df['vol_sma'] = df['volume'].rolling(window=self.sma_period).mean()
-        
-        # 1. Check previous 6 days (Consolidation)
-        # We look at index -7 up to -2
-        previous_days = df.iloc[-(self.min_quiet_days + 1):-1]
-        quiet_phase = all(previous_days['volume'] < previous_days['vol_sma'])
-        
-        # 2. Check current day (Breakout)
-        current_day = df.iloc[-1]
-        volume_breakout = current_day['volume'] > current_day['vol_sma']
-        
-        if quiet_phase and volume_breakout:
+        if res['detected']:
             return {
-                'current_vol': int(current_day['volume']),
-                'avg_vol': int(current_day['vol_sma']),
-                'surge_ratio': round(current_day['volume'] / current_day['vol_sma'], 2)
+                'symbol': symbol,
+                'price': round(data.iloc[-1]['close'] if 'close' in data.columns else data.iloc[-1]['Close'], 2),
+                'pattern': res['pattern'],
+                'trigger': res['trigger'],
+                'surge_ratio': res['surge_ratio'],
+                'resistance': res['resistance'],
+                'support': res['support'],
+                'has_pattern': True
             }
+        
         return None
-
-    def run(self):
-        """Main execution loop"""
-        # 1. Get F&O List
-        instruments = self.kite.instruments("NFO")
-        fo_list = [i for i in instruments if i['segment'] == 'NFO-FUT' and i['name'] != '']
-        unique_stocks = {s['name']: s['instrument_token'] for s in fo_list}
-        
-        results = []
-        logger.info(f"Starting scan on {len(unique_stocks)} stocks...")
-
-        for name, token in unique_stocks.items():
-            try:
-                data = self.fetch_data(token)
-                pattern = self.detect_volume_pattern(data)
-                
-                if pattern:
-                    pattern['symbol'] = name
-                    pattern['price'] = data.iloc[-1]['close']
-                    results.append(pattern)
-                    logger.info(f"MATCH: {name} found with {pattern['surge_ratio']}x volume")
-                
-                time.sleep(0.1) # Rate limiting
-            except Exception:
-                continue
-
-        # --- EXPORTING RESULTS FOR FURTHER QUERIES ---
-        df_results = pd.DataFrame(results)
-        
-        # 1. Save to CSV (Best for other scripts to read)
-        df_results.to_csv("volume_scan_results.csv", index=False)
-        
-        # 2. Save to JSON (Best for web/apps)
-        with open("highlights.json", "w") as f:
-            json.dump(results, f, indent=4)
-
-        # 3. Output to GitHub Summary (Visible on your dashboard)
-        if not df_results.empty:
-            summary_table = df_results[['symbol', 'price', 'surge_ratio']].to_markdown(index=False)
-            with open(os.environ.get('GITHUB_STEP_SUMMARY', 'summary.md'), 'a') as f:
-                f.write(f"### 🎯 Volume Crossover Results ({pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')})\n")
-                f.write(summary_table)
-        
-        return results
-
-# To run automatically in your GitHub Action:
-if __name__ == "__main__":
-    # Pull credentials from GitHub Secrets
-    scanner = OmkarScannerV3(
-        api_key=os.getenv("KITE_API_KEY"),
-        api_secret=os.getenv("KITE_API_SECRET"),
-        totp_secret=os.getenv("KITE_TOTP_SECRET")
-    )
-    # Note: Ensure your auto_login handles the access_token correctly for GitHub
-    scanner.run()
