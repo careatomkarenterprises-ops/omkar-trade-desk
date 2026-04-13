@@ -57,7 +57,7 @@ class ZerodhaFetcher:
             raise ValueError("Could not connect to Zerodha")
 
     def get_automated_access_token(self):
-        """Fixed version to prevent 'Exec format error' on GitHub Linux"""
+        """Fixed version with deep-search for the correct chromedriver binary on Linux"""
         options = Options()
         options.add_argument("--headless") 
         options.add_argument("--no-sandbox")
@@ -65,27 +65,31 @@ class ZerodhaFetcher:
         options.binary_location = "/usr/bin/google-chrome"
         
         try:
-            # Install driver
-            path = ChromeDriverManager().install()
+            # 1. Install and get the initial path
+            install_path = ChromeDriverManager().install()
             
-            # This logic finds the actual 'chromedriver' program and avoids the 'NOTICE' files
-            if os.path.isdir(path):
-                exec_path = os.path.join(path, "chromedriver")
-            elif not path.endswith("chromedriver"):
-                exec_path = os.path.join(os.path.dirname(path), "chromedriver")
-            else:
-                exec_path = path
-
-            # Final check to ensure we have the right file
-            if not os.path.exists(exec_path):
-                # Fallback search if pathing is weird
-                parent = os.path.dirname(exec_path)
-                for root, dirs, files in os.walk(parent):
-                    if "chromedriver" in files and "chromedriver-" not in root:
-                        exec_path = os.path.join(root, "chromedriver")
+            # 2. DEEP SEARCH: Look for the actual 'chromedriver' binary
+            exec_path = None
+            # Search in the directory where webdriver-manager downloaded the files
+            search_dir = os.path.dirname(install_path)
+            
+            for root, dirs, files in os.walk(search_dir):
+                if "chromedriver" in files:
+                    temp_path = os.path.join(root, "chromedriver")
+                    # Ignore license/notice files and ensure it's a file, not a folder
+                    if os.path.isfile(temp_path) and "THIRD_PARTY" not in temp_path:
+                        exec_path = temp_path
                         break
+            
+            if not exec_path:
+                logger.error("Could not find the actual chromedriver binary.")
+                return None
 
-            logger.info(f"Using Chromedriver at: {exec_path}")
+            logger.info(f"🚀 Success! Found binary at: {exec_path}")
+            
+            # Ensure the file has execution permissions on Linux
+            os.chmod(exec_path, 0o755)
+
             service = Service(executable_path=exec_path)
             driver = webdriver.Chrome(service=service, options=options)
             
@@ -93,23 +97,26 @@ class ZerodhaFetcher:
             driver.get(kite.login_url())
             wait = WebDriverWait(driver, 20)
             
-            # Step 1: Login
+            # Step 1: Login ID & Password
             wait.until(EC.presence_of_element_located((By.XPATH, "//input[@type='text']"))).send_keys(self.user_id)
             driver.find_element(By.XPATH, "//input[@type='password']").send_keys(self.password)
             driver.find_element(By.XPATH, "//button[@type='submit']").click()
             
-            # Step 2: TOTP
+            # Step 2: Enter TOTP
             totp = pyotp.TOTP(self.totp_secret.replace(" ", ""))
             wait.until(EC.presence_of_element_located((By.XPATH, "//input[@type='text']"))).send_keys(totp.now())
             driver.find_element(By.XPATH, "//button[@type='submit']").click()
             
-            # Step 3: URL Token
+            # Step 3: Wait and grab token from URL
             time.sleep(5)
             current_url = driver.current_url
             if "request_token=" not in current_url:
+                logger.error(f"Login failed. Current URL: {current_url}")
                 return None
                 
             request_token = current_url.split("request_token=")[1].split("&")[0]
+            
+            # Step 4: Final handshake
             session = kite.generate_session(request_token, api_secret=self.api_secret)
             return session["access_token"]
             
