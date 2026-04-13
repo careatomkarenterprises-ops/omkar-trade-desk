@@ -1,0 +1,45 @@
+name: Diagnostic - Test Zerodha Connection
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: pip install kiteconnect pandas
+        
+      - name: Test Connection
+        env:
+          ZERODHA_API_KEY: ${{ secrets.ZERODHA_API_KEY }}
+          ZERODHA_API_SECRET: ${{ secrets.ZERODHA_API_SECRET }}
+          ZERODHA_REQUEST_TOKEN: ${{ secrets.ZERODHA_REQUEST_TOKEN }}
+        run: |
+          python -c "
+          import os
+          from kiteconnect import KiteConnect
+          
+          api_key = os.getenv('ZERODHA_API_KEY')
+          api_secret = os.getenv('ZERODHA_API_SECRET')
+          request_token = os.getenv('ZERODHA_REQUEST_TOKEN')
+          
+          print(f'API Key: {api_key[:10]}...' if api_key else 'API Key: MISSING')
+          print(f'API Secret: {api_secret[:10]}...' if api_secret else 'API Secret: MISSING')
+          print(f'Request Token: {request_token[:20]}...' if request_token else 'Request Token: MISSING')
+          
+          if all([api_key, api_secret, request_token]):
+              try:
+                  kite = KiteConnect(api_key=api_key)
+                  session = kite.generate_session(request_token, api_secret=api_secret)
+                  print(f'✅ Success! Access Token: {session[\"access_token\"][:20]}...')
+              except Exception as e:
+                  print(f'❌ Error: {e}')
+          "
