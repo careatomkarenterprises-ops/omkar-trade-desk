@@ -70,7 +70,7 @@ class ZerodhaFetcher:
             raise ValueError("Could not connect to Zerodha")
 
     def get_automated_access_token(self):
-        """Auto-login to Zerodha using Selenium with correct selectors"""
+        """Auto-login to Zerodha using Selenium with correct chromedriver binary"""
         options = Options()
         options.add_argument("--headless=new")
         options.add_argument("--no-sandbox")
@@ -80,8 +80,53 @@ class ZerodhaFetcher:
         
         driver = None
         try:
-            # Setup ChromeDriver
-            service = Service(ChromeDriverManager().install())
+            # Install ChromeDriver and get the correct binary path
+            driver_path = ChromeDriverManager().install()
+            logger.info(f"Driver installed at: {driver_path}")
+            
+            # Fix: Find the actual chromedriver executable (not the notice file)
+            # The path might be to a directory or a zip file
+            if driver_path.endswith('.zip'):
+                # Extract directory from zip path
+                driver_dir = os.path.dirname(driver_path)
+            else:
+                driver_dir = driver_path
+            
+            # Search for the actual chromedriver executable
+            chromedriver_path = None
+            for root, dirs, files in os.walk(driver_dir):
+                for file in files:
+                    if file == "chromedriver" or file == "chromedriver.exe":
+                        full_path = os.path.join(root, file)
+                        # Skip THIRD_PARTY_NOTICES files
+                        if "THIRD_PARTY" not in full_path:
+                            chromedriver_path = full_path
+                            break
+                if chromedriver_path:
+                    break
+            
+            # If still not found, try a common pattern
+            if not chromedriver_path:
+                # Look in .wdm cache directory
+                wdm_cache = os.path.expanduser("~/.wdm/drivers/chromedriver/linux64")
+                if os.path.exists(wdm_cache):
+                    for version_dir in os.listdir(wdm_cache):
+                        version_path = os.path.join(wdm_cache, version_dir)
+                        chromedriver_file = os.path.join(version_path, "chromedriver")
+                        if os.path.isfile(chromedriver_file) and "THIRD_PARTY" not in chromedriver_file:
+                            chromedriver_path = chromedriver_file
+                            break
+            
+            if not chromedriver_path or not os.path.exists(chromedriver_path):
+                logger.error("Could not find chromedriver binary")
+                return None
+            
+            # Make sure it's executable
+            os.chmod(chromedriver_path, 0o755)
+            logger.info(f"✅ Using chromedriver at: {chromedriver_path}")
+            
+            # Setup service with correct binary
+            service = Service(executable_path=chromedriver_path)
             driver = webdriver.Chrome(service=service, options=options)
             driver.set_page_load_timeout(30)
             
@@ -92,7 +137,7 @@ class ZerodhaFetcher:
             
             wait = WebDriverWait(driver, 20)
             
-            # Step 1: Enter User ID (using ID selector - more reliable)
+            # Step 1: Enter User ID
             logger.info("Entering User ID...")
             userid_input = wait.until(EC.presence_of_element_located((By.ID, "userid")))
             userid_input.clear()
@@ -135,7 +180,6 @@ class ZerodhaFetcher:
             logger.info(f"Redirected to: {current_url[:100]}...")
             
             if "request_token=" not in current_url:
-                # Take screenshot for debugging
                 driver.save_screenshot("data/login_failed.png")
                 logger.error(f"Login failed. No request_token in URL")
                 return None
