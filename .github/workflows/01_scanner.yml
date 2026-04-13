@@ -2,41 +2,61 @@ name: 🔍 Omkar Scanner - Every 30 Minutes
 
 on:
   schedule:
-    - cron: '*/30 * * * *' # Runs every 30 minutes
-  workflow_dispatch: # Allows manual run
+    - cron: '*/30 3-10 * * 1-5'
+  workflow_dispatch:
 
 jobs:
-  run-scanner:
+  scan:
+    name: Run Market Scanner
     runs-on: ubuntu-latest
-    
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+          cache: 'pip'
 
-      # --- ADDED: INSTALL CHROME ---
-      - name: Install Google Chrome
+      - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
-
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
+          pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Market Scanner
+      - name: Run Scanner
         env:
+          PYTHONPATH: .
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          
+          # ✅ Zerodha Credentials - ALL SECRETS
           ZERODHA_API_KEY: ${{ secrets.ZERODHA_API_KEY }}
           ZERODHA_API_SECRET: ${{ secrets.ZERODHA_API_SECRET }}
+          ZERODHA_REQUEST_TOKEN: ${{ secrets.ZERODHA_REQUEST_TOKEN }}
           ZERODHA_USER_ID: ${{ secrets.ZERODHA_USER_ID }}
           ZERODHA_PASSWORD: ${{ secrets.ZERODHA_PASSWORD }}
           ZERODHA_TOTP_SECRET: ${{ secrets.ZERODHA_TOTP_SECRET }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          # Ensure all your channel IDs are listed here too
+          KITE_ACCESS_TOKEN: ${{ secrets.KITE_ACCESS_TOKEN }}
+          
+          # Telegram Channels
+          CHANNEL_EDUCATION: ${{ secrets.CHANNEL_EDUCATION }}
           CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
-        run: python -m src.scanner.core
+          CHANNEL_NIFTY: ${{ secrets.CHANNEL_NIFTY }}
+          CHANNEL_BANKNIFTY: ${{ secrets.CHANNEL_BANKNIFTY }}
+          CHANNEL_COMMODITY: ${{ secrets.CHANNEL_COMMODITY }}
+          CHANNEL_CURRENCY: ${{ secrets.CHANNEL_CURRENCY }}
+          CHANNEL_SWING: ${{ secrets.CHANNEL_SWING }}
+          CHANNEL_INTRADAY: ${{ secrets.CHANNEL_INTRADAY }}
+          CHANNEL_FNO: ${{ secrets.CHANNEL_FNO }}
+          
+        run: |
+          python -m src.scanner.core
+
+      - name: Upload scan logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scan-logs
+          path: data/
+          retention-days: 7
+          if-no-files-found: warn
