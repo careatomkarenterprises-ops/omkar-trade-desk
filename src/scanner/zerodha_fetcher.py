@@ -27,6 +27,18 @@ class ZerodhaFetcher:
         self.totp_secret = os.getenv('ZERODHA_TOTP_SECRET')
         self.token_file = 'data/zerodha_session.pkl'
         
+        # Validate all credentials are present
+        missing = []
+        if not self.api_key: missing.append("ZERODHA_API_KEY")
+        if not self.api_secret: missing.append("ZERODHA_API_SECRET")
+        if not self.user_id: missing.append("ZERODHA_USER_ID")
+        if not self.password: missing.append("ZERODHA_PASSWORD")
+        if not self.totp_secret: missing.append("ZERODHA_TOTP_SECRET")
+        
+        if missing:
+            logger.error(f"Missing credentials: {', '.join(missing)}")
+            raise ValueError(f"Missing Zerodha credentials: {', '.join(missing)}")
+        
         os.makedirs('data', exist_ok=True)
         self.kite = None
         self.access_token = None
@@ -52,141 +64,256 @@ class ZerodhaFetcher:
             self.kite = KiteConnect(api_key=self.api_key)
             self.kite.set_access_token(self.access_token)
             self._save_session()
+            logger.info("✅ Auto-Login successful!")
         else:
             logger.error("❌ Auto-Login failed. Check your Credentials/TOTP Secret.")
             raise ValueError("Could not connect to Zerodha")
 
     def get_automated_access_token(self):
-        """Fixed version with deep-search for the correct chromedriver binary on Linux"""
+        """Auto-login to Zerodha using Selenium with correct selectors"""
         options = Options()
-        options.add_argument("--headless") 
+        options.add_argument("--headless=new")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
-        options.binary_location = "/usr/bin/google-chrome"
+        options.add_argument("--disable-gpu")
+        options.add_argument("--window-size=1280,720")
         
+        driver = None
         try:
-            # 1. Install and get the initial path
-            install_path = ChromeDriverManager().install()
-            
-            # 2. DEEP SEARCH: Look for the actual 'chromedriver' binary
-            exec_path = None
-            # Search in the directory where webdriver-manager downloaded the files
-            search_dir = os.path.dirname(install_path)
-            
-            for root, dirs, files in os.walk(search_dir):
-                if "chromedriver" in files:
-                    temp_path = os.path.join(root, "chromedriver")
-                    # Ignore license/notice files and ensure it's a file, not a folder
-                    if os.path.isfile(temp_path) and "THIRD_PARTY" not in temp_path:
-                        exec_path = temp_path
-                        break
-            
-            if not exec_path:
-                logger.error("Could not find the actual chromedriver binary.")
-                return None
-
-            logger.info(f"🚀 Success! Found binary at: {exec_path}")
-            
-            # Ensure the file has execution permissions on Linux
-            os.chmod(exec_path, 0o755)
-
-            service = Service(executable_path=exec_path)
+            # Setup ChromeDriver
+            service = Service(ChromeDriverManager().install())
             driver = webdriver.Chrome(service=service, options=options)
+            driver.set_page_load_timeout(30)
             
             kite = KiteConnect(api_key=self.api_key)
-            driver.get(kite.login_url())
+            login_url = kite.login_url()
+            logger.info(f"Navigating to login page...")
+            driver.get(login_url)
+            
             wait = WebDriverWait(driver, 20)
             
-            # Step 1: Login ID & Password
-            wait.until(EC.presence_of_element_located((By.XPATH, "//input[@type='text']"))).send_keys(self.user_id)
-            driver.find_element(By.XPATH, "//input[@type='password']").send_keys(self.password)
-            driver.find_element(By.XPATH, "//button[@type='submit']").click()
+            # Step 1: Enter User ID (using ID selector - more reliable)
+            logger.info("Entering User ID...")
+            userid_input = wait.until(EC.presence_of_element_located((By.ID, "userid")))
+            userid_input.clear()
+            userid_input.send_keys(self.user_id)
             
-            # Step 2: Enter TOTP
-            totp = pyotp.TOTP(self.totp_secret.replace(" ", ""))
-            wait.until(EC.presence_of_element_located((By.XPATH, "//input[@type='text']"))).send_keys(totp.now())
-            driver.find_element(By.XPATH, "//button[@type='submit']").click()
+            # Step 2: Enter Password
+            logger.info("Entering Password...")
+            password_input = driver.find_element(By.ID, "password")
+            password_input.clear()
+            password_input.send_keys(self.password)
             
-            # Step 3: Wait and grab token from URL
+            # Step 3: Click Login button
+            logger.info("Clicking Login button...")
+            login_button = driver.find_element(By.XPATH, "//button[@type='submit']")
+            login_button.click()
+            
+            # Step 4: Wait for 2FA page and enter TOTP
+            time.sleep(3)
+            logger.info("Waiting for 2FA input...")
+            
+            try:
+                # Look for TOTP input field
+                totp_input = wait.until(EC.presence_of_element_located((By.ID, "twofa")))
+                totp = pyotp.TOTP(self.totp_secret.replace(" ", ""))
+                otp_code = totp.now()
+                logger.info(f"Entering TOTP: {otp_code}")
+                totp_input.clear()
+                totp_input.send_keys(otp_code)
+                
+                # Submit TOTP
+                submit_button = driver.find_element(By.XPATH, "//button[@type='submit']")
+                submit_button.click()
+                time.sleep(3)
+            except Exception as e:
+                logger.warning(f"TOTP entry issue: {e}")
+            
+            # Step 5: Wait for redirect and capture request_token
             time.sleep(5)
             current_url = driver.current_url
+            logger.info(f"Redirected to: {current_url[:100]}...")
+            
             if "request_token=" not in current_url:
-                logger.error(f"Login failed. Current URL: {current_url}")
+                # Take screenshot for debugging
+                driver.save_screenshot("data/login_failed.png")
+                logger.error(f"Login failed. No request_token in URL")
                 return None
                 
             request_token = current_url.split("request_token=")[1].split("&")[0]
+            logger.info(f"✅ Got request_token: {request_token[:20]}...")
             
-            # Step 4: Final handshake
+            # Step 6: Exchange for access token
             session = kite.generate_session(request_token, api_secret=self.api_secret)
             return session["access_token"]
             
         except Exception as e:
             logger.error(f"Auto-Login Error: {e}")
+            if driver:
+                driver.save_screenshot("data/login_error.png")
             return None
         finally:
-            if 'driver' in locals():
+            if driver:
                 driver.quit()
 
     def _save_session(self):
-        session_data = {'access_token': self.access_token, 'api_key': self.api_key}
+        """Save session to disk for reuse"""
+        session_data = {
+            'access_token': self.access_token, 
+            'api_key': self.api_key,
+            'created_at': datetime.now().isoformat()
+        }
         with open(self.token_file, 'wb') as f:
             pickle.dump(session_data, f)
+        logger.info(f"✅ Session saved to {self.token_file}")
 
     def _load_session(self) -> bool:
-        if not os.path.exists(self.token_file): return False
+        """Load and validate existing session"""
+        if not os.path.exists(self.token_file):
+            return False
         try:
             with open(self.token_file, 'rb') as f:
                 data = pickle.load(f)
             self.kite = KiteConnect(api_key=self.api_key)
             self.kite.set_access_token(data['access_token'])
-            self.kite.profile() 
+            # Validate token by making a test call
+            self.kite.profile()
+            logger.info("✅ Session valid")
             return True
-        except: return False
+        except Exception as e:
+            logger.warning(f"Session invalid: {e}")
+            return False
+
+    def refresh_if_needed(self):
+        """Check if token is still valid"""
+        try:
+            if self.kite:
+                self.kite.profile()
+        except Exception:
+            logger.warning("Token may be expired, will refresh on next call")
+            self._initialize_connection()
 
     def load_instruments(self):
+        """Load instrument list (updated daily)"""
         try:
+            self.refresh_if_needed()
+            
             if os.path.exists(self.cache_file):
                 mod_time = datetime.fromtimestamp(os.path.getmtime(self.cache_file))
-                if mod_time.date() == datetime.now().date(): return
+                if mod_time.date() == datetime.now().date():
+                    logger.info("Using cached instruments from today")
+                    return
+            
+            logger.info("Fetching fresh instrument list from Zerodha...")
             instruments = self.kite.instruments()
-            pd.DataFrame(instruments).to_csv(self.cache_file, index=False)
+            df = pd.DataFrame(instruments)
+            df.to_csv(self.cache_file, index=False)
+            logger.info(f"✅ Loaded {len(df)} instruments")
+            
         except Exception as e:
             logger.error(f"Error loading instruments: {e}")
 
     def get_instrument_token(self, symbol: str, exchange: str = "NSE") -> Optional[str]:
+        """Get instrument token for a symbol"""
         try:
+            self.refresh_if_needed()
+            
             cache_key = f"{exchange}:{symbol}"
-            if cache_key in self.instrument_cache: return self.instrument_cache[cache_key]
+            if cache_key in self.instrument_cache:
+                return self.instrument_cache[cache_key]
+            
             df = pd.read_csv(self.cache_file)
             match = df[(df['exchange'] == exchange) & (df['tradingsymbol'] == symbol)]
+            
             if match.empty and exchange == "NSE":
                 match = df[(df['exchange'] == exchange) & (df['tradingsymbol'] == f"{symbol}EQ")]
+            
             if not match.empty:
                 token = str(match.iloc[0]['instrument_token'])
                 self.instrument_cache[cache_key] = token
                 return token
+            
+            logger.warning(f"No token found for {symbol}")
             return None
-        except: return None
+            
+        except Exception as e:
+            logger.error(f"Error getting token for {symbol}: {e}")
+            return None
 
     def get_historical_data(self, symbol: str, interval: str = "day", days: int = 45) -> Optional[pd.DataFrame]:
+        """Get historical candle data"""
         try:
+            self.refresh_if_needed()
+            
             token = self.get_instrument_token(symbol)
-            if not token: return None
+            if not token:
+                return None
+            
             to_date = datetime.now()
             from_date = to_date - timedelta(days=days)
-            candles = self.kite.historical_data(int(token), from_date.strftime("%Y-%m-%d %H:%M:%S"), to_date.strftime("%Y-%m-%d %H:%M:%S"), interval)
+            
+            candles = self.kite.historical_data(
+                int(token), 
+                from_date.strftime("%Y-%m-%d %H:%M:%S"), 
+                to_date.strftime("%Y-%m-%d %H:%M:%S"), 
+                interval
+            )
+            
             if candles:
-                df = pd.DataFrame(candles).rename(columns={'date':'Date','open':'Open','high':'High','low':'Low','close':'Close','volume':'Volume'})
+                df = pd.DataFrame(candles)
+                df = df.rename(columns={
+                    'date': 'Date', 'open': 'Open', 'high': 'High',
+                    'low': 'Low', 'close': 'Close', 'volume': 'Volume'
+                })
                 df.set_index('Date', inplace=True)
+                logger.info(f"✅ Got {len(df)} days of data for {symbol}")
                 return df
+            
             return None
+            
         except Exception as e:
             logger.error(f"Data error for {symbol}: {e}")
             return None
 
     def get_ltp(self, symbols: List[str]) -> Dict:
+        """Get last traded prices for multiple symbols"""
         try:
+            self.refresh_if_needed()
             formatted = [f"NSE:{s}" for s in symbols]
             ltp_data = self.kite.ltp(formatted)
-            return {s: ltp_data[f"NSE:{s}"]['last_price'] for s in symbols if f"NSE:{s}" in ltp_data}
-        except: return {}
+            
+            result = {}
+            for sym in symbols:
+                key = f"NSE:{sym}"
+                if key in ltp_data:
+                    result[sym] = ltp_data[key]['last_price']
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error fetching LTP: {e}")
+            return {}
+
+    def get_quote(self, symbol: str) -> Optional[Dict]:
+        """Get real-time quote for a symbol"""
+        try:
+            self.refresh_if_needed()
+            quotes = self.kite.quote([f"NSE:{symbol}"])
+            
+            if quotes and f"NSE:{symbol}" in quotes:
+                quote = quotes[f"NSE:{symbol}"]
+                return {
+                    'symbol': symbol,
+                    'last_price': quote['last_price'],
+                    'volume': quote.get('volume', 0),
+                    'open': quote['ohlc']['open'],
+                    'high': quote['ohlc']['high'],
+                    'low': quote['ohlc']['low'],
+                    'close': quote['ohlc']['close'],
+                    'timestamp': quote['timestamp'],
+                    'source': 'zerodha'
+                }
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error fetching quote: {e}")
+            return None
