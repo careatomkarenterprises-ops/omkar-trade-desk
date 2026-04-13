@@ -57,34 +57,59 @@ class ZerodhaFetcher:
             raise ValueError("Could not connect to Zerodha")
 
     def get_automated_access_token(self):
-        """Mimics a human browser login to get a fresh token"""
+        """Fixed version to prevent 'Exec format error' on GitHub Linux"""
         options = Options()
         options.add_argument("--headless") 
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
-        
-        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+        options.binary_location = "/usr/bin/google-chrome"
         
         try:
+            # Install driver
+            path = ChromeDriverManager().install()
+            
+            # This logic finds the actual 'chromedriver' program and avoids the 'NOTICE' files
+            if os.path.isdir(path):
+                exec_path = os.path.join(path, "chromedriver")
+            elif not path.endswith("chromedriver"):
+                exec_path = os.path.join(os.path.dirname(path), "chromedriver")
+            else:
+                exec_path = path
+
+            # Final check to ensure we have the right file
+            if not os.path.exists(exec_path):
+                # Fallback search if pathing is weird
+                parent = os.path.dirname(exec_path)
+                for root, dirs, files in os.walk(parent):
+                    if "chromedriver" in files and "chromedriver-" not in root:
+                        exec_path = os.path.join(root, "chromedriver")
+                        break
+
+            logger.info(f"Using Chromedriver at: {exec_path}")
+            service = Service(executable_path=exec_path)
+            driver = webdriver.Chrome(service=service, options=options)
+            
             kite = KiteConnect(api_key=self.api_key)
             driver.get(kite.login_url())
             wait = WebDriverWait(driver, 20)
             
-            # Step 1: Login ID & Password
+            # Step 1: Login
             wait.until(EC.presence_of_element_located((By.XPATH, "//input[@type='text']"))).send_keys(self.user_id)
             driver.find_element(By.XPATH, "//input[@type='password']").send_keys(self.password)
             driver.find_element(By.XPATH, "//button[@type='submit']").click()
             
-            # Step 2: Enter TOTP
+            # Step 2: TOTP
             totp = pyotp.TOTP(self.totp_secret.replace(" ", ""))
             wait.until(EC.presence_of_element_located((By.XPATH, "//input[@type='text']"))).send_keys(totp.now())
             driver.find_element(By.XPATH, "//button[@type='submit']").click()
             
-            # Step 3: Get the token from URL
+            # Step 3: URL Token
             time.sleep(5)
-            request_token = driver.current_url.split("request_token=")[1].split("&")[0]
-            
-            # Step 4: Final handshake
+            current_url = driver.current_url
+            if "request_token=" not in current_url:
+                return None
+                
+            request_token = current_url.split("request_token=")[1].split("&")[0]
             session = kite.generate_session(request_token, api_secret=self.api_secret)
             return session["access_token"]
             
@@ -92,7 +117,8 @@ class ZerodhaFetcher:
             logger.error(f"Auto-Login Error: {e}")
             return None
         finally:
-            driver.quit()
+            if 'driver' in locals():
+                driver.quit()
 
     def _save_session(self):
         session_data = {'access_token': self.access_token, 'api_key': self.api_key}
