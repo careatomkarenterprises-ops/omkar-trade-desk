@@ -4,12 +4,13 @@ import pandas as pd
 import pyotp
 import time
 import pickle
+import zipfile
+import urllib.request
 from datetime import datetime, timedelta
 from kiteconnect import KiteConnect
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -69,8 +70,61 @@ class ZerodhaFetcher:
             logger.error("❌ Auto-Login failed. Check your Credentials/TOTP Secret.")
             raise ValueError("Could not connect to Zerodha")
 
+    def _download_chromedriver(self):
+        """Manually download and extract ChromeDriver"""
+        try:
+            # ChromeDriver version for Chrome 146
+            version = "146.0.7680.165"
+            download_url = f"https://storage.googleapis.com/chrome-for-testing-public/{version}/linux64/chromedriver-linux64.zip"
+            
+            # Create directory
+            driver_dir = os.path.expanduser("~/.chromedriver")
+            os.makedirs(driver_dir, exist_ok=True)
+            
+            chromedriver_path = os.path.join(driver_dir, "chromedriver")
+            
+            # Check if already downloaded
+            if os.path.exists(chromedriver_path):
+                logger.info(f"ChromeDriver already exists at {chromedriver_path}")
+                return chromedriver_path
+            
+            # Download zip file
+            zip_path = os.path.join(driver_dir, "chromedriver.zip")
+            logger.info(f"Downloading ChromeDriver from {download_url}...")
+            
+            urllib.request.urlretrieve(download_url, zip_path)
+            logger.info("Download complete, extracting...")
+            
+            # Extract zip
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(driver_dir)
+            
+            # Find the chromedriver binary in extracted folder
+            extracted_dir = os.path.join(driver_dir, "chromedriver-linux64")
+            extracted_binary = os.path.join(extracted_dir, "chromedriver")
+            
+            if os.path.exists(extracted_binary):
+                # Move to final location
+                import shutil
+                shutil.move(extracted_binary, chromedriver_path)
+                # Clean up
+                os.remove(zip_path)
+                shutil.rmtree(extracted_dir)
+                logger.info(f"✅ ChromeDriver installed at {chromedriver_path}")
+            else:
+                raise Exception("Binary not found after extraction")
+            
+            # Make executable
+            os.chmod(chromedriver_path, 0o755)
+            
+            return chromedriver_path
+            
+        except Exception as e:
+            logger.error(f"Failed to download ChromeDriver: {e}")
+            return None
+
     def get_automated_access_token(self):
-        """Auto-login to Zerodha using Selenium with correct chromedriver binary"""
+        """Auto-login to Zerodha using Selenium"""
         options = Options()
         options.add_argument("--headless=new")
         options.add_argument("--no-sandbox")
@@ -80,52 +134,15 @@ class ZerodhaFetcher:
         
         driver = None
         try:
-            # Install ChromeDriver and get the correct binary path
-            driver_path = ChromeDriverManager().install()
-            logger.info(f"Driver installed at: {driver_path}")
-            
-            # Fix: Find the actual chromedriver executable (not the notice file)
-            # The path might be to a directory or a zip file
-            if driver_path.endswith('.zip'):
-                # Extract directory from zip path
-                driver_dir = os.path.dirname(driver_path)
-            else:
-                driver_dir = driver_path
-            
-            # Search for the actual chromedriver executable
-            chromedriver_path = None
-            for root, dirs, files in os.walk(driver_dir):
-                for file in files:
-                    if file == "chromedriver" or file == "chromedriver.exe":
-                        full_path = os.path.join(root, file)
-                        # Skip THIRD_PARTY_NOTICES files
-                        if "THIRD_PARTY" not in full_path:
-                            chromedriver_path = full_path
-                            break
-                if chromedriver_path:
-                    break
-            
-            # If still not found, try a common pattern
+            # Download ChromeDriver manually
+            chromedriver_path = self._download_chromedriver()
             if not chromedriver_path:
-                # Look in .wdm cache directory
-                wdm_cache = os.path.expanduser("~/.wdm/drivers/chromedriver/linux64")
-                if os.path.exists(wdm_cache):
-                    for version_dir in os.listdir(wdm_cache):
-                        version_path = os.path.join(wdm_cache, version_dir)
-                        chromedriver_file = os.path.join(version_path, "chromedriver")
-                        if os.path.isfile(chromedriver_file) and "THIRD_PARTY" not in chromedriver_file:
-                            chromedriver_path = chromedriver_file
-                            break
-            
-            if not chromedriver_path or not os.path.exists(chromedriver_path):
-                logger.error("Could not find chromedriver binary")
+                logger.error("Could not download ChromeDriver")
                 return None
             
-            # Make sure it's executable
-            os.chmod(chromedriver_path, 0o755)
-            logger.info(f"✅ Using chromedriver at: {chromedriver_path}")
+            logger.info(f"✅ Using ChromeDriver at: {chromedriver_path}")
             
-            # Setup service with correct binary
+            # Setup service
             service = Service(executable_path=chromedriver_path)
             driver = webdriver.Chrome(service=service, options=options)
             driver.set_page_load_timeout(30)
@@ -189,6 +206,7 @@ class ZerodhaFetcher:
             
             # Step 6: Exchange for access token
             session = kite.generate_session(request_token, api_secret=self.api_secret)
+            logger.info("✅ Access token generated successfully!")
             return session["access_token"]
             
         except Exception as e:
