@@ -1,6 +1,5 @@
 """
 Zerodha Data Fetcher - Using Request Token (No Selenium)
-One-time setup, then fully automatic token refresh
 """
 
 import os
@@ -183,7 +182,7 @@ class ZerodhaFetcher:
                     'low': 'Low', 'close': 'Close', 'volume': 'Volume'
                 })
                 df.set_index('Date', inplace=True)
-                logger.debug(f"Got {len(df)} days for {symbol}")
+                logger.info(f"✅ Got {len(df)} days for {symbol}")
                 return df
             
             return None
