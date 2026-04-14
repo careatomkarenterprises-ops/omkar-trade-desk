@@ -112,12 +112,47 @@ class OmkarTradeDesk:
         logger.info(f"🏁 Scan Complete. Found {matches_found} new setups.")
 
 def main():
-    # Only run during market hours (Simple Local Check)
     now = datetime.now()
-    if now.weekday() >= 5: # Saturday/Sunday
+    # List of Holidays and their specific greeting titles
+    holidays = {
+        "2026-04-14": "Dr. Babasaheb Ambedkar Jayanti",
+        "2026-05-01": "Maharashtra Day",
+        "2026-11-08": "Diwali Laxmi Pujan"
+    }
+    
+    today_str = now.strftime('%Y-%m-%d')
+    
+    # 1. Check for Weekend
+    if now.weekday() >= 5:
         logger.info("😴 Weekend - Scanner resting.")
         return
 
+    # 2. Check for Holiday to send wishes
+    if today_str in holidays:
+        occasion = holidays[today_str]
+        poster = TelegramPoster()
+        
+        # We only want to send the wish ONCE (e.g., at 9:00 AM)
+        if now.hour == 9 and now.minute < 30:
+            wish_msg = (
+                f"✨ **Greetings from Omkar TradeDesk** ✨\n\n"
+                f"Wishing you and your family a very Happy **{occasion}**.\n\n"
+                f"🏛️ The Indian Stock Markets are closed today in observance of this occasion. "
+                f"We will resume our Institutional Volume Scans tomorrow morning at 9:15 AM.\n\n"
+                f"Best Regards,\n"
+                f"**Omkar Market Intelligence Team**"
+            )
+            poster.send_message(channel='premium', message=wish_msg)
+            logger.info(f"🎉 Sent holiday wishes for {occasion}")
+        return
+
+    # 3. If not a holiday, run the regular scanner
+    try:
+        scanner = OmkarTradeDesk()
+        scanner.execute_scan()
+    except Exception as e:
+        logger.critical(f"Critical System Failure: {e}")
+        
     try:
         scanner = OmkarTradeDesk()
         scanner.execute_scan()
