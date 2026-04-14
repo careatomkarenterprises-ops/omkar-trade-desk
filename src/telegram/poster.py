@@ -1,5 +1,5 @@
 """
-Telegram Poster - Clean & Fixed Version
+Telegram Poster - Omkar Elite Multi-Segment Version
 """
 
 import os
@@ -11,23 +11,26 @@ from typing import Dict
 logger = logging.getLogger(__name__)
 
 class TelegramPoster:
-
     def __init__(self):
-
         self.bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
-
         if not self.bot_token:
             raise ValueError("TELEGRAM_BOT_TOKEN not set")
 
         self.base_url = f"https://api.telegram.org/bot{self.bot_token}"
 
-        # Channels
+        # ✅ Expanded Channels for Multi-Segment Scanner
         self.channels = {
             'premium': os.getenv('CHANNEL_PREMIUM'),
-            'education': os.getenv('CHANNEL_EDUCATION')
+            'education': os.getenv('CHANNEL_EDUCATION'),
+            'fno': os.getenv('CHANNEL_FNO'),
+            'nifty': os.getenv('CHANNEL_NIFTY'),
+            'banknifty': os.getenv('CHANNEL_BANKNIFTY'),
+            'swing': os.getenv('CHANNEL_SWING'),
+            'currency': os.getenv('CHANNEL_CURRENCY'),
+            'commodity': os.getenv('CHANNEL_COMMODITY')
         }
 
-        # ✅ CLEAN LEGAL DISCLAIMER (FIXED INDENTATION)
+        # ✅ CLEAN LEGAL DISCLAIMER
         self.disclaimer = """
 ━━━━━━━━━━━━━━━━━━━━
 📚 Omkar Market Intelligence
@@ -38,12 +41,13 @@ class TelegramPoster:
 """
 
     def send_message(self, channel: str, message: str) -> Dict:
-
         try:
-            chat_id = self.channels.get(channel)
+            # Convert channel names to lowercase to prevent matching errors
+            chat_id = self.channels.get(channel.lower())
 
             if not chat_id:
-                return {'success': False, 'error': 'Channel not found'}
+                logger.error(f"Channel ID not found for: {channel}")
+                return {'success': False, 'error': f'Channel {channel} not found'}
 
             url = f"{self.base_url}/sendMessage"
 
@@ -68,3 +72,9 @@ class TelegramPoster:
         except Exception as e:
             logger.error(f"Telegram Error: {e}")
             return {'success': False, 'error': str(e)}
+
+# ✅ THE "BRIDGE" FUNCTION
+# This fixes the ImportError in your Agents
+def send_to_telegram(segment: str, message: str):
+    poster = TelegramPoster()
+    return poster.send_message(segment, message)
