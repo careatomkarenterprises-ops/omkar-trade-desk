@@ -2,11 +2,11 @@ name: 🔍 Omkar Scanner - Multi-Segment Elite
 
 on:
   schedule:
-    # 08:45 AM IST (03:15 UTC): Morning Setup & Token Mapping
+    # 08:45 AM IST (03:15 UTC): Morning Setup
     - cron: '15 3 * * 1-5'
-    # Every 30 mins (Mon-Fri) 09:00 AM to 04:00 PM IST: Multi-Agent Scan
+    # Every 30 mins (Mon-Fri) 09:00 AM to 04:00 PM IST
     - cron: '0,30 3-10 * * 1-5' 
-  workflow_dispatch: # Allows you to trigger it manually for testing
+  workflow_dispatch: # Manual trigger
 
 jobs:
   scan:
@@ -19,13 +19,11 @@ jobs:
       - name: Check Indian Market Holiday
         id: holiday_check
         run: |
-          # Get current date in IST
           CURRENT_DATE=$(TZ='Asia/Kolkata' date +%Y-%m-%d)
-          
-          # Official NSE 2026 Holiday List
           HOLIDAYS="2026-01-26,2026-03-03,2026-03-26,2026-03-31,2026-04-03,2026-04-14,2026-05-01,2026-05-28,2026-06-26,2026-09-14,2026-10-02,2026-10-20,2026-11-10,2026-11-24,2026-12-25"
           
-          if [[ "false" =~ $CURRENT_DATE ]]; then
+          # ✅ FIXED LOGIC: We check if CURRENT_DATE is in HOLIDAYS
+          if [[ $HOLIDAYS =~ $CURRENT_DATE ]]; then
             echo "Today is a Market Holiday ($CURRENT_DATE). Skipping core scan."
             echo "is_holiday=true" >> $GITHUB_OUTPUT
           else
@@ -67,22 +65,25 @@ jobs:
           CHANNEL_COMMODITY: ${{ secrets.CHANNEL_COMMODITY }}
           CHANNEL_EDUCATION: ${{ secrets.CHANNEL_EDUCATION }}
         run: |
+          # Create data directory if it doesn't exist
+          mkdir -p data
+          
           # Step 1: Initialize Tokens & Authentication
           echo "🚀 Initializing Morning Setup..."
           python -m src.scanner.morning_setup
           
           # Step 2: Execute Multi-Segment Agents
-          echo "📉 Scanning F&O (Futures & Options)..."
-          python -m src.scanner.fno_agent
+          echo "📉 Scanning F&O..."
+          python -m src.scanner.fno_agent || echo "⚠️ FNO Agent Failed"
           
-          echo "📈 Scanning Swing Trade Opportunities (VSA)..."
-          python -m src.scanner.swing_agent
+          echo "📈 Scanning Swing..."
+          python -m src.scanner.swing_agent || echo "⚠️ Swing Agent Failed"
           
-          echo "💱 Scanning Currency (USDINR & Factors)..."
-          python -m src.scanner.currency_agent
+          echo "💱 Scanning Currency..."
+          python -m src.scanner.currency_agent || echo "⚠️ Currency Agent Failed"
           
-          echo "🪙 Scanning Commodities (MCX)..."
-          python -m src.scanner.commodity_agent
+          echo "🪙 Scanning Commodities..."
+          python -m src.scanner.commodity_agent || echo "⚠️ Commodity Agent Failed"
 
       - name: Save Execution Data & History
         if: always() && steps.holiday_check.outputs.is_holiday != 'true'
