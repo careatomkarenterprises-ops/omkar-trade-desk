@@ -1,46 +1,56 @@
-name: 🚀 Omkar Multi-Segment Scanner
+"""
+Omkar Trade Services - Morning Token Setup
+Run at 08:45 AM IST daily to refresh instrument tokens.
+"""
+import os
+import json
+import pandas as pd
+from pathlib import Path
+from kiteconnect import KiteConnect
 
-on:
-  schedule:
-    - cron: '15 3 * * 1-5'  # 08:45 AM IST (Morning Setup)
-    - cron: '*/15 4-10 * * 1-5' # Every 15 mins during market hours
-  workflow_dispatch:
+def run_morning_setup(kite):
+    print("🌅 Starting Omkar Morning Setup...")
+    
+    # 1. Fetch all instruments from Zerodha
+    instruments = kite.instruments()
+    df = pd.DataFrame(instruments)
+    
+    # 2. Filter for your specific segments
+    # - Equity for Swing Trading
+    # - NFO for Futures & Options
+    # - CDS for Currency
+    # - MCX for Commodities
+    
+    # Create a mapping for easy lookup: 'NSE:RELIANCE' -> 738561
+    token_map = {}
+    
+    # Map Equity (NSE)
+    nse_df = df[df['exchange'] == 'NSE']
+    for _, row in nse_df.iterrows():
+        token_map[f"NSE:{row['tradingsymbol']}"] = row['instrument_token']
+        
+    # Map F&O (NFO) - Focusing on Current/Next/Far Futures
+    nfo_df = df[df['exchange'] == 'NFO']
+    for _, row in nfo_df.iterrows():
+        token_map[f"NFO:{row['tradingsymbol']}"] = row['instrument_token']
 
-jobs:
-  market_scanner:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      
-      - name: Restore Token Cache
-        uses: actions/cache@v4
-        with:
-          path: data/
-          key: market-tokens-${{ github.run_id }}
-          restore-keys: |
-            market-tokens-
+    # Map Currency (CDS)
+    cds_df = df[df['exchange'] == 'CDS']
+    for _, row in cds_df.iterrows():
+        token_map[f"CDS:{row['tradingsymbol']}"] = row['instrument_token']
 
-      - name: Install Dependencies
-        run: pip install -r requirements.txt
+    # 3. Save to data folder for the scanners to use
+    data_dir = Path('data')
+    data_dir.mkdir(exist_ok=True)
+    
+    with open(data_dir / 'instrument_tokens.json', 'w') as f:
+        json.dump(token_map, f)
+        
+    print(f"✅ Successfully mapped {len(token_map)} instruments for today's session.")
 
-      - name: Morning Setup (Only at 8:45 AM)
-        if: github.event.schedule == '15 3 * * 1-5'
-        run: python -m src.scanner.morning_setup
-        env:
-          KITE_API_KEY: ${{ secrets.KITE_API_KEY }}
-          KITE_ACCESS_TOKEN: ${{ secrets.KITE_ACCESS_TOKEN }}
-
-      - name: Run Scanners (Market Hours)
-        if: github.event.schedule != '15 3 * * 1-5'
-        run: |
-          python -m src.scanner.fno_agent
-          python -m src.scanner.swing_agent
-          python -m src.scanner.currency_agent
-        env:
-          KITE_API_KEY: ${{ secrets.KITE_API_KEY }}
-          KITE_ACCESS_TOKEN: ${{ secrets.KITE_ACCESS_TOKEN }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+if __name__ == "__main__":
+    # This assumes you have your kite initialization logic ready
+    # from src.auth.kite_setup import get_kite_instance
+    # kite = get_kite_instance()
+    # run_morning_setup(kite)
+    pass
