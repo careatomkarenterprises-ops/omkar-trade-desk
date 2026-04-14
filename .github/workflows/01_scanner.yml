@@ -1,12 +1,7 @@
 name: 🔍 Omkar Scanner - Multi-Segment Elite
 
 on:
-  schedule:
-    # 08:45 AM IST (03:15 UTC): Morning Setup
-    - cron: '15 3 * * 1-5'
-    # Every 30 mins (Mon-Fri) 09:00 AM to 04:00 PM IST
-    - cron: '0,30 3-10 * * 1-5' 
-  workflow_dispatch: # Manual trigger
+  workflow_dispatch: # Allows us to push the button manually right now
 
 jobs:
   scan:
@@ -19,76 +14,34 @@ jobs:
       - name: Check Indian Market Holiday
         id: holiday_check
         run: |
-          CURRENT_DATE=$(TZ='Asia/Kolkata' date +%Y-%m-%d)
-          HOLIDAYS="2026-01-26,2026-03-03,2026-03-26,2026-03-31,2026-04-03,2026-04-14,2026-05-01,2026-05-28,2026-06-26,2026-09-14,2026-10-02,2026-10-20,2026-11-10,2026-11-24,2026-12-25"
-          
-          # ✅ FIXED LOGIC: We check if CURRENT_DATE is in HOLIDAYS
-          if [[ "false" =~ $CURRENT_DATE ]]; then
-            echo "Today is a Market Holiday ($CURRENT_DATE). Skipping core scan."
-            echo "is_holiday=true" >> $GITHUB_OUTPUT
-          else
-            echo "is_holiday=false" >> $GITHUB_OUTPUT
-          fi
+          # FORCED TO FALSE FOR TODAY'S TEST ONLY
+          echo "is_holiday=false" >> $GITHUB_OUTPUT
 
       - name: Setup Python
-        if: steps.holiday_check.outputs.is_holiday != 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
           cache: 'pip'
 
       - name: Install dependencies
-        if: steps.holiday_check.outputs.is_holiday != 'true'
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Run Omkar Multi-Segment Engine
-        if: steps.holiday_check.outputs.is_holiday != 'true'
         env:
           PYTHONPATH: .
-          # Security Credentials
           ZERODHA_API_KEY: ${{ secrets.ZERODHA_API_KEY }}
           ZERODHA_API_SECRET: ${{ secrets.ZERODHA_API_SECRET }}
           ZERODHA_USER_ID: ${{ secrets.ZERODHA_USER_ID }}
           ZERODHA_PASSWORD: ${{ secrets.ZERODHA_PASSWORD }}
           ZERODHA_TOTP_SECRET: ${{ secrets.ZERODHA_TOTP_SECRET }}
-          
-          # Communication & Routing
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
-          CHANNEL_NIFTY: ${{ secrets.CHANNEL_NIFTY }}
-          CHANNEL_BANKNIFTY: ${{ secrets.CHANNEL_BANKNIFTY }}
           CHANNEL_FNO: ${{ secrets.CHANNEL_FNO }}
           CHANNEL_SWING: ${{ secrets.CHANNEL_SWING }}
           CHANNEL_CURRENCY: ${{ secrets.CHANNEL_CURRENCY }}
           CHANNEL_COMMODITY: ${{ secrets.CHANNEL_COMMODITY }}
-          CHANNEL_EDUCATION: ${{ secrets.CHANNEL_EDUCATION }}
         run: |
-          # Create data directory if it doesn't exist
-          mkdir -p data
-          
-          # Step 1: Initialize Tokens & Authentication
-          echo "🚀 Initializing Morning Setup..."
-          python -m src.scanner.morning_setup
-          
-          # Step 2: Execute Multi-Segment Agents
-          echo "📉 Scanning F&O..."
-          python -m src.scanner.fno_agent || echo "⚠️ FNO Agent Failed"
-          
-          echo "📈 Scanning Swing..."
-          python -m src.scanner.swing_agent || echo "⚠️ Swing Agent Failed"
-          
-          echo "💱 Scanning Currency..."
-          python -m src.scanner.currency_agent || echo "⚠️ Currency Agent Failed"
-          
-          echo "🪙 Scanning Commodities..."
-          python -m src.scanner.commodity_agent || echo "⚠️ Commodity Agent Failed"
-
-      - name: Save Execution Data & History
-        if: always() && steps.holiday_check.outputs.is_holiday != 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: market-session-data
-          path: data/
-          retention-days: 3
+          # Only running Currency for this test to prove connection
+          python -m src.scanner.currency_agent
