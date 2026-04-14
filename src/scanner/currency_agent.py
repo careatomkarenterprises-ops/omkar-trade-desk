@@ -7,36 +7,48 @@ import pandas as pd
 from datetime import datetime, timedelta
 from src.telegram.poster import send_to_telegram
 
+# Note: You will need a way to initialize Kite here if running as __main__
+# For now, this is designed to be called by your main scanner logic
+
 class CurrencyAgent:
     def __init__(self, kite):
         self.kite = kite
-        with open('data/instrument_tokens.json', 'r') as f:
-            self.tokens = json.load(f)
+        try:
+            with open('data/instrument_tokens.json', 'r') as f:
+                self.tokens = json.load(f)
+        except FileNotFoundError:
+            self.tokens = {}
 
     def scan_currency(self):
-        # Focus on the most liquid USDINR Current Month Future
-        # Note: morning_setup.py maps these to the correct expiry tokens
+        # Focus on the most liquid USDINR and EURINR contracts
         targets = ["CDS:USDINR26APRFUT", "CDS:EURINR26APRFUT"]
         
         for symbol in targets:
             token = self.tokens.get(symbol)
-            if not token: continue
+            if not token: 
+                print(f"⚠️ Token not found for {symbol}")
+                continue
             
             # Fetch Hourly candles to identify the 'Big Picture'
             to_date = datetime.now()
             from_date = to_date - timedelta(days=5)
-            candles = self.kite.historical_data(token, from_date, to_date, "60minute")
-            df = pd.DataFrame(candles)
             
-            # VSA Logic: No Supply / No Demand
-            # Low Volume test of a previous support = Institutional 'No Supply'
-            last_candle = df.iloc[-1]
-            prev_lows = df['low'].tail(20).min()
-            avg_vol = df['volume'].tail(20).mean()
+            try:
+                candles = self.kite.historical_data(token, from_date, to_date, "60minute")
+                df = pd.DataFrame(candles)
+                
+                if df.empty:
+                    print(f"⚠️ No data found for {symbol}")
+                    continue
 
-            # Detection: Testing lows on very low volume (Smart money not selling)
-            if last_candle['low'] <= (prev_lows * 1.0005) and last_candle['volume'] < (0.7 * avg_vol):
-                self.alert_currency_setup(symbol, "No Supply Test (Potential Reversal)")
+                # --- TEST MODE START ---
+                # We are forcing this to True to test the Telegram connection
+                if True: 
+                    self.alert_currency_setup(symbol, "MANUAL TEST: No Supply Test")
+                # --- TEST MODE END ---
+                
+            except Exception as e:
+                print(f"❌ Error scanning {symbol}: {e}")
 
     def alert_currency_setup(self, symbol, pattern):
         msg = (
@@ -46,8 +58,10 @@ class CurrencyAgent:
             f"**Insight:** Market is testing lows with zero selling pressure. High probability of Mean Reversion.\n"
             f"📈 **Target:** Daily VWAP / Pivot Point"
         )
-        send_to_telegram("CURRENCY", msg)
+        # Using lowercase 'currency' to match your poster.py mapping
+        send_to_telegram("currency", msg)
 
 if __name__ == "__main__":
-    # The main workflow calls this via the .yml file
+    # This part is used if you run the script directly for a test
+    # Ensure your Kite authentication logic is available here if needed
     pass
