@@ -1,15 +1,16 @@
-name: 🔍 Omkar Scanner - Every 30 Minutes
+name: 🔍 Omkar Scanner - Multi-Segment Elite
 
 on:
   schedule:
-    # Runs every 30 mins, Mon-Fri, between 9:00 AM and 4:00 PM IST
-    # (Note: GitHub uses UTC time, so 3:30 UTC is 9:00 AM IST)
+    # 08:45 AM IST (03:15 UTC): Morning Setup & Token Mapping
+    - cron: '15 3 * * 1-5'
+    # Every 30 mins (Mon-Fri) 09:00 AM to 04:00 PM IST: Multi-Agent Scan
     - cron: '0,30 3-10 * * 1-5' 
-  workflow_dispatch: # Allows manual triggers
+  workflow_dispatch: # Allows you to trigger it manually for testing
 
 jobs:
   scan:
-    name: Run Market Scanner
+    name: Execute Multi-Agent Scan
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -18,14 +19,14 @@ jobs:
       - name: Check Indian Market Holiday
         id: holiday_check
         run: |
-          # Get current date in IST (UTC + 5.5)
+          # Get current date in IST
           CURRENT_DATE=$(TZ='Asia/Kolkata' date +%Y-%m-%d)
           
-          # List of NSE Holidays 2026
+          # Official NSE 2026 Holiday List
           HOLIDAYS="2026-01-26,2026-03-03,2026-03-26,2026-03-31,2026-04-03,2026-04-14,2026-05-01,2026-05-28,2026-06-26,2026-09-14,2026-10-02,2026-10-20,2026-11-10,2026-11-24,2026-12-25"
           
           if [[ $HOLIDAYS =~ $CURRENT_DATE ]]; then
-            echo "Today is a Market Holiday ($CURRENT_DATE). Skipping scan."
+            echo "Today is a Market Holiday ($CURRENT_DATE). Skipping core scan."
             echo "is_holiday=true" >> $GITHUB_OUTPUT
           else
             echo "is_holiday=false" >> $GITHUB_OUTPUT
@@ -44,25 +45,49 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Scanner
+      - name: Run Omkar Multi-Segment Engine
         if: steps.holiday_check.outputs.is_holiday != 'true'
         env:
           PYTHONPATH: .
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          # Security Credentials
           ZERODHA_API_KEY: ${{ secrets.ZERODHA_API_KEY }}
           ZERODHA_API_SECRET: ${{ secrets.ZERODHA_API_SECRET }}
           ZERODHA_USER_ID: ${{ secrets.ZERODHA_USER_ID }}
           ZERODHA_PASSWORD: ${{ secrets.ZERODHA_PASSWORD }}
           ZERODHA_TOTP_SECRET: ${{ secrets.ZERODHA_TOTP_SECRET }}
+          
+          # Communication & Routing
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
-          # Add other channel secrets here if needed
+          CHANNEL_NIFTY: ${{ secrets.CHANNEL_NIFTY }}
+          CHANNEL_BANKNIFTY: ${{ secrets.CHANNEL_BANKNIFTY }}
+          CHANNEL_FNO: ${{ secrets.CHANNEL_FNO }}
+          CHANNEL_SWING: ${{ secrets.CHANNEL_SWING }}
+          CHANNEL_CURRENCY: ${{ secrets.CHANNEL_CURRENCY }}
+          CHANNEL_COMMODITY: ${{ secrets.CHANNEL_COMMODITY }}
+          CHANNEL_EDUCATION: ${{ secrets.CHANNEL_EDUCATION }}
         run: |
-          python -m src.scanner.core
+          # Step 1: Initialize Tokens & Authentication
+          echo "🚀 Initializing Morning Setup..."
+          python -m src.scanner.morning_setup
+          
+          # Step 2: Execute Multi-Segment Agents
+          echo "📉 Scanning F&O (Futures & Options)..."
+          python -m src.scanner.fno_agent
+          
+          echo "📈 Scanning Swing Trade Opportunities (VSA)..."
+          python -m src.scanner.swing_agent
+          
+          echo "💱 Scanning Currency (USDINR & Factors)..."
+          python -m src.scanner.currency_agent
+          
+          echo "🪙 Scanning Commodities (MCX)..."
+          python -m src.scanner.commodity_agent
 
-      - name: Upload scan logs
+      - name: Save Execution Data & History
         if: always() && steps.holiday_check.outputs.is_holiday != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: scan-logs
+          name: market-session-data
           path: data/
-          retention-days: 7
+          retention-days: 3
