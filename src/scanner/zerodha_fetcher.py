@@ -44,25 +44,24 @@ class ZerodhaFetcher:
         logger.info("✅ ZerodhaFetcher initialized successfully")
 
     def _initialize_connection(self):
-        """Initialize connection using saved session or new request token"""
-        # First try to load existing session
+        """Forces Auto-Login if the saved session is expired"""
+        # 1. Try to reuse a session from the last 24 hours
         if self._load_session():
-            logger.info("✅ Using existing valid session")
+            logger.info("✅ Reusing existing session")
             return
+
+        # 2. If no session, go STRAIGHT to Auto-Login (Skip manual request tokens)
+        logger.info("🔄 Session expired. Starting Auto-Login engine...")
+        self.access_token = self.get_automated_access_token()
         
-        # Generate new token from request_token
-        logger.info("🔄 Generating new access token from request_token...")
-        try:
+        if self.access_token:
             self.kite = KiteConnect(api_key=self.api_key)
-            session = self.kite.generate_session(self.request_token, api_secret=self.api_secret)
-            self.access_token = session["access_token"]
             self.kite.set_access_token(self.access_token)
             self._save_session()
-            logger.info("✅ New access token generated successfully!")
-        except Exception as e:
-            logger.error(f"Failed to generate token: {e}")
-            logger.error("Your request_token may have expired. Generate a new one from kite.trade")
-            raise
+            logger.info("✅ Auto-Login successful. Access Token saved.")
+        else:
+            logger.error("❌ Auto-Login failed. Check Credentials or TOTP Secret.")
+            raise ValueError("Could not connect to Zerodha")
 
     def _save_session(self):
         """Save session to disk"""
