@@ -2,7 +2,7 @@ name: 🔍 Omkar Scanner - Multi-Segment Elite
 
 on:
   schedule:
-    - cron: '*/30 3-18 * * 1-5' # Every 30 mins, 9:00 AM - 11:30 PM IST
+    - cron: '*/30 3-18 * * 1-5' 
   workflow_dispatch: 
 
 jobs:
@@ -39,15 +39,16 @@ jobs:
           CHANNEL_SWING: ${{ secrets.CHANNEL_SWING }}
           CHANNEL_EDUCATION: ${{ secrets.CHANNEL_EDUCATION }}
         run: |
-          echo "🚀 Starting Morning Setup..."
-          python -m src.scanner.morning_setup || echo "⚠️ Setup already done or market closed."
+          # 1. Setup & Auth
+          python -m src.scanner.morning_setup || echo "Setup skipped"
           
-          echo "📈 Running FnO & Swing Agents..."
-          python -m src.scanner.fno_agent || echo "⚠️ FnO Scan Skipped"
-          python -m src.scanner.swing_agent || echo "⚠️ Swing Scan Skipped"
+          # 2. Equity & FNO Desk
+          python -m src.scanner.fno_agent || echo "FnO skipped"
+          python -m src.scanner.swing_agent || echo "Swing skipped"
           
-          echo "💱 Running Currency Agent..."
-          python -m src.scanner.currency_agent || echo "⚠️ Currency Scan Skipped"
+          # 3. CDS & MCX Desk
+          python -m src.scanner.currency_agent || echo "Currency skipped"
+          python -m src.scanner.commodity_agent || echo "Commodity skipped"
           
-          echo "🪙 Running Commodity Agent..."
-          python -m src.scanner.commodity_agent || echo "⚠️ Commodity Scan Skipped"
+          # 4. Content & Education Desk
+          python -m src.scanner.edu_news_agent || echo "Edu skipped"
