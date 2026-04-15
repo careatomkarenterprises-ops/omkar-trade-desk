@@ -9,45 +9,46 @@ class CurrencyAgent:
         try:
             with open('data/instrument_tokens.json', 'r') as f:
                 self.tokens = json.load(f)
-        except FileNotFoundError:
+        except:
             self.tokens = {}
 
     def scan_currency(self):
         targets = ["CDS:USDINR26APRFUT", "CDS:EURINR26APRFUT"]
         for symbol in targets:
             token = self.tokens.get(symbol)
-            if not token: 
-                continue
+            if not token: continue
 
             try:
-                # Fetch 60min candles for VSA analysis
+                # VSA Analysis logic
                 candles = self.kite.historical_data(token, datetime.now()-timedelta(days=5), datetime.now(), "60minute")
                 df = pd.DataFrame(candles)
                 if df.empty: continue
 
-                # VSA LOGIC: No Supply / Low Volume Test
+                # Logic: Low Volume Test at Support
                 last_vol = df['volume'].iloc[-1]
                 avg_vol = df['volume'].tail(20).mean()
                 
-                if last_vol < (avg_vol * 0.7):
-                    self.alert_currency_setup(symbol, "No Supply Test (Low Volume)")
-                
-            except Exception as e:
-                print(f"❌ Error scanning {symbol}: {e}")
+                if last_vol < (avg_vol * 0.8):
+                    self.alert_currency_setup(symbol, "Institutional No-Supply Test")
+            except:
+                print(f"🟡 Skipping {symbol} (Market might be closed)")
 
     def alert_currency_setup(self, symbol, pattern):
         msg = (
             f"💱 **OMKAR ELITE CURRENCY ALERT**\n\n"
             f"**Symbol:** {symbol}\n"
             f"**VSA Pattern:** {pattern}\n"
-            f"**Insight:** Price testing levels with minimal selling pressure. Potential reversal zone."
+            f"**Insight:** Smart Money is testing supply. Reversal expected.\n"
+            f"⚠️ *Educational purposes only.*"
         )
         send_to_telegram("currency", msg)
 
 if __name__ == "__main__":
-    # This block is used by the .yml engine
     from src.scanner.morning_setup import get_kite_instance
-    kite = get_kite_instance()
-    if kite:
-        agent = CurrencyAgent(kite)
-        agent.scan_currency()
+    try:
+        kite = get_kite_instance()
+        if kite:
+            agent = CurrencyAgent(kite)
+            agent.scan_currency()
+    except:
+        print("🚫 System offline: Market is closed.")
