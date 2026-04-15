@@ -8,7 +8,8 @@ class TelegramPoster:
             'currency': os.getenv('CHANNEL_CURRENCY'),
             'commodity': os.getenv('CHANNEL_COMMODITY'),
             'fno': os.getenv('CHANNEL_FNO'),
-            'swing': os.getenv('CHANNEL_SWING')
+            'swing': os.getenv('CHANNEL_SWING'),
+            'education': os.getenv('CHANNEL_EDUCATION')
         }
         self.base_url = f"https://api.telegram.org/bot{self.bot_token}"
 
@@ -22,7 +23,7 @@ class TelegramPoster:
         payload = {'chat_id': chat_id, 'text': message, 'parse_mode': 'Markdown'}
         
         try:
-            response = requests.post(url, json=payload, timeout=10)
+            response = requests.post(url, json=payload, timeout=15)
             if response.status_code == 200:
                 print(f"✅ Success: Posted to {channel}")
             else:
