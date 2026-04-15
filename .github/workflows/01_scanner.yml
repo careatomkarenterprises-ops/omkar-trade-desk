@@ -36,11 +36,6 @@ jobs:
           CHANNEL_EDUCATION: ${{ secrets.CHANNEL_EDUCATION }}
         run: |
           mkdir -p data
-          echo "🚀 Refreshing Tokens..."
           python -m src.scanner.morning_setup
-          
-          echo "💱 Analyzing Currency Segments..."
           python -m src.scanner.currency_agent
-          
-          echo "🎓 Posting Educational Insight..."
           python -m src.scanner.edu_news_agent
