@@ -32,11 +32,12 @@ jobs:
           CHANNEL_CURRENCY: ${{ secrets.CHANNEL_CURRENCY }}
           CHANNEL_FNO: ${{ secrets.CHANNEL_FNO }}
           CHANNEL_EDUCATION: ${{ secrets.CHANNEL_EDUCATION }}
-        run: |
-          mkdir -p data
-          # 1. First, fetch fresh market tokens
-          python -m src.scanner.morning_setup
-          
-          # 2. Run the specialized agents
-          python -m src.scanner.currency_agent
-          python -m src.scanner.edu_news_agent
+        run: |# ... (keep your env variables)
+    run: |
+      mkdir -p data
+      # Run setup to generate everything needed for the day
+      python -m src.scanner.morning_setup
+      
+      # Run agents - they will now use the data saved in the 'data/' folder
+      python -m src.scanner.currency_agent
+      python -m src.scanner.edu_news_agent
