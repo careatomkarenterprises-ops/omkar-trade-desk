@@ -2,7 +2,7 @@ name: 🔍 Omkar Scanner - Multi-Segment Elite
 
 on:
   schedule:
-    - cron: '*/30 3-18 * * 1-5'
+    - cron: '*/30 3-18 * * 1-5' # Runs every 30 mins
   workflow_dispatch: 
 
 jobs:
@@ -12,17 +12,13 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-          cache: 'pip'
-
       - name: Install dependencies
         run: |
           pip install kiteconnect pyotp pandas requests python-dotenv numpy
-
       - name: Run Multi-Agent Engine
         env:
           PYTHONPATH: .
@@ -32,7 +28,6 @@ jobs:
           ZERODHA_TOTP_SECRET: ${{ secrets.ZERODHA_TOTP_SECRET }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHANNEL_CURRENCY: ${{ secrets.CHANNEL_CURRENCY }}
-          CHANNEL_FNO: ${{ secrets.CHANNEL_FNO }}
           CHANNEL_EDUCATION: ${{ secrets.CHANNEL_EDUCATION }}
         run: |
           mkdir -p data
