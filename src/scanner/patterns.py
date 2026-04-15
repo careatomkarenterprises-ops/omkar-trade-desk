@@ -1,5 +1,5 @@
 """
-Pattern Detection Engine - Institutional Silent Accumulation Edition
+Pattern Detection Engine - Institutional Multi-Factor Breakout System (Upgraded)
 """
 
 import pandas as pd
@@ -9,61 +9,99 @@ from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
+
 class PatternDetector:
     def __init__(self):
-        self.version = "3.0"
-        # Parameters for Institutional Footprint
-        self.vol_sma_period = 15      # 15-day Volume SMA
-        self.quiet_days = 6           # Days volume must stay below SMA
-        self.box_lookback = 6         # Period to determine Support/Resistance
-        self.surge_threshold = 1.8    # Volume must be 1.8x the SMA to trigger
+        self.version = "4.0"
 
-    def detect_volume_price_box(self, data: pd.DataFrame) -> Dict:
-        """
-        Detects 6+ days of quiet volume (below 15 SMA) followed by 
-        a price breakout from the 'Box' on high volume.
-        """
+        # Core Parameters
+        self.vol_sma_period = 15
+        self.quiet_days = 6
+        self.surge_threshold = 1.8
+
+        # New Filters
+        self.trend_period = 20
+        self.fake_breakout_buffer = 0.15  # % buffer to avoid wick traps
+
+    # ---------------- TREND FILTER ----------------
+    def get_trend(self, data):
         try:
-            if len(data) < 20:
+            ema = data['close'].ewm(span=self.trend_period).mean()
+            return "UPTREND" if data['close'].iloc[-1] > ema.iloc[-1] else "DOWNTREND"
+        except:
+            return "UNKNOWN"
+
+    # ---------------- VOLUME BOX BREAKOUT ----------------
+    def detect_volume_price_box(self, data: pd.DataFrame) -> Dict:
+
+        try:
+            if len(data) < 25:
                 return {'detected': False}
 
-            # 1. Calculate 15-day Volume SMA
             data = data.copy()
-            data['vol_sma'] = data['volume'].rolling(window=self.vol_sma_period).mean()
-            
-            # 2. Check the "Quiet Period" (Previous 6 days excluding today)
-            # We look at index -7 to -2
-            quiet_slice = data.iloc[-(self.quiet_days + 1): -1]
+
+            # Volume SMA
+            data['vol_sma'] = data['volume'].rolling(self.vol_sma_period).mean()
+
+            # Quiet zone
+            quiet_slice = data.iloc[-(self.quiet_days + 1):-1]
+
+            if len(quiet_slice) < self.quiet_days:
+                return {'detected': False}
+
             is_quiet = all(quiet_slice['volume'] < quiet_slice['vol_sma'])
 
-            # 3. Define the "Box" (High/Low of those 6 quiet days)
             resistance = quiet_slice['high'].max()
             support = quiet_slice['low'].min()
 
-            # 4. Check Today's Action (The Trigger)
-            current_bar = data.iloc[-1]
-            current_close = current_bar['close']
-            current_volume = current_bar['volume']
-            current_vol_sma = current_bar['vol_sma']
+            current = data.iloc[-1]
 
-            # Trigger Conditions:
-            # - Price breaks above Resistance OR below Support
-            # - Volume is significantly higher than the 15 SMA
-            breakout = current_close > resistance
-            breakdown = current_close < support
-            volume_surge = current_volume > (current_vol_sma * self.surge_threshold)
+            price = current['close']
+            volume = current['volume']
+            vol_sma = current['vol_sma']
 
-            if (breakout or breakdown) and volume_surge:
-                trigger_type = "🚀 BOX BREAKOUT" if breakout else "📉 BOX BREAKDOWN"
-                surge_ratio = round(current_volume / current_vol_sma, 2)
-                
+            if pd.isna(vol_sma) or vol_sma == 0:
+                return {'detected': False}
+
+            # ---------------- CONDITIONS ----------------
+            breakout = price > resistance * (1 + self.fake_breakout_buffer / 100)
+            breakdown = price < support * (1 - self.fake_breakout_buffer / 100)
+
+            volume_surge = volume > (vol_sma * self.surge_threshold)
+
+            trend = self.get_trend(data)
+
+            # Trend alignment filter
+            trend_ok = True
+            if breakout and trend != "UPTREND":
+                trend_ok = False
+            if breakdown and trend != "DOWNTREND":
+                trend_ok = False
+
+            # Final validation
+            if (breakout or breakdown) and volume_surge and is_quiet and trend_ok:
+
+                trigger_type = "🚀 BREAKOUT DETECTED" if breakout else "📉 BREAKDOWN DETECTED"
+                surge_ratio = round(volume / vol_sma, 2)
+
+                # ---------------- SCORING SYSTEM ----------------
+                score = 0
+
+                score += 40 if is_quiet else 0
+                score += min(surge_ratio * 10, 30)
+                score += 20 if trend_ok else 0
+                score += 10 if volume_surge else 0
+
+                score = min(score, 100)
+
                 return {
                     'detected': True,
                     'trigger': trigger_type,
                     'resistance': round(resistance, 2),
                     'support': round(support, 2),
                     'surge_ratio': surge_ratio,
-                    'strength': min(surge_ratio / 3, 1.0) # Normalized score
+                    'trend': trend,
+                    'strength': score / 100
                 }
 
             return {'detected': False}
@@ -72,15 +110,16 @@ class PatternDetector:
             logger.error(f"Pattern Error: {e}")
             return {'detected': False}
 
+    # ---------------- MAIN ENTRY ----------------
     def analyze(self, symbol: str, data: pd.DataFrame) -> Optional[Dict]:
-        """Main entry point for core.py"""
+
         if data is None or data.empty:
             return None
 
-        # Run the specific Institutional Scanner
         res = self.detect_volume_price_box(data)
-        
-        if res['detected']:
+
+        if res.get('detected'):
+
             return {
                 'symbol': symbol,
                 'price': round(data['close'].iloc[-1], 2),
@@ -89,7 +128,8 @@ class PatternDetector:
                 'surge_ratio': res['surge_ratio'],
                 'resistance': res['resistance'],
                 'support': res['support'],
+                'trend': res.get('trend', 'UNKNOWN'),
                 'strength': res['strength']
             }
-        
+
         return {'symbol': symbol, 'has_pattern': False}
