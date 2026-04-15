@@ -31,7 +31,6 @@ class OmkarTradeDesk:
         self.sent_alerts = self._load_history()
 
     def _load_history(self):
-        """Load the list of stocks already alerted today"""
         if os.path.exists(self.history_file):
             try:
                 with open(self.history_file, 'r') as f:
@@ -43,7 +42,6 @@ class OmkarTradeDesk:
         return []
 
     def _save_history(self, symbol):
-        """Add a stock to today's 'already sent' list"""
         if symbol not in self.sent_alerts:
             self.sent_alerts.append(symbol)
             try:
@@ -66,8 +64,6 @@ class OmkarTradeDesk:
             return []
 
     def execute_scan(self):
-        # 1. Check if Market is actually open via Zerodha API
-        # This handles unscheduled holidays/uncertain news
         if not self.fetcher.is_ready():
             logger.warning("Market might be closed or API is disconnected.")
             return False 
@@ -81,101 +77,101 @@ class OmkarTradeDesk:
                 continue
 
             try:
+                logger.info(f"Checking symbol: {symbol}")
+
                 data = self.fetcher.get_stock_data(symbol) 
                 
                 if data is not None and not data.empty:
                     result = self.detector.analyze(symbol, data)
+
+                    logger.info(f"Analysis result: {result}")
                     
                     if result and result.get('has_pattern'):
                         logger.info(f"✅ Pattern Found: {symbol}")
                         
                         message = (
-                            f"🔍 **{result['trigger']}**\n\n"
-                            f"🎫 **Symbol:** #{symbol}\n"
-                            f"💰 **Price:** ₹{result['price']}\n"
-                            f"📊 **Volume Surge:** {result['surge_ratio']}x\n"
-                            f"📦 **Box Range:** {result['support']} - {result['resistance']}\n"
-                            f"⚡ **Strength:** {'⭐' * int(result['strength'] * 5)}"
+                            f"🔍 {result['trigger']}\n\n"
+                            f"🎫 Symbol: {symbol}\n"
+                            f"💰 Price: ₹{result['price']}\n"
+                            f"📊 Volume Surge: {result['surge_ratio']}x\n"
+                            f"📦 Range: {result['support']} - {result['resistance']}\n"
+                            f"⚡ Strength: {'⭐' * int(result['strength'] * 5)}"
                         )
-                        
-                        self.poster.send_message(channel='premium', message=message)
+
+                        # ✅ SAVE SIGNAL (VERY IMPORTANT)
+                        with open("data/latest_signal.json", "w") as f:
+                            json.dump(result, f, indent=2)
+
+                        # ✅ SEND TO FREE CHANNEL
+                        self.poster.send_message("free", message)
+
+                        # ✅ SEND TO PREMIUM IF STRONG
+                        if result.get('strength', 0) > 0.7:
+                            self.poster.send_message("premium", message)
+
                         self._save_history(symbol)
                         matches_found += 1
                 
                 time.sleep(0.5)
+
             except Exception as e:
                 logger.error(f"Error processing {symbol}: {e}")
                 continue
 
-        logger.info(f"🏁 Scan Complete. Found {matches_found} new setups.")
+        logger.info(f"🏁 Scan Complete. Found {matches_found} setups.")
         return True
 
+
 def send_holiday_wish(occasion, poster):
-    """Sends a professional wish to members"""
     ist = pytz.timezone('Asia/Kolkata')
     now = datetime.now(ist)
     
-    # We only send the wish during the morning run (9:00 AM - 9:35 AM)
     if now.hour == 9 and now.minute <= 35:
         wish_msg = (
-            f"✨ **Greetings from Omkar TradeDesk** ✨\n\n"
-            f"Wishing you and your family a very Happy **{occasion}**.\n\n"
-            f"🏛️ The Indian Stock Markets are closed today. Take this time to rest and recharge.\n\n"
-            f"We will resume our Institutional Volume Scans on the next trading day at 9:15 AM.\n\n"
-            f"Best Regards,\n"
-            f"**Omkar Market Intelligence Team**"
+            f"✨ Greetings from Omkar TradeDesk ✨\n\n"
+            f"Happy {occasion}\n\n"
+            f"Market is closed today.\n"
+            f"Scans will resume next trading day.\n\n"
+            f"Omkar Team"
         )
-        poster.send_message(channel='premium', message=wish_msg)
-        logger.info(f"🎉 Sent holiday wishes for {occasion}")
+        poster.send_message("free", wish_msg)
+
 
 def main():
     ist = pytz.timezone('Asia/Kolkata')
     now = datetime.now(ist)
     today_str = now.strftime('%Y-%m-%d')
-    
-    # Official NSE Holidays 2026
+
     holidays = {
         "2026-01-26": "Republic Day",
         "2026-03-03": "Holi",
-        "2026-03-26": "Shri Ram Navami",
-        "2026-03-31": "Shri Mahavir Jayanti",
-        "2026-04-03": "Good Friday",
-        "2026-04-14": "Dr. Babasaheb Ambedkar Jayanti",
+        "2026-04-14": "Ambedkar Jayanti",
         "2026-05-01": "Maharashtra Day",
-        "2026-05-28": "Bakri Id",
-        "2026-06-26": "Muharram",
-        "2026-09-14": "Ganesh Chaturthi",
-        "2026-10-02": "Mahatma Gandhi Jayanti",
-        "2026-10-20": "Dussehra",
-        "2026-11-10": "Diwali Balipratipada",
-        "2026-11-24": "Guru Nanak Jayanti",
-        "2026-12-25": "Christmas"
+        "2026-10-02": "Gandhi Jayanti"
     }
 
-    # 1. Check for Weekend
     if now.weekday() >= 5:
-        logger.info("😴 Weekend - System on standby.")
+        logger.info("Weekend - System stopped.")
         return
 
-    # 2. Check for Scheduled Holiday
     if today_str in holidays:
         poster = TelegramPoster()
         send_holiday_wish(holidays[today_str], poster)
         return
 
-    # 3. Run Scanner (includes API check for unscheduled closures)
     try:
         scanner = OmkarTradeDesk()
         success = scanner.execute_scan()
-        
-        # If API says market is closed but it's not in our holiday list (Sudden Holiday)
-        if not success and (now.hour == 9 and now.minute <= 35):
+
+        if not success:
             scanner.poster.send_message(
-                channel='premium', 
-                message="📢 **Market Notice:** The exchange appears to be closed today for an unscheduled holiday or session change. No scans will be generated."
+                "free",
+                "Market seems closed or API issue. No signals today."
             )
+
     except Exception as e:
-        logger.critical(f"Critical System Failure: {e}")
+        logger.critical(f"Critical Error: {e}")
+
 
 if __name__ == "__main__":
     main()
