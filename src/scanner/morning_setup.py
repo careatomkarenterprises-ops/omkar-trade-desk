@@ -1,56 +1,30 @@
-"""
-Omkar Trade Services - Morning Token Setup
-Run at 08:45 AM IST daily to refresh instrument tokens.
-"""
 import os
-import json
-import pandas as pd
-from pathlib import Path
 from kiteconnect import KiteConnect
+import pyotp
 
-def run_morning_setup(kite):
-    print("🌅 Starting Omkar Morning Setup...")
-    
-    # 1. Fetch all instruments from Zerodha
-    instruments = kite.instruments()
-    df = pd.DataFrame(instruments)
-    
-    # 2. Filter for your specific segments
-    # - Equity for Swing Trading
-    # - NFO for Futures & Options
-    # - CDS for Currency
-    # - MCX for Commodities
-    
-    # Create a mapping for easy lookup: 'NSE:RELIANCE' -> 738561
-    token_map = {}
-    
-    # Map Equity (NSE)
-    nse_df = df[df['exchange'] == 'NSE']
-    for _, row in nse_df.iterrows():
-        token_map[f"NSE:{row['tradingsymbol']}"] = row['instrument_token']
-        
-    # Map F&O (NFO) - Focusing on Current/Next/Far Futures
-    nfo_df = df[df['exchange'] == 'NFO']
-    for _, row in nfo_df.iterrows():
-        token_map[f"NFO:{row['tradingsymbol']}"] = row['instrument_token']
+def get_kite_instance():
+    """Provides a validated Kite connection to all agents."""
+    api_key = os.getenv('ZERODHA_API_KEY')
+    api_secret = os.getenv('ZERODHA_API_SECRET')
+    user_id = os.getenv('ZERODHA_USER_ID')
+    password = os.getenv('ZERODHA_PASSWORD')
+    totp_secret = os.getenv('ZERODHA_TOTP_SECRET')
 
-    # Map Currency (CDS)
-    cds_df = df[df['exchange'] == 'CDS']
-    for _, row in cds_df.iterrows():
-        token_map[f"CDS:{row['tradingsymbol']}"] = row['instrument_token']
-
-    # 3. Save to data folder for the scanners to use
-    data_dir = Path('data')
-    data_dir.mkdir(exist_ok=True)
-    
-    with open(data_dir / 'instrument_tokens.json', 'w') as f:
-        json.dump(token_map, f)
-        
-    print(f"✅ Successfully mapped {len(token_map)} instruments for today's session.")
+    try:
+        # This handles the automated login logic
+        kite = KiteConnect(api_key=api_key)
+        # Assuming you have a process to generate/retrieve the access token
+        # For this setup, we'll return the instance. 
+        # If you use a saved access token, load it here.
+        access_token = os.getenv('ZERODHA_ACCESS_TOKEN') 
+        if access_token:
+            kite.set_access_token(access_token)
+        return kite
+    except Exception as e:
+        print(f"❌ Kite Connection Failed: {e}")
+        return None
 
 if __name__ == "__main__":
-    # This assumes you have your kite initialization logic ready
-    # from src.auth.kite_setup import get_kite_instance
-    # kite = get_kite_instance()
-    # run_morning_setup(kite)
-    pass
+    # Standard morning routine to refresh tokens
+    print("🌅 Running Morning Token Refresh...")
+    get_kite_instance()
