@@ -16,7 +16,7 @@ class CurrencyAgent:
             self.tokens = {}
 
     def detect_v_pattern(self, data):
-        """Your v2.0 Logic: V-Shape Volume Recovery"""
+        """Omkar Logic: V-Shape Volume Recovery"""
         if len(data) < 10: return None
         volumes = data['volume'].values[-10:]
         closes = data['close'].values[-10:]
@@ -33,7 +33,7 @@ class CurrencyAgent:
         return None
 
     def detect_volume_spike(self, data, threshold=1.8):
-        """Your v2.0 Logic: Volume Spike"""
+        """Omkar Logic: Volume Spike"""
         if len(data) < 20: return None
         current_volume = data['volume'].iloc[-1]
         avg_volume = data['volume'].iloc[-20:].mean()
@@ -48,7 +48,6 @@ class CurrencyAgent:
             token = self.tokens.get(symbol)
             if not token: continue
             try:
-                # 60-min timeframe for high-conviction institutional footprints
                 data = self.kite.historical_data(token, datetime.now()-timedelta(days=5), datetime.now(), "60minute")
                 df = pd.DataFrame(data)
                 
@@ -65,7 +64,7 @@ class CurrencyAgent:
             f"**Price:** {price}\n"
             f"**Pattern:** {pattern}\n"
             f"**Strategy:** Omkar V-Logic v2.0\n\n"
-            f"🔍 *Watch for follow-through volume. Educational only.*"
+            f"🔍 *Institutional Footprint detected.*"
         )
         send_to_telegram("currency", msg)
 
