@@ -23,8 +23,5 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run System Health Check
-        run: python system_health_check.py
-
-      - name: Run Market Intelligence Controller
-        run: python src/scanner/system_controller.py
+      - name: Run Production System
+        run: python main.py
