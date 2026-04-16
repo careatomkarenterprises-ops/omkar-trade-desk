@@ -25,44 +25,28 @@ class SystemController:
 
         logger.info(f"🚀 SYSTEM START | TIME: {now}")
 
-        # -------------------------------
-        # STEP 1: GLOBAL CONTEXT
-        # -------------------------------
         global_data = self.global_engine.run()
         logger.info(f"🌍 GLOBAL BIAS: {global_data.get('overall_bias')}")
 
         symbols = self.fetcher.get_fno_symbols()
 
         if not symbols:
-            logger.warning("⚠ No symbols found")
+            logger.warning("No symbols found")
             return
 
-        # -------------------------------
-        # STEP 2: PREMARKET ENGINE
-        # -------------------------------
         if now.hour < 9:
 
             logger.info("🔥 PREMARKET ENGINE START")
 
-            try:
-                engine = PreMarketPredictionEngine(
-                    data_fetcher=self.fetcher,
-                    pattern_detector=self.detector
-                )
+            engine = PreMarketPredictionEngine(
+                data_fetcher=self.fetcher,
+                pattern_detector=self.detector
+            )
+            engine.run()
 
-                result = engine.run(symbols, global_data)
-
-                logger.info(f"📊 PREMARKET COMPLETED | SETUPS: {len(result) if result else 0}")
-
-            except Exception as e:
-                logger.error(f"❌ PreMarket Engine Error: {e}")
-
-        # -------------------------------
-        # STEP 3: MARKET LIVE MODE
-        # -------------------------------
         elif 9 <= now.hour < 16:
 
-            logger.info("📊 MARKET LIVE MODE - SCANNER ONLY")
+            logger.info("📊 MARKET LIVE MODE")
 
             for symbol in symbols[:20]:
 
@@ -75,34 +59,24 @@ class SystemController:
                     result = self.detector.analyze(symbol, data)
 
                     if result and result.get("has_pattern"):
-                        logger.info(f"🔥 SIGNAL DETECTED: {symbol}")
+                        logger.info(f"🔥 SIGNAL: {symbol}")
 
                 except Exception as e:
-                    logger.error(f"❌ {symbol} error: {e}")
+                    logger.error(f"{symbol} error: {e}")
 
-        # -------------------------------
-        # STEP 4: EOD ENGINE
-        # -------------------------------
         else:
 
             logger.info("📉 EOD ENGINE START")
 
-            try:
-                eod = EODEngine()
-                eod.run(global_data)
-            except Exception as e:
-                logger.error(f"❌ EOD Error: {e}")
+            EODEngine().run(global_data)
+            LearningEngine().run(global_data)
 
-            logger.info("🧠 LEARNING ENGINE START")
+        logger.info("✅ SYSTEM COMPLETE")
 
-            try:
-                learn = LearningEngine()
-                learn.run(global_data)
-            except Exception as e:
-                logger.error(f"❌ Learning Error: {e}")
 
-        logger.info("✅ SYSTEM COMPLETE SUCCESSFULLY")
+def main():
+    SystemController().run()
 
 
 if __name__ == "__main__":
-    SystemController().run()
+    main()
