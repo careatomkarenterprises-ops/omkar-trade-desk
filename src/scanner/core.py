@@ -8,7 +8,9 @@ import pytz
 
 from src.scanner.data_fetcher import DataFetcher
 from src.scanner.patterns import PatternDetector
+from src.scanner.smart_money_filter import SmartMoneyFilter
 from src.telegram.poster import TelegramPoster
+
 
 # ---------------- LOGGING ----------------
 logging.basicConfig(
@@ -18,23 +20,27 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# ---------------- MAIN ENGINE ----------------
+# =========================================================
+# 🚀 OMKAR TRADE INTELLIGENCE ENGINE (PRODUCTION)
+# =========================================================
 class OmkarTradeDesk:
 
     def __init__(self):
-        logger.info("🚀 Initializing Omkar Trade Intelligence Engine...")
+        logger.info("🚀 Initializing Omkar Institutional Scanner...")
 
         self.fetcher = DataFetcher()
         self.detector = PatternDetector()
+        self.smart_filter = SmartMoneyFilter()
         self.poster = TelegramPoster()
 
         self.symbols_file = 'fno_stocks.csv'
         self.history_file = 'data/sent_alerts.json'
+
         os.makedirs('data', exist_ok=True)
 
         self.sent_alerts = self._load_history()
 
-    # ---------------- HISTORY SYSTEM ----------------
+    # ---------------- HISTORY ----------------
     def _load_history(self):
         if os.path.exists(self.history_file):
             try:
@@ -63,7 +69,7 @@ class OmkarTradeDesk:
             except Exception as e:
                 logger.error(f"History save error: {e}")
 
-    # ---------------- UNIVERSE ----------------
+    # ---------------- SYMBOL UNIVERSE ----------------
     def get_symbols(self):
         try:
             if os.path.exists(self.symbols_file):
@@ -76,22 +82,24 @@ class OmkarTradeDesk:
             logger.error(f"Symbol load error: {e}")
             return []
 
-    # ---------------- SCORING ENGINE ----------------
-    def calculate_score(self, result):
+    # ---------------- SCORE ENGINE ----------------
+    def calculate_score(self, pattern_result, smart_result):
         """
-        Converts pattern result into strength score (0–100)
+        FINAL INSTITUTIONAL SCORING MODEL
         """
-        score = 0
 
-        if result.get("has_pattern"):
-            score += 40
+        base = 0
 
-        score += min(result.get("surge_ratio", 1) * 10, 25)
+        # Pattern strength
+        base += pattern_result.get("strength", 0) * 50
 
-        strength = result.get("strength", 0)
-        score += strength * 35
+        # Volume surge impact
+        base += min(pattern_result.get("surge_ratio", 1) * 8, 30)
 
-        return min(int(score), 100)
+        # Smart money confirmation
+        base += smart_result.get("score", 0) * 40
+
+        return min(int(base), 100)
 
     # ---------------- MAIN SCAN ----------------
     def execute_scan(self):
@@ -100,7 +108,7 @@ class OmkarTradeDesk:
             logger.warning("⚠ Market not ready or API disconnected")
             return False
 
-        logger.info("📡 Starting Market Intelligence Scan...")
+        logger.info("📡 Starting Institutional Market Scan...")
 
         symbols = self.get_symbols()
         matches_found = 0
@@ -118,40 +126,71 @@ class OmkarTradeDesk:
                 if data is None or data.empty:
                     continue
 
-                result = self.detector.analyze(symbol, data)
+                # =========================
+                # 1. PATTERN ENGINE
+                # =========================
+                pattern_result = self.detector.analyze(symbol, data)
 
-                if not result or not result.get('has_pattern'):
+                if not pattern_result or not pattern_result.get('has_pattern'):
                     continue
 
-                # ---------------- SCORE ----------------
-                score = self.calculate_score(result)
-                result["score"] = score
+                # =========================
+                # 2. SMART MONEY FILTER
+                # =========================
+                smart_result = self.smart_filter.is_institutional_move(data)
 
-                logger.info(f"📊 Signal Detected: {symbol} | Score: {score}")
+                if not smart_result.get("valid"):
+                    logger.info(f"❌ Rejected Smart Money Filter: {symbol}")
+                    continue
 
-                # ---------------- MESSAGE ----------------
+                # =========================
+                # 3. FINAL SCORE
+                # =========================
+                score = self.calculate_score(pattern_result, smart_result)
+
+                pattern_result["score"] = score
+                pattern_result["smart_score"] = smart_result["score"]
+
+                logger.info(f"📊 SIGNAL: {symbol} | SCORE: {score}")
+
+                # =========================
+                # 4. TELEGRAM MESSAGE
+                # =========================
                 message = (
-                    f"📊 MARKET INTELLIGENCE ALERT\n\n"
+                    f"📊 INSTITUTIONAL SIGNAL ALERT\n\n"
                     f"🎫 Symbol: {symbol}\n"
-                    f"🔍 Setup: {result.get('trigger','Pattern Detected')}\n"
-                    f"💰 Price: ₹{result.get('price')}\n"
-                    f"📦 Range: {result.get('support')} - {result.get('resistance')}\n"
-                    f"📊 Volume Surge: {result.get('surge_ratio')}x\n"
-                    f"⭐ Strength Score: {score}/100\n\n"
-                    f"⚠ This is a market condition alert, not a recommendation."
+                    f"🔍 Setup: {pattern_result.get('trigger','Detected')}\n"
+                    f"💰 Price: ₹{pattern_result.get('price')}\n"
+                    f"📦 Range: {pattern_result.get('support')} - {pattern_result.get('resistance')}\n"
+                    f"📊 Volume Surge: {pattern_result.get('surge_ratio')}x\n"
+                    f"🧠 Smart Money Score: {smart_result.get('score')}\n"
+                    f"⭐ Final Score: {score}/100\n\n"
+                    f"⚠ Educational market observation - not a recommendation"
                 )
 
-                # ---------------- SAVE SIGNAL ----------------
+                # =========================
+                # 5. SAVE SIGNAL
+                # =========================
                 with open("data/latest_signal.json", "w") as f:
-                    json.dump(result, f, indent=2)
+                    json.dump({
+                        "pattern": pattern_result,
+                        "smart_money": smart_result,
+                        "final_score": score,
+                        "symbol": symbol,
+                        "time": str(datetime.now())
+                    }, f, indent=2)
 
-                # ---------------- CHANNEL LOGIC ----------------
+                # =========================
+                # 6. SEND TELEGRAM
+                # =========================
                 self.poster.send_message("free", message)
 
                 if score >= 75:
                     self.poster.send_message("premium", message)
 
-                # ---------------- HISTORY ----------------
+                # =========================
+                # 7. HISTORY UPDATE
+                # =========================
                 self._save_history(symbol)
                 matches_found += 1
 
@@ -160,11 +199,11 @@ class OmkarTradeDesk:
             except Exception as e:
                 logger.error(f"Error scanning {symbol}: {e}")
 
-        logger.info(f"🏁 Scan Complete | Total Signals: {matches_found}")
+        logger.info(f"🏁 SCAN COMPLETE | SIGNALS: {matches_found}")
         return True
 
 
-# ---------------- HOLIDAY FUNCTION ----------------
+# ---------------- HOLIDAY ----------------
 def send_holiday_wish(occasion, poster):
 
     ist = pytz.timezone('Asia/Kolkata')
@@ -176,8 +215,7 @@ def send_holiday_wish(occasion, poster):
             f"✨ MARKET CLOSED NOTICE ✨\n\n"
             f"Happy {occasion}\n\n"
             f"Market is closed today.\n"
-            f"Scanner will resume next session.\n\n"
-            f"Omkar Trade Intelligence System"
+            f"Scanner will resume next session.\n"
         )
 
         poster.send_message("free", msg)
@@ -198,12 +236,10 @@ def main():
         "2026-10-02": "Gandhi Jayanti"
     }
 
-    # Weekend block
     if now.weekday() >= 5:
         logger.info("⏳ Weekend - System idle")
         return
 
-    # Holiday block
     if today in holidays:
         poster = TelegramPoster()
         send_holiday_wish(holidays[today], poster)
@@ -216,7 +252,7 @@ def main():
         if not success:
             scanner.poster.send_message(
                 "free",
-                "⚠ Market not active or API issue. No scans executed."
+                "⚠ Market inactive or API issue detected"
             )
 
     except Exception as e:
