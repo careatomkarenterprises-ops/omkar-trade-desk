@@ -79,11 +79,28 @@ logger.info("🧪 RUNNING SYSTEM TEST MODE")
 try:
     from src.scanner.telegram_report_engine import TelegramReportEngine
 
-    telegram = TelegramReportEngine()
-    telegram.send_message(
-        "free",
-        "🧪 SYSTEM TEST SUCCESS - ALL MODULES CONNECTED"
-    )
+    import logging
+
+from src.scanner.full_market_scanner import run_full_scan
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+def main():
+    try:
+        logger.info("🚀 STARTING OMKAR TRADE DESK LIVE SYSTEM")
+
+        results = run_full_scan()
+
+        logger.info(f"✅ Scan Completed | Signals Found: {len(results)}")
+
+    except Exception as e:
+        logger.critical(f"❌ SYSTEM FAILURE: {e}")
+
+
+if __name__ == "__main__":
+    main()
 
     logger.info("✅ Telegram Test Message Sent")
 
