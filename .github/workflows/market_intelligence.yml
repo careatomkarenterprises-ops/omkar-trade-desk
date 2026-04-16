@@ -12,7 +12,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repo
+        uses: actions/checkout@v4
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -22,11 +23,8 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-- name: Run System Health Check
-      run: python system_health_check.py
+      - name: Run System Health Check
+        run: python system_health_check.py
 
-       - name: Run Market Intelligence
-      run: python main_engine.py
-      
-      - name: Run Hedge Fund Engine
-        run: python main_engine.py
+      - name: Run Market Intelligence Controller
+        run: python src/scanner/system_controller.py
