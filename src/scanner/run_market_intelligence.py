@@ -1,119 +1,178 @@
 import datetime
 import logging
-
-from src.scanner.premarket_prediction_engine import PreMarketPredictionEngine
-from src.scanner.eod_engine import EODEngine
-from src.scanner.learning_engine import LearningEngine
-from src.scanner.global_market_engine import GlobalMarketEngine
-from src.scanner.telegram_report_engine import TelegramReportEngine
+import json
+import os
+from datetime import datetime
+import pytz
 
 from src.scanner.data_fetcher import DataFetcher
 from src.scanner.patterns import PatternDetector
+from src.scanner.global_market_engine import GlobalMarketEngine
+from src.scanner.options_intelligence_engine import OptionsIntelligenceEngine
+from src.telegram.poster import TelegramPoster
 
-
-# -------------------------------
-# LOGGING SETUP
-# -------------------------------
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-# =========================================================
-# 🚀 MAIN ORCHESTRATION ENGINE (PRODUCTION VERSION)
-# =========================================================
-def main():
+class MarketIntelligenceOrchestrator:
 
-    now = datetime.datetime.now()
+    def __init__(self):
 
-    logger.info("=" * 60)
-    logger.info(f"🕒 MARKET INTELLIGENCE SYSTEM STARTED | {now}")
-    logger.info("=" * 60)
+        logger.info("🚀 Initializing Hedge Fund Intelligence System")
 
-    # -------------------------------
-    # 🌍 GLOBAL MARKET ENGINE
-    # -------------------------------
-    global_engine = GlobalMarketEngine()
-    global_data = global_engine.run()
+        self.fetcher = DataFetcher()
+        self.pattern = PatternDetector()
+        self.options = OptionsIntelligenceEngine()
+        self.poster = TelegramPoster()
+        self.global_engine = GlobalMarketEngine()
 
-    logger.info(f"🌍 GLOBAL BIAS: {global_data.get('overall_bias')}")
+        self.output_file = "data/final_signals.json"
+        os.makedirs("data", exist_ok=True)
 
-    # -------------------------------
-    # CORE COMPONENTS INIT
-    # -------------------------------
-    fetcher = DataFetcher()
-    detector = PatternDetector()
-    telegram = TelegramReportEngine()
+    # ----------------------------
+    # RANKING ENGINE (IMPORTANT)
+    # ----------------------------
+    def rank_signals(self, signals):
 
-    # -------------------------------
-    # SYMBOLS LIST (F&O)
-    # -------------------------------
-    try:
-        symbols = fetcher.get_fno_symbols()
-    except Exception:
-        symbols = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK"]
-
-    logger.info(f"📊 TOTAL SYMBOLS LOADED: {len(symbols)}")
-
-    # =========================================================
-    # 🚀 PREMARKET ENGINE (BEFORE MARKET OPEN)
-    # =========================================================
-    if now.hour < 9:
-
-        logger.info("🚀 PREMARKET MODE ACTIVATED")
-
-        pre_engine = PreMarketPredictionEngine(
-            data_fetcher=fetcher,
-            pattern_detector=detector
+        ranked = sorted(
+            signals,
+            key=lambda x: x.get("score", 0),
+            reverse=True
         )
 
-        top_setups = pre_engine.run(symbols, global_data)
+        return ranked[:5]  # TOP 5 ONLY (HEDGE FUND STYLE)
 
-        logger.info(f"🔥 TOP SETUPS GENERATED: {len(top_setups)}")
+    # ----------------------------
+    # MAIN SCAN ENGINE
+    # ----------------------------
+    def run(self):
 
-        # -------------------------------
-        # 📩 TELEGRAM PREMARKET REPORT
-        # -------------------------------
-        telegram.send_premarket_report(global_data, top_setups)
+        if not self.fetcher.is_ready():
+            logger.error("Market Data Not Ready")
+            return
 
-    # =========================================================
-    # 📊 LIVE MARKET MODE
-    # =========================================================
-    elif 9 <= now.hour < 16:
+        now = datetime.now()
+        logger.info(f"🕒 Running Cycle at {now}")
 
-        logger.info("📊 LIVE MARKET MODE ACTIVE")
+        # 🌍 GLOBAL CONTEXT
+        global_data = self.global_engine.run()
 
-        logger.info("👉 Use core.py / GitHub workflow for real-time scanning")
+        symbols = self.fetcher.get_fno_symbols()
 
-    # =========================================================
-    # 📉 EOD ENGINE
-    # =========================================================
-    else:
+        signals = []
 
-        logger.info("📉 EOD MODE ACTIVATED")
+        for symbol in symbols:
 
-        eod_engine = EODEngine()
-        eod_data = eod_engine.run(global_data)
+            try:
+                data = self.fetcher.get_stock_data(symbol)
 
-        # -------------------------------
-        # 📩 TELEGRAM EOD REPORT
-        # -------------------------------
-        telegram.send_eod_report(eod_data)
+                if data is None or data.empty:
+                    continue
 
-        # -------------------------------
-        # 🧠 LEARNING ENGINE
-        # -------------------------------
-        logger.info("🧠 LEARNING ENGINE RUNNING")
+                # -------------------------
+                # 1. PATTERN DETECTION
+                # -------------------------
+                pattern_result = self.pattern.analyze(symbol, data)
 
-        learner = LearningEngine()
-        learner.run(global_data)
+                if not pattern_result or not pattern_result.get("has_pattern"):
+                    continue
 
-    logger.info("=" * 60)
-    logger.info("✅ MARKET INTELLIGENCE CYCLE COMPLETED SUCCESSFULLY")
-    logger.info("=" * 60)
+                # -------------------------
+                # 2. OPTIONS INTELLIGENCE
+                # -------------------------
+                spot = data["close"].iloc[-1]
+
+                options_signal = self.options.generate_options_signal(
+                    nifty_data=data,
+                    banknifty_data=data
+                )
+
+                # -------------------------
+                # 3. SCORE ENGINE
+                # -------------------------
+                score = 0
+
+                score += pattern_result.get("strength", 0) * 40
+                score += options_signal.get("confidence", 0) * 0.6
+
+                final_signal = {
+                    "symbol": symbol,
+                    "price": spot,
+                    "pattern": pattern_result.get("trigger"),
+                    "support": pattern_result.get("support"),
+                    "resistance": pattern_result.get("resistance"),
+                    "volume_surge": pattern_result.get("surge_ratio"),
+                    "options_bias": options_signal.get("bias", {}).get("overall_bias"),
+                    "strike_plan": options_signal.get("strike_plan"),
+                    "confidence": round(score, 2)
+                }
+
+                signals.append(final_signal)
+
+            except Exception as e:
+                logger.error(f"Error in {symbol}: {e}")
+
+        # ----------------------------
+        # RANK TOP SETUPS
+        # ----------------------------
+        top_signals = self.rank_signals(signals)
+
+        # ----------------------------
+        # SAVE OUTPUT
+        # ----------------------------
+        with open(self.output_file, "w") as f:
+            json.dump(top_signals, f, indent=2)
+
+        # ----------------------------
+        # TELEGRAM REPORT
+        # ----------------------------
+        self.send_report(top_signals)
+
+        logger.info(f"✅ Cycle Complete | Signals: {len(top_signals)}")
+
+    # ----------------------------
+    # TELEGRAM REPORT ENGINE
+    # ----------------------------
+    def send_report(self, signals):
+
+        if not signals:
+            self.poster.send_message("free",
+                "📊 Market Scan Complete\n\nNo high-probability setups found today.")
+            return
+
+        message = "🚀 HEDGE FUND INTELLIGENCE REPORT\n\n"
+
+        for s in signals:
+
+            message += (
+                f"📌 {s['symbol']}\n"
+                f"💰 Price: {s['price']}\n"
+                f"📊 Pattern: {s['pattern']}\n"
+                f"📈 Confidence: {s['confidence']}/100\n"
+                f"📦 Range: {s['support']} - {s['resistance']}\n"
+                f"⚡ Options Bias: {s['options_bias']}\n\n"
+            )
+
+        self.poster.send_message("free", message)
 
 
-# =========================================================
+# ----------------------------
 # ENTRY POINT
-# =========================================================
+# ----------------------------
+def main():
+
+    ist = pytz.timezone("Asia/Kolkata")
+    now = datetime.now(ist)
+
+    # 🚫 WEEKEND FILTER
+    if now.weekday() >= 5:
+        logger.info("Weekend - No Market")
+        return
+
+    engine = MarketIntelligenceOrchestrator()
+    engine.run()
+
+
 if __name__ == "__main__":
     main()
