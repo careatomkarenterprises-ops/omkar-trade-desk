@@ -1,97 +1,127 @@
 import pandas as pd
 import time
-import json
 import logging
 
 from src.scanner.data_fetcher import DataFetcher
 from src.scanner.patterns import PatternDetector
 from src.telegram.poster import TelegramPoster
 
-logger = logging.getLogger(__name__)
-
+logger = logging.getLogger(**name**)
 
 def load_fno_symbols():
-    try:
-        df = pd.read_csv("fno_stocks.csv")
-        symbols = df["symbol"].dropna().unique().tolist()
+try:
+df = pd.read_csv("fno_stocks.csv")
+symbols = df["symbol"].dropna().unique().tolist()
 
-        logger.info(f"📊 Loaded F&O Symbols: {len(symbols)}")
-        return symbols
+```
+    logger.info(f"📊 Loaded F&O Symbols: {len(symbols)}")
+    return symbols
 
-    except Exception as e:
-        logger.error(f"❌ CSV Load Error: {e}")
-        return []
-
+except Exception as e:
+    logger.error(f"❌ CSV Load Error: {e}")
+    return []
+```
 
 def run_full_scan():
 
-    fetcher = DataFetcher()
-    detector = PatternDetector()
-    telegram = TelegramPoster()
+```
+fetcher = DataFetcher()
+detector = PatternDetector()
+telegram = TelegramPoster()
 
-    symbols = load_fno_symbols()
+symbols = load_fno_symbols()
 
-    results = []
-    scanned = 0
-    signals = 0
+if not symbols:
+    logger.error("❌ No symbols loaded. Stopping scan.")
+    return []
 
-    logger.info("🚀 STARTING FULL F&O MARKET SCAN")
+results = []
+scanned = 0
+signals = 0
 
-    for symbol in symbols:
+logger.info("🚀 STARTING FULL F&O MARKET SCAN")
 
-        try:
-            scanned += 1
+for symbol in symbols:
 
-            data = fetcher.get_stock_data(symbol)
+    try:
+        scanned += 1
 
-            if data is None or data.empty:
-                continue
+        data = fetcher.get_stock_data(symbol)
 
-            result = detector.analyze(symbol, data)
+        if data is None or data.empty:
+            continue
 
-            if result and result.get("has_pattern"):
+        result = detector.analyze(symbol, data)
 
-                signals += 1
+        if result and result.get("has_pattern"):
 
-                output = {
-                    "symbol": symbol,
-                    "trend": result.get("trend"),
-                    "signal": result.get("signal"),
-                }
+            signals += 1
 
-                results.append(output)
+            output = {
+                "symbol": symbol,
+                "trend": result.get("trend"),
+                "signal": result.get("signal"),
+            }
 
-                logger.info(f"🔥 SIGNAL: {symbol}")
+            results.append(output)
 
-            time.sleep(0.2)
+            logger.info(f"🔥 SIGNAL: {symbol} | {result.get('signal')}")
 
-        except Exception as e:
-            logger.error(f"{symbol} error: {e}")
+        time.sleep(0.2)
 
-    # ---------------- SUMMARY ----------------
+    except Exception as e:
+        logger.error(f"{symbol} error: {e}")
 
-    logger.info("📊 FULL SCAN COMPLETE")
-    logger.info(f"Total Scanned: {scanned}")
-    logger.info(f"Signals Found: {signals}")
+# ---------------- SUMMARY ----------------
 
-    # ---------------- TOP SIGNALS ----------------
+logger.info("📊 FULL SCAN COMPLETE")
+logger.info(f"Total Scanned: {scanned}")
+logger.info(f"Signals Found: {signals}")
 
-    if results:
+# ---------------- NO SIGNAL CASE ----------------
 
-        top = results[:10]
-
-        message = "🔥 TOP MARKET SETUPS\n\n"
-
-        for t in top:
-            message += f"{t['symbol']} | {t['signal']} | {t['trend']}\n"
-
-        # ✅ SEND TELEGRAM
-        telegram.send_message("free", message)
-
-    else:
+if not results:
+    try:
         telegram.send_message(
             "free",
             "⚠ No strong setups found in current market conditions."
         )
+    except Exception as e:
+        logger.error(f"Telegram error: {e}")
 
-    return results
+    return []
+
+# ---------------- SORT (IMPORTANT) ----------------
+
+# Currently no strength score, so just limit to first 10
+top = results[:10]
+
+# ---------------- PREMIUM MESSAGE ----------------
+
+premium_msg = "🔥 PREMIUM TRADE SETUPS\n\n"
+
+for t in top:
+    premium_msg += f"{t['symbol']} | {t['signal']} | {t['trend']}\n"
+
+# ---------------- FREE MESSAGE (DELAY STYLE) ----------------
+
+free_msg = "📊 MARKET INSIGHT (EDUCATIONAL)\n\n"
+
+for t in top[:3]:
+    free_msg += f"{t['symbol']} showing {t['trend']} structure\n"
+
+free_msg += "\n⚠ For real-time signals → Join Premium"
+
+# ---------------- TELEGRAM SEND ----------------
+
+try:
+    telegram.send_message("premium", premium_msg)
+    telegram.send_message("free", free_msg)
+
+    logger.info("✅ Telegram messages sent successfully")
+
+except Exception as e:
+    logger.error(f"❌ Telegram send failed: {e}")
+
+return results
+```
