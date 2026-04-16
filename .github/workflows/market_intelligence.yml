@@ -2,9 +2,9 @@ name: Hedge Fund Market Intelligence
 
 on:
   schedule:
-    - cron: "15 3 * * 1-5"   # Pre-market
-    - cron: "30 10 * * 1-5"  # Mid session
-    - cron: "30 15 * * 1-5"  # EOD
+    - cron: "15 3 * * 1-5"
+    - cron: "30 10 * * 1-5"
+    - cron: "30 15 * * 1-5"
   workflow_dispatch:
 
 jobs:
@@ -23,5 +23,8 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run Production System
-        run: python main.py
+      - name: Run System Health Check
+        run: python system_health_check.py
+
+      - name: Run System Controller
+        run: python src/scanner/system_controller.py
