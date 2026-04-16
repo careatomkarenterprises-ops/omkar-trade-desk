@@ -22,5 +22,11 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+- name: Run System Health Check
+      run: python system_health_check.py
+
+       - name: Run Market Intelligence
+      run: python main_engine.py
+      
       - name: Run Hedge Fund Engine
         run: python main_engine.py
