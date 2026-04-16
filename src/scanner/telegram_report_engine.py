@@ -1,51 +1,41 @@
-import os
-import requests
-from dotenv import load_dotenv
+import logging
+from src.telegram.poster import TelegramPoster
 
-load_dotenv()
+logger = logging.getLogger(__name__)
 
 
 class TelegramReportEngine:
     """
-    PRODUCTION TELEGRAM ENGINE (WRAPPER)
+    Simple wrapper around TelegramPoster
+    Used by execution layer and system controller
     """
 
     def __init__(self):
-        self.bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+        self.poster = TelegramPoster()
 
-        self.channels = {
-            'premium': os.getenv('CHANNEL_PREMIUM'),
-            'free': os.getenv('CHANNEL_FREE'),
-            'test': os.getenv('CHANNEL_TEST')
-        }
-
-        self.base_url = f"https://api.telegram.org/bot{self.bot_token}"
-
-    def send_message(self, channel, message):
+    def send_message(self, channel: str, message: str):
         try:
-            chat_id = self.channels.get(channel)
-
-            if not chat_id:
-                print(f"❌ Invalid channel: {channel}")
-                return False
-
-            url = f"{self.base_url}/sendMessage"
-
-            payload = {
-                "chat_id": chat_id,
-                "text": message,
-                "parse_mode": "Markdown"
-            }
-
-            response = requests.post(url, json=payload, timeout=10)
-
-            if response.status_code == 200:
-                print(f"✅ Telegram sent → {channel}")
-                return True
-            else:
-                print(f"❌ Telegram Error: {response.text}")
-                return False
-
+            return self.poster.send_message(channel, message)
         except Exception as e:
-            print(f"❌ Telegram Exception: {e}")
+            logger.error(f"Telegram send failed: {e}")
+            return Falseimport logging
+from src.telegram.poster import TelegramPoster
+
+logger = logging.getLogger(__name__)
+
+
+class TelegramReportEngine:
+    """
+    Simple wrapper around TelegramPoster
+    Used by execution layer and system controller
+    """
+
+    def __init__(self):
+        self.poster = TelegramPoster()
+
+    def send_message(self, channel: str, message: str):
+        try:
+            return self.poster.send_message(channel, message)
+        except Exception as e:
+            logger.error(f"Telegram send failed: {e}")
             return False
