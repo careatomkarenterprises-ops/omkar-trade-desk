@@ -73,6 +73,23 @@ def main():
         logger.critical("❌ SYSTEM STOPPED - CORE ENGINE NOT LOADED")
         return
 
+    # ---------------- TEST MODE (SAFE VALIDATION) ----------------
+logger.info("🧪 RUNNING SYSTEM TEST MODE")
+
+try:
+    from src.scanner.telegram_report_engine import TelegramReportEngine
+
+    telegram = TelegramReportEngine()
+    telegram.send_message(
+        "free",
+        "🧪 SYSTEM TEST SUCCESS - ALL MODULES CONNECTED"
+    )
+
+    logger.info("✅ Telegram Test Message Sent")
+
+except Exception as e:
+    logger.error(f"❌ Telegram Test Failed: {e}")
+
     try:
         run_system()
         logger.info("✅ SYSTEM EXECUTION COMPLETED SUCCESSFULLY")
