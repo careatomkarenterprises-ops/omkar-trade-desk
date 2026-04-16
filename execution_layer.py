@@ -1,6 +1,6 @@
 """
 OMKAR TRADE DESK - PRODUCTION EXECUTION LAYER
-Single Entry Point for ALL GitHub Workflows
+FINAL CLEAN VERSION (LIVE SCANNER ENABLED)
 """
 
 import sys
@@ -20,12 +20,12 @@ logging.basicConfig(
 
 logger = logging.getLogger("EXECUTION_LAYER")
 
-# ---------------- CORE SYSTEM IMPORT ----------------
+# ---------------- IMPORT SCANNER ----------------
 try:
-    from src.scanner.system_controller import main as run_system
+    from src.scanner.full_market_scanner import run_full_scan
 except Exception as e:
     logger.critical(f"❌ IMPORT FAILED: {e}")
-    run_system = None
+    run_full_scan = None
 
 
 # ---------------- PRE-FLIGHT CHECK ----------------
@@ -36,10 +36,8 @@ def preflight_check():
     required_files = [
         "src/scanner/data_fetcher.py",
         "src/scanner/patterns.py",
-        "src/scanner/global_market_engine.py",
-        "src/scanner/options_intelligence_engine.py",
-        "src/scanner/telegram_report_engine.py",
-        "src/scanner/system_controller.py"
+        "src/scanner/full_market_scanner.py",
+        "src/telegram/poster.py"
     ]
 
     missing = []
@@ -60,7 +58,7 @@ def preflight_check():
 # ---------------- MAIN EXECUTION ----------------
 def main():
 
-    logger.info("🚀 OMKAR TRADE DESK STARTED")
+    logger.info("🚀 OMKAR TRADE DESK LIVE SYSTEM STARTED")
     logger.info(f"🕒 Time: {datetime.now()}")
 
     # STEP 1: Safety Check
@@ -68,51 +66,17 @@ def main():
         logger.critical("❌ SYSTEM STOPPED - FILE STRUCTURE ISSUE")
         return
 
-    # STEP 2: Run Core System
-    if run_system is None:
-        logger.critical("❌ SYSTEM STOPPED - CORE ENGINE NOT LOADED")
+    # STEP 2: Run Scanner
+    if run_full_scan is None:
+        logger.critical("❌ SYSTEM STOPPED - SCANNER NOT LOADED")
         return
 
-    # ---------------- TEST MODE (SAFE VALIDATION) ----------------
-logger.info("🧪 RUNNING SYSTEM TEST MODE")
-
-try:
-    from src.scanner.telegram_report_engine import TelegramReportEngine
-
-    import logging
-
-from src.scanner.full_market_scanner import run_full_scan
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-
-def main():
     try:
-        logger.info("🚀 STARTING OMKAR TRADE DESK LIVE SYSTEM")
-
         results = run_full_scan()
-
         logger.info(f"✅ Scan Completed | Signals Found: {len(results)}")
 
     except Exception as e:
         logger.critical(f"❌ SYSTEM FAILURE: {e}")
-
-
-if __name__ == "__main__":
-    main()
-
-    logger.info("✅ Telegram Test Message Sent")
-
-except Exception as e:
-    logger.error(f"❌ Telegram Test Failed: {e}")
-
-    try:
-        run_system()
-        logger.info("✅ SYSTEM EXECUTION COMPLETED SUCCESSFULLY")
-
-    except Exception as e:
-        logger.critical(f"❌ SYSTEM CRASH: {e}")
 
 
 # ---------------- ENTRY POINT ----------------
