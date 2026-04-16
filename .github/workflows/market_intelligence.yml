@@ -26,5 +26,5 @@ jobs:
       - name: Run System Health Check
         run: python system_health_check.py
 
-      - name: Run System Controller
-        run: python src/scanner/system_controller.py
+      - name: Run Production Execution Layer
+        run: python execution_layer.py
