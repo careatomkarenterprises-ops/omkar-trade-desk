@@ -25,22 +25,18 @@ class SystemController:
 
         logger.info(f"🚀 SYSTEM START | TIME: {now}")
 
-        # STEP 1: GLOBAL CONTEXT
+        # GLOBAL BIAS
         global_data = self.global_engine.run()
         logger.info(f"🌍 GLOBAL BIAS: {global_data.get('overall_bias')}")
 
-        # SAFE SYMBOL FETCH (FIXED ERROR)
-        try:
-            symbols = self.fetcher.get_fno_symbols()
-        except AttributeError:
-            logger.warning("⚠ get_fno_symbols missing → using fallback list")
-            symbols = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK"]
+        # SAFE SYMBOLS
+        symbols = self.fetcher.get_fno_symbols()
 
         if not symbols:
             logger.warning("No symbols found")
             return
 
-        # STEP 2: PREMARKET
+        # PREMARKET
         if now.hour < 9:
 
             logger.info("🔥 PREMARKET ENGINE START")
@@ -51,7 +47,7 @@ class SystemController:
             )
             engine.run()
 
-        # STEP 3: MARKET HOURS
+        # MARKET HOURS
         elif 9 <= now.hour < 16:
 
             logger.info("📊 MARKET LIVE MODE")
@@ -67,12 +63,12 @@ class SystemController:
                     result = self.detector.analyze(symbol, data)
 
                     if result and result.get("has_pattern"):
-                        logger.info(f"🔥 SIGNAL: {symbol}")
+                        logger.info(f"🔥 SIGNAL: {symbol} | {result['signal']}")
 
                 except Exception as e:
                     logger.error(f"{symbol} error: {e}")
 
-        # STEP 4: EOD
+        # EOD
         else:
 
             logger.info("📉 EOD ENGINE START")
