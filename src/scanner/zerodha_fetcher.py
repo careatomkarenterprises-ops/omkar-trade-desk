@@ -1,178 +1,163 @@
 import os
 import logging
 import pandas as pd
-import pyotp
-import time
-import pickle
 from datetime import datetime, timedelta
 from kiteconnect import KiteConnect
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver import ActionChains
 from typing import Optional, Dict, List
+from dotenv import load_dotenv
+
+# ✅ Load .env from root properly
+load_dotenv(dotenv_path=".env")
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+
 
 class ZerodhaFetcher:
     def __init__(self):
-        self.api_key = os.getenv('ZERODHA_API_KEY')
-        self.api_secret = os.getenv('ZERODHA_API_SECRET')
-        self.user_id = os.getenv('ZERODHA_USER_ID')
-        self.password = os.getenv('ZERODHA_PASSWORD')
-        self.totp_secret = os.getenv('ZERODHA_TOTP_SECRET')
-        self.token_file = 'data/zerodha_session.pkl'
-        
-        os.makedirs('data', exist_ok=True)
-        self.kite = None
-        self.access_token = None
-        
-        self._initialize_connection()
-        
-        self.cache_file = 'data/zerodha_instruments.csv'
-        self.instrument_cache = {}
-        self.load_instruments()
-        logger.info("✅ ZerodhaFetcher fully initialized and automated")
+        # ✅ Read credentials from .env
+        self.api_key = os.getenv("KITE_API_KEY")
+        self.access_token = os.getenv("KITE_ACCESS_TOKEN")
 
-    def _initialize_connection(self):
-        if self._load_session():
-            logger.info("✅ Reusing existing session")
-            return
+        # 🔍 Debug check (IMPORTANT)
+        logger.info(f"API KEY Loaded: {bool(self.api_key)}")
+        logger.info(f"ACCESS TOKEN Loaded: {bool(self.access_token)}")
 
-        logger.info("🔄 Session expired. Starting Auto-Login engine...")
-        self.access_token = self.get_automated_access_token()
-        
-        if self.access_token:
-            self.kite = KiteConnect(api_key=self.api_key)
-            self.kite.set_access_token(self.access_token)
-            self._save_session()
-        else:
-            logger.error("❌ Auto-Login failed.")
-            raise ValueError("Could not connect to Zerodha")
+        if not self.api_key or not self.access_token:
+            raise ValueError("❌ Missing KITE API credentials in .env")
 
-    def get_automated_access_token(self):
-        options = Options()
-        options.add_argument("--headless") 
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.binary_location = "/usr/bin/google-chrome"
-        
+        # ✅ Initialize Kite
+        self.kite = KiteConnect(api_key=self.api_key)
+        self.kite.set_access_token(self.access_token)
+
+        # ✅ Validate connection
         try:
-            # Finding the binary (the fix we found earlier)
-            install_path = ChromeDriverManager().install()
-            exec_path = None
-            search_dir = os.path.dirname(install_path)
-            for root, dirs, files in os.walk(search_dir):
-                if "chromedriver" in files:
-                    temp_path = os.path.join(root, "chromedriver")
-                    if os.path.isfile(temp_path) and "THIRD_PARTY" not in temp_path:
-                        exec_path = temp_path
-                        break
-            
-            if not exec_path: return None
-            os.chmod(exec_path, 0o755)
-
-            service = Service(executable_path=exec_path)
-            driver = webdriver.Chrome(service=service, options=options)
-            
-            kite = KiteConnect(api_key=self.api_key)
-            driver.get(kite.login_url())
-            time.sleep(4)
-            
-            # Step 1: ID & Password
-            driver.find_element(By.XPATH, "//input[@type='text']").send_keys(self.user_id)
-            driver.find_element(By.XPATH, "//input[@type='password']").send_keys(self.password)
-            driver.find_element(By.XPATH, "//button[@type='submit']").click()
-            
-            # Step 2: Wait and Enter TOTP (The winning local logic)
-            time.sleep(5)
-            totp = pyotp.TOTP(self.totp_secret.replace(" ", ""))
-            token_2fa = totp.now()
-            
-            actions = ActionChains(driver)
-            actions.send_keys(token_2fa)
-            actions.send_keys(Keys.ENTER)
-            actions.perform()
-            
-            # Step 3: Wait for redirect and capture token
-            time.sleep(10)
-            current_url = driver.current_url
-            if "request_token=" not in current_url:
-                logger.error(f"Login failed. URL: {current_url}")
-                return None
-                
-            request_token = current_url.split("request_token=")[1].split("&")[0]
-            session = kite.generate_session(request_token, api_secret=self.api_secret)
-            return session["access_token"]
-            
+            profile = self.kite.profile()
+            logger.info(f"✅ Connected to Zerodha as {profile['user_name']}")
         except Exception as e:
-            logger.error(f"Auto-Login Error: {e}")
-            return None
-        finally:
-            if 'driver' in locals():
-                driver.quit()
+            raise ValueError(f"❌ Invalid Access Token or API issue: {e}")
 
-    def _save_session(self):
-        session_data = {'access_token': self.access_token, 'api_key': self.api_key}
-        with open(self.token_file, 'wb') as f:
-            pickle.dump(session_data, f)
+        # 📁 Setup cache
+        self.cache_file = "data/zerodha_instruments.csv"
+        os.makedirs("data", exist_ok=True)
+        self.instrument_cache = {}
 
-    def _load_session(self) -> bool:
-        if not os.path.exists(self.token_file): return False
-        try:
-            with open(self.token_file, 'rb') as f:
-                data = pickle.load(f)
-            # Check if session is still valid
-            self.kite = KiteConnect(api_key=self.api_key)
-            self.kite.set_access_token(data['access_token'])
-            self.kite.profile() 
-            return True
-        except: return False
+        self.load_instruments()
 
+    # ----------------------------------------
+    # LOAD INSTRUMENTS
+    # ----------------------------------------
     def load_instruments(self):
         try:
             if os.path.exists(self.cache_file):
                 mod_time = datetime.fromtimestamp(os.path.getmtime(self.cache_file))
-                if mod_time.date() == datetime.now().date(): return
+                if mod_time.date() == datetime.now().date():
+                    logger.info("✅ Using cached instruments")
+                    return
+
+            logger.info("📥 Downloading instruments...")
             instruments = self.kite.instruments()
             pd.DataFrame(instruments).to_csv(self.cache_file, index=False)
-        except: pass
+            logger.info("✅ Instruments updated")
 
+        except Exception as e:
+            logger.error(f"❌ Error loading instruments: {e}")
+
+    # ----------------------------------------
+    # GET INSTRUMENT TOKEN
+    # ----------------------------------------
     def get_instrument_token(self, symbol: str, exchange: str = "NSE") -> Optional[str]:
         try:
             cache_key = f"{exchange}:{symbol}"
-            if cache_key in self.instrument_cache: return self.instrument_cache[cache_key]
+
+            if cache_key in self.instrument_cache:
+                return self.instrument_cache[cache_key]
+
             df = pd.read_csv(self.cache_file)
-            match = df[(df['exchange'] == exchange) & (df['tradingsymbol'] == symbol)]
+
+            match = df[
+                (df["exchange"] == exchange) &
+                (df["tradingsymbol"] == symbol)
+            ]
+
             if match.empty and exchange == "NSE":
-                match = df[(df['exchange'] == exchange) & (df['tradingsymbol'] == f"{symbol}EQ")]
+                match = df[
+                    (df["exchange"] == exchange) &
+                    (df["tradingsymbol"] == f"{symbol}EQ")
+                ]
+
             if not match.empty:
-                token = str(match.iloc[0]['instrument_token'])
+                token = str(match.iloc[0]["instrument_token"])
                 self.instrument_cache[cache_key] = token
                 return token
-            return None
-        except: return None
 
-    def get_historical_data(self, symbol: str, interval: str = "day", days: int = 45) -> Optional[pd.DataFrame]:
-        try:
-            token = self.get_instrument_token(symbol)
-            if not token: return None
-            to_date = datetime.now()
-            from_date = to_date - timedelta(days=days)
-            candles = self.kite.historical_data(int(token), from_date.strftime("%Y-%m-%d %H:%M:%S"), to_date.strftime("%Y-%m-%d %H:%M:%S"), interval)
-            if candles:
-                df = pd.DataFrame(candles).rename(columns={'date':'Date','open':'Open','high':'High','low':'Low','close':'Close','volume':'Volume'})
-                df.set_index('Date', inplace=True)
-                return df
+            logger.warning(f"⚠️ Token not found for {symbol}")
             return None
-        except: return None
 
+        except Exception as e:
+            logger.error(f"❌ Token fetch error: {e}")
+            return None
+
+    # ----------------------------------------
+    # GET LTP
+    # ----------------------------------------
     def get_ltp(self, symbols: List[str]) -> Dict:
         try:
             formatted = [f"NSE:{s}" for s in symbols]
             ltp_data = self.kite.ltp(formatted)
-            return {s: ltp_data[f"NSE:{s}"]['last_price'] for s in symbols if f"NSE:{s}" in ltp_data}
-        except: return {}
+
+            return {
+                s: ltp_data[f"NSE:{s}"]["last_price"]
+                for s in symbols
+                if f"NSE:{s}" in ltp_data
+            }
+
+        except Exception as e:
+            logger.error(f"❌ LTP fetch error: {e}")
+            return {}
+
+    # ----------------------------------------
+    # HISTORICAL DATA
+    # ----------------------------------------
+    def get_historical_data(
+        self,
+        symbol: str,
+        interval: str = "day",
+        days: int = 45
+    ) -> Optional[pd.DataFrame]:
+
+        try:
+            token = self.get_instrument_token(symbol)
+
+            if not token:
+                return None
+
+            to_date = datetime.now()
+            from_date = to_date - timedelta(days=days)
+
+            candles = self.kite.historical_data(
+                int(token),
+                from_date.strftime("%Y-%m-%d %H:%M:%S"),
+                to_date.strftime("%Y-%m-%d %H:%M:%S"),
+                interval
+            )
+
+            if candles:
+                df = pd.DataFrame(candles)
+                df.rename(columns={
+                    "date": "Date",
+                    "open": "Open",
+                    "high": "High",
+                    "low": "Low",
+                    "close": "Close",
+                    "volume": "Volume"
+                }, inplace=True)
+
+                df.set_index("Date", inplace=True)
+                return df
+
+            return None
+
+        except Exception as e:
+            logger.error(f"❌ Historical data error: {e}")
+            return None
