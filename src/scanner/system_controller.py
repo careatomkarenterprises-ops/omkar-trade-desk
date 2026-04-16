@@ -1,38 +1,85 @@
+import datetime
 import logging
 
+from src.scanner.global_market_engine import GlobalMarketEngine
+from src.scanner.premarket_engine import PreMarketEngine
+from src.scanner.eod_engine import EODEngine
+from src.scanner.learning_engine import LearningEngine
+from src.scanner.data_fetcher import DataFetcher
+from src.scanner.patterns import PatternDetector
+
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
 class SystemController:
 
     def __init__(self):
-        self.health_status = {}
+        self.fetcher = DataFetcher()
+        self.detector = PatternDetector()
+        self.global_engine = GlobalMarketEngine()
 
-    def validate(self, fetcher, detector):
+    def run(self):
 
-        logger.info("🧠 Running System Validation Gate...")
+        now = datetime.datetime.now()
 
-        try:
-            # Test Data Layer
-            data = fetcher.get_stock_data("RELIANCE")
+        logger.info(f"🚀 SYSTEM START | TIME: {now}")
 
-            if data is None or data.empty:
-                self.health_status["data"] = False
-                return False
+        # STEP 1: GLOBAL CONTEXT
+        global_data = self.global_engine.run()
 
-            # Test Pattern Layer
-            result = detector.analyze("RELIANCE", data)
+        logger.info(f"🌍 GLOBAL BIAS: {global_data.get('overall_bias')}")
 
-            if result is None:
-                self.health_status["pattern"] = False
-                return False
+        symbols = self.fetcher.get_fno_symbols()
 
-            self.health_status["data"] = True
-            self.health_status["pattern"] = True
+        if not symbols:
+            logger.warning("No symbols found")
+            return
 
-            logger.info("✅ System Validation PASSED")
-            return True
+        # STEP 2: PREMARKET
+        if now.hour < 9:
 
-        except Exception as e:
-            logger.error(f"❌ System Validation FAILED: {e}")
-            return False
+            logger.info("🔥 PREMARKET ENGINE START")
+
+            engine = PreMarketEngine()
+            engine.run(symbols, global_data)
+
+        # STEP 3: MARKET HOURS (light mode)
+        elif 9 <= now.hour < 16:
+
+            logger.info("📊 MARKET LIVE MODE - SCANNER ONLY")
+
+            for symbol in symbols[:20]:  # limit load for GitHub stability
+
+                try:
+                    data = self.fetcher.get_stock_data(symbol)
+
+                    if data is None or data.empty:
+                        continue
+
+                    result = self.detector.analyze(symbol, data)
+
+                    if result and result.get("has_pattern"):
+                        logger.info(f"🔥 SIGNAL: {symbol}")
+
+                except Exception as e:
+                    logger.error(f"{symbol} error: {e}")
+
+        # STEP 4: EOD
+        else:
+
+            logger.info("📉 EOD ENGINE START")
+
+            eod = EODEngine()
+            eod.run(global_data)
+
+            logger.info("🧠 LEARNING ENGINE START")
+
+            learn = LearningEngine()
+            learn.run(global_data)
+
+        logger.info("✅ SYSTEM COMPLETE")
+
+
+if __name__ == "__main__":
+    SystemController().run()
