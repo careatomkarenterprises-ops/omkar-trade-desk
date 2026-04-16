@@ -5,79 +5,56 @@ from src.scanner.global_market_engine import GlobalMarketEngine
 from src.scanner.premarket_engine import PreMarketPredictionEngine
 from src.scanner.eod_engine import EODEngine
 from src.scanner.learning_engine import LearningEngine
-from src.scanner.data_fetcher import DataFetcher
-from src.scanner.patterns import PatternDetector
+
+# ✅ NEW IMPORT (IMPORTANT)
+
+from src.scanner.full_market_scanner import run_full_scan
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
+logger = logging.getLogger(**name**)
 
 class SystemController:
 
-    def __init__(self):
-        self.fetcher = DataFetcher()
-        self.detector = PatternDetector()
-        self.global_engine = GlobalMarketEngine()
+```
+def __init__(self):
+    self.global_engine = GlobalMarketEngine()
 
-    def run(self):
+def run(self):
 
-        now = datetime.datetime.now()
+    now = datetime.datetime.now()
 
-        logger.info(f"🚀 SYSTEM START | TIME: {now}")
+    logger.info(f"🚀 SYSTEM START | TIME: {now}")
 
-        # GLOBAL BIAS
-        global_data = self.global_engine.run()
-        logger.info(f"🌍 GLOBAL BIAS: {global_data.get('overall_bias')}")
+    # ---------------- GLOBAL MARKET ----------------
+    global_data = self.global_engine.run()
+    logger.info(f"🌍 GLOBAL BIAS: {global_data.get('overall_bias')}")
 
-        # SAFE SYMBOLS
-        symbols = self.fetcher.get_fno_symbols()
+    # ---------------- PRE-MARKET ----------------
+    if now.hour < 9:
 
-        if not symbols:
-            logger.warning("No symbols found")
-            return
+        logger.info("🔥 PREMARKET ENGINE START")
 
-        # PREMARKET
-        if now.hour < 9:
+        engine = PreMarketPredictionEngine()
+        engine.run()
 
-            logger.info("🔥 PREMARKET ENGINE START")
+    # ---------------- MARKET HOURS ----------------
+    elif 9 <= now.hour < 16:
 
-            engine = PreMarketPredictionEngine(
-                data_fetcher=self.fetcher,
-                pattern_detector=self.detector
-            )
-            engine.run()
+        logger.info("📊 MARKET LIVE MODE")
 
-        # MARKET HOURS
-        elif 9 <= now.hour < 16:
+        # ✅ FULL SCANNER (YOUR LOCAL LOGIC CONNECTED)
+        run_full_scan()
 
-            logger.info("📊 MARKET LIVE MODE")
+    # ---------------- EOD ----------------
+    else:
 
-            for symbol in symbols[:20]:
+        logger.info("📉 EOD ENGINE START")
 
-                try:
-                    data = self.fetcher.get_stock_data(symbol)
+        EODEngine().run(global_data)
+        LearningEngine().run(global_data)
 
-                    if data is None or data.empty:
-                        continue
-
-                    result = self.detector.analyze(symbol, data)
-
-                    if result and result.get("has_pattern"):
-                        logger.info(f"🔥 SIGNAL: {symbol} | {result['signal']}")
-
-                except Exception as e:
-                    logger.error(f"{symbol} error: {e}")
-
-        # EOD
-        else:
-
-            logger.info("📉 EOD ENGINE START")
-
-            EODEngine().run(global_data)
-            LearningEngine().run(global_data)
-
-        logger.info("✅ SYSTEM COMPLETE")
-
+    logger.info("✅ SYSTEM COMPLETE")
+```
 
 def main():
-    SystemController().run()
+SystemController().run()
