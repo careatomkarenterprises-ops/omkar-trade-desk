@@ -1,41 +1,83 @@
 import datetime
+import logging
 
-from src.scanner.premarket_engine import PreMarketEngine
+from src.scanner.premarket_prediction_engine import PreMarketPredictionEngine
 from src.scanner.eod_engine import EODEngine
 from src.scanner.learning_engine import LearningEngine
 from src.scanner.global_market_engine import GlobalMarketEngine
+
+from src.scanner.data_fetcher import DataFetcher
+from src.scanner.patterns import PatternDetector
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def main():
 
     now = datetime.datetime.now()
 
-    global_engine = GlobalMarketEngine()
+    logger.info(f"🕒 System Time: {now}")
 
-    # Always generate global context first
+    # -------------------------------
+    # GLOBAL MARKET CONTEXT FIRST
+    # -------------------------------
+    global_engine = GlobalMarketEngine()
     global_data = global_engine.run()
 
-    # PREMARKET (before 9:15 AM)
+    logger.info(f"🌍 Global Bias: {global_data.get('overall_bias')}")
+
+    # -------------------------------
+    # INIT CORE COMPONENTS
+    # -------------------------------
+    fetcher = DataFetcher()
+    detector = PatternDetector()
+
+    symbols = fetcher.get_fno_symbols() if hasattr(fetcher, "get_fno_symbols") else [
+        "RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK"
+    ]
+
+    # -------------------------------
+    # 🚀 PREMARKET ENGINE (UPGRADED)
+    # -------------------------------
     if now.hour < 9:
 
-        print("🚀 Running PREMARKET ENGINE")
-        engine = PreMarketEngine()
-        engine.run(global_data)
+        logger.info("🚀 Running PREMARKET PREDICTION ENGINE")
 
-    # MARKET HOURS (skip heavy processing)
+        pre_engine = PreMarketPredictionEngine(
+            data_fetcher=fetcher,
+            pattern_detector=detector
+        )
+
+        top_setups = pre_engine.run(symbols, global_data)
+
+        logger.info(f"🔥 Top Setups Found: {len(top_setups)}")
+
+    # -------------------------------
+    # 📊 MARKET HOURS
+    # -------------------------------
     elif 9 <= now.hour < 16:
-        print("📊 Market Live - Scanner mode should run separately")
 
-    # EOD ENGINE (after 3:30 PM)
+        logger.info("📊 Market Live Mode")
+
+        logger.info("Scanner should run via core.py or GitHub workflow")
+
+    # -------------------------------
+    # 📉 EOD ENGINE
+    # -------------------------------
     else:
 
-        print("📉 Running EOD ENGINE")
+        logger.info("📉 Running EOD ENGINE")
+
         eod = EODEngine()
         eod.run(global_data)
 
-        print("🧠 Running LEARNING ENGINE")
+        logger.info("🧠 Running LEARNING ENGINE")
+
         learn = LearningEngine()
         learn.run(global_data)
+
+    logger.info("✅ Market Intelligence Cycle Completed")
 
 
 if __name__ == "__main__":
