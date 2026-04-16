@@ -9,7 +9,8 @@ import logging
 from datetime import datetime
 
 # ---------------- SAFE PATH FIX ----------------
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, BASE_DIR)
 
 # ---------------- LOGGING ----------------
 logging.basicConfig(
@@ -20,7 +21,11 @@ logging.basicConfig(
 logger = logging.getLogger("EXECUTION_LAYER")
 
 # ---------------- CORE SYSTEM IMPORT ----------------
-from src.scanner.system_controller import main as run_system
+try:
+    from src.scanner.system_controller import main as run_system
+except Exception as e:
+    logger.critical(f"❌ IMPORT FAILED: {e}")
+    run_system = None
 
 
 # ---------------- PRE-FLIGHT CHECK ----------------
@@ -37,10 +42,16 @@ def preflight_check():
         "src/scanner/system_controller.py"
     ]
 
+    missing = []
+
     for file in required_files:
-        if not os.path.exists(file):
-            logger.error(f"❌ Missing file: {file}")
-            return False
+        full_path = os.path.join(BASE_DIR, file)
+        if not os.path.exists(full_path):
+            missing.append(file)
+
+    if missing:
+        logger.error(f"❌ Missing Files: {missing}")
+        return False
 
     logger.info("✅ Preflight Check Passed")
     return True
@@ -54,11 +65,15 @@ def main():
 
     # STEP 1: Safety Check
     if not preflight_check():
-        logger.critical("❌ SYSTEM STOPPED - MISSING FILES")
+        logger.critical("❌ SYSTEM STOPPED - FILE STRUCTURE ISSUE")
+        return
+
+    # STEP 2: Run Core System
+    if run_system is None:
+        logger.critical("❌ SYSTEM STOPPED - CORE ENGINE NOT LOADED")
         return
 
     try:
-        # STEP 2: Run Core System
         run_system()
         logger.info("✅ SYSTEM EXECUTION COMPLETED SUCCESSFULLY")
 
