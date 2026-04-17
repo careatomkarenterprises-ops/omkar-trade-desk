@@ -1,13 +1,15 @@
 import logging
-# We import DataFetcher which we fixed in File 1
+# Import core components
 from src.scanner.zerodha_fetcher import DataFetcher
 from src.scanner.patterns import PatternDetector
 from src.scanner.premarket_engine import PreMarketPredictionEngine
 from src.scanner.global_market_engine import GlobalMarketEngine
 from src.scanner.options_intelligence_engine import OptionsIntelligenceEngine
 from src.telegram.poster import TelegramPoster
-from src.agents.currency_agent import CurrencyAgent 
-from src.agents.commodity_agent import CommodityAgent
+
+# Corrected: Importing agents from the scanner folder (where they actually live)
+from src.scanner.currency_agent import CurrencyAgent 
+from src.scanner.edu_news_agent import NewsAgent as CommodityAgent 
 
 logger = logging.getLogger(__name__)
 
@@ -27,11 +29,11 @@ class SystemController:
             logger.info("🚀 Executing Premarket Scan...")
             global_data = self.global_engine.run()
             
-            # This triggers the scan of your stock list
             results = self.premarket.run(global_data=global_data)
             
             if not results:
-                self.telegram.send_message("🔍 Premarket: Scan complete. No institutional volume shocks found.")
+                # Fixed: Added 'free' channel argument
+                self.telegram.send_message("free", "🔍 Premarket: Scan complete. No institutional volume shocks found.")
         except Exception as e:
             logger.error(f"Premarket failure: {e}")
 
@@ -44,11 +46,11 @@ class SystemController:
             # 2. Update Options Data
             self.options_engine.run()
 
-            # 3. Currency & Commodity Agents
+            # 3. Currency & News Agents
             try:
-                # Fixed: Calling agents without extra arguments to prevent errors
-                CurrencyAgent().scan() 
-                CommodityAgent().scan()
+                # We initialize and run them based on your current file structure
+                CurrencyAgent().run() 
+                CommodityAgent().run()
             except Exception as e:
                 logger.warning(f"Secondary Agent Error: {e}")
 
