@@ -5,9 +5,10 @@ from src.scanner.global_market_engine import GlobalMarketEngine
 from src.scanner.premarket_engine import PreMarketPredictionEngine
 from src.scanner.eod_engine import EODEngine
 from src.scanner.learning_engine import LearningEngine
-from src.scanner.data_fetcher import DataFetcher
-from src.scanner.patterns import PatternDetector
+from src.scanner.options_intelligence_engine import OptionsIntelligenceEngine
 from src.scanner.full_market_scanner import run_full_scan
+from src.scanner.currency_agent import CurrencyAgent
+from src.scanner.commodity_agent import CommodityAgent
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -16,8 +17,6 @@ logger = logging.getLogger(__name__)
 class SystemController:
 
     def __init__(self):
-        self.fetcher = DataFetcher()
-        self.detector = PatternDetector()
         self.global_engine = GlobalMarketEngine()
 
     def run(self):
@@ -26,38 +25,41 @@ class SystemController:
 
         logger.info(f"🚀 SYSTEM START | TIME: {now}")
 
-        # 🌍 GLOBAL BIAS
+        # 🌍 GLOBAL MARKET
         global_data = self.global_engine.run()
         logger.info(f"🌍 GLOBAL BIAS: {global_data.get('overall_bias')}")
 
-        # 🔥 PREMARKET
+        # 🌅 PREMARKET
         if now.hour < 9:
 
-            logger.info("🔥 PREMARKET ENGINE START")
+            logger.info("🔥 PREMARKET MODE")
+            PreMarketPredictionEngine().run()
 
-            engine = PreMarketPredictionEngine(
-                data_fetcher=self.fetcher,
-                pattern_detector=self.detector
-            )
-            engine.run()
-
-        # 📊 MARKET HOURS → FULL SCANNER
+        # 📊 LIVE MARKET
         elif 9 <= now.hour < 16:
 
-            logger.info("📊 RUNNING FULL MARKET SCANNER")
+            logger.info("📊 LIVE MARKET MODE")
 
-            run_full_scan()
+            # 🔥 MAIN SCANNER (YOUR CORE LOGIC)
+            results = run_full_scan()
 
-        # 📉 EOD
+            logger.info(f"🔥 Signals Found: {len(results)}")
+
+            # 📊 OPTIONS
+            OptionsIntelligenceEngine().run()
+
+            # 💱 CURRENCY
+            CurrencyAgent().run()
+
+            # 🛢️ COMMODITY
+            CommodityAgent().run()
+
+        # 🌙 EOD
         else:
 
-            logger.info("📉 EOD ENGINE START")
+            logger.info("📉 EOD MODE")
 
             EODEngine().run(global_data)
             LearningEngine().run(global_data)
 
         logger.info("✅ SYSTEM COMPLETE")
-
-
-def main():
-    SystemController().run()
