@@ -31,7 +31,7 @@ jobs:
           ZERODHA_PASSWORD: ${{ secrets.ZERODHA_PASSWORD }}
           ZERODHA_TOTP_SECRET: ${{ secrets.ZERODHA_TOTP_SECRET }}
           
-          # TELEGRAM CHANNELS
+          # TELEGRAM CHANNELS (Standardized Names)
           CHANNEL_FREE: ${{ secrets.CHANNEL_FREE }}
           CHANNEL_EDUCATION: ${{ secrets.CHANNEL_EDUCATION }}
           CHANNEL_CURRENCY: ${{ secrets.CHANNEL_CURRENCY }}
@@ -42,4 +42,7 @@ jobs:
           CHANNEL_BANKNIFTY: ${{ secrets.CHANNEL_BANKNIFTY }}
           CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
           CHANNEL_INTRADAY: ${{ secrets.CHANNEL_INTRADAY }}
+          
+          # LOGGING SETTINGS
+          PYTHONUNBUFFERED: "1"
         run: python execution_layer.py
