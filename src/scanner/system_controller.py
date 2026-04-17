@@ -42,7 +42,6 @@ class SystemController:
 
     def _init_all_agents(self):
         kite = self.fetcher.kite
-        # Mapping files to their primary class names
         agent_configs = {
             'currency_agent': 'CurrencyAgent',
             'fno_agent': 'FnOAgent',
@@ -56,14 +55,13 @@ class SystemController:
                 module = __import__(f"src.scanner.{file_name}", fromlist=[class_name])
                 cls = getattr(module, class_name, None)
                 
-                # If specific class name fails, look for any class containing 'Agent'
                 if not cls:
                     for attr in dir(module):
                         if 'Agent' in attr: cls = getattr(module, attr)
 
                 if cls:
-                    # Dynamically check for 'kite' vs 'kite_instance' to avoid init errors
                     sig = inspect.signature(cls.__init__)
+                    # Matches agents using 'kite_instance' or just 'kite'
                     if 'kite_instance' in sig.parameters:
                         self.agents[file_name] = cls(kite_instance=kite)
                     elif 'kite' in sig.parameters:
@@ -78,14 +76,25 @@ class SystemController:
     def run_agent_safely(self, name, agent):
         try:
             logger.info(f"📡 Executing {name.upper()}...")
-            # Try all known execution method names used across your files
-            methods = ['run', 'scan', 'post_education', 'analyze_news', 'execute']
-            for m in methods:
+            
+            # 1. Priority check for common Omkar method names
+            priority_methods = ['run', 'scan', 'post_education', 'analyze_news', 'execute', 'scan_fno', 'scan_swing']
+            for m in priority_methods:
                 method = getattr(agent, m, None)
                 if callable(method):
                     method()
                     logger.info(f"🟢 {name} completed via {m}()")
                     return
+
+            # 2. Aggressive Fallback: Find ANY method starting with 'scan' or 'run'
+            for attr in dir(agent):
+                if not attr.startswith('__'):
+                    func = getattr(agent, attr)
+                    if callable(func) and (attr.startswith('scan') or attr.startswith('run')):
+                        func()
+                        logger.info(f"🟢 {name} completed via auto-discovery: {attr}()")
+                        return
+
             logger.warning(f"❓ {name} has no recognized execution method")
         except Exception as e:
             logger.error(f"❌ {name} execution failed: {e}")
@@ -94,18 +103,16 @@ class SystemController:
         try:
             logger.info("🚀 OMKAR INTELLIGENCE CYCLE STARTING")
             
-            # 1. Run Core Engines (Market context & Options)
+            # Step 1: Market Overlays
             self.global_engine.run()
             self.options_engine.run()
 
-            # 2. Run Individual Specialized Agents
+            # Step 2: Specialized Agents
             for name, agent in self.agents.items():
                 self.run_agent_safely(name, agent)
 
             logger.info("✅ ALL SYSTEMS OPERATIONAL - SCAN COMPLETE")
         except Exception as e:
-            logger.error(f"❌ Critical System Failure: {e}")
-            print(traceback.format_exc())
+            logger.error(f"❌ System Run Failure: {e}")
 
-    def run_live_session(self): 
-        self.run()
+    def run_live_session(self): self.run()
