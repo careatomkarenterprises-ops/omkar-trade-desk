@@ -17,7 +17,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip' # Speeds up future runs
+          cache: 'pip'
 
       - name: Install dependencies
         run: |
@@ -27,7 +27,7 @@ jobs:
       - name: Run Multi-Agent Engine
         env:
           PYTHONPATH: .
-          # ✅ Matching your code's expected names with your GitHub Secrets
+          # ✅ Essential Credentials
           KITE_API_KEY: ${{ secrets.KITE_API_KEY }}
           KITE_ACCESS_TOKEN: ${{ secrets.KITE_ACCESS_TOKEN }}
           ZERODHA_API_SECRET: ${{ secrets.ZERODHA_API_SECRET }}
@@ -43,11 +43,13 @@ jobs:
           
         run: |
           mkdir -p data
-          # 1. First, run the Health Check to verify connection
+          
+          # 1. Verify connection first (If this fails, the rest won't run)
           python system_health_check.py
           
-          # 2. Run your specific agents (using your module paths)
-          # Note: If these files moved to src/scanner/ use the -m format
-          python -m src.scanner.morning_setup || echo "Morning setup skipped"
+          # 2. Run the Execution Layer (The Brain)
+          python execution_layer.py || echo "Execution layer had an issue, moving to individual agents"
+          
+          # 3. Individual Agent Fallbacks
           python -m src.scanner.currency_agent || echo "Currency agent failed"
           python -m src.scanner.edu_news_agent || echo "News agent failed"
