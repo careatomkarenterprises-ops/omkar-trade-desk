@@ -11,32 +11,31 @@ class TelegramPoster:
 
     def __init__(self):
         self.bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
-        self.chat_id = os.getenv("TELEGRAM_CHAT_ID")
 
-        # ✅ CHANNEL MAP (IMPORTANT)
+        # ✅ FIX: Use YOUR existing secrets
         self.channels = {
-            "free": self.chat_id,
-            "premium": os.getenv("CHANNEL_PREMIUM", self.chat_id),
-            "currency": self.chat_id,
-            "commodity": self.chat_id
+            "free": os.getenv("CHANNEL_FREE"),
+            "premium": os.getenv("CHANNEL_PREMIUM"),
+            "currency": os.getenv("CHANNEL_CURRENCY"),
+            "commodity": os.getenv("CHANNEL_COMMODITY"),
         }
 
-        if not self.bot_token or not self.chat_id:
-            logger.warning("⚠ Telegram credentials missing")
+        if not self.bot_token:
+            logger.warning("⚠ Telegram BOT TOKEN missing")
 
     def send_message(self, chat_type, message):
 
         try:
-            target_id = self.channels.get(chat_type, self.chat_id)
+            chat_id = self.channels.get(chat_type)
 
-            if not self.bot_token or not target_id:
-                logger.error("❌ Cannot send message - Missing credentials")
+            if not self.bot_token or not chat_id:
+                logger.error(f"❌ Missing Telegram config for {chat_type}")
                 return
 
             url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
 
             payload = {
-                "chat_id": target_id,
+                "chat_id": chat_id,
                 "text": message,
                 "parse_mode": "Markdown"
             }
@@ -52,7 +51,6 @@ class TelegramPoster:
             logger.error(f"❌ Telegram Error: {e}")
 
 
-# ✅ SUPPORT FUNCTION FOR AGENTS
 def send_to_telegram(chat_type, message):
     try:
         TelegramPoster().send_message(chat_type, message)
