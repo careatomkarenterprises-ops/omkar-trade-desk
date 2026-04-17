@@ -1,6 +1,5 @@
 import logging
 import os
-import json
 import inspect
 from datetime import datetime
 
@@ -12,14 +11,11 @@ class SystemController:
         try:
             from src.scanner.zerodha_fetcher import ZerodhaFetcher
             from src.scanner.global_market_engine import GlobalMarketEngine
-            from src.scanner.options_intelligence_engine import OptionsIntelligenceEngine
             from src.telegram.poster import TelegramPoster
             
             self.fetcher = ZerodhaFetcher()
             self.global_engine = GlobalMarketEngine()
-            self.options_engine = OptionsIntelligenceEngine()
             self.telegram = TelegramPoster()
-            
             self.agents = {}
             self._init_all_agents()
         except Exception as e:
@@ -27,21 +23,16 @@ class SystemController:
 
     def _init_all_agents(self):
         kite = self.fetcher.kite
-        agent_configs = {
-            'currency_agent': 'CurrencyAgent',
-            'fno_agent': 'FnOAgent',
-            'swing_agent': 'SwingAgent',
-            'commodity_agent': 'CommodityAgent',
-            'edu_news_agent': 'EduNewsAgent'
-        }
+        agent_configs = {'fno_agent': 'FnOAgent', 'swing_agent': 'SwingAgent', 
+                         'commodity_agent': 'CommodityAgent', 'currency_agent': 'CurrencyAgent',
+                         'edu_news_agent': 'EduNewsAgent'}
         for file_name, class_name in agent_configs.items():
             try:
                 module = __import__(f"src.scanner.{file_name}", fromlist=[class_name])
                 cls = getattr(module, class_name, None)
                 if cls:
                     sig = inspect.signature(cls.__init__)
-                    instance = cls(kite_instance=kite) if 'kite_instance' in sig.parameters else cls()
-                    self.agents[file_name] = instance
+                    self.agents[file_name] = cls(kite_instance=kite) if 'kite_instance' in sig.parameters else cls()
                     logger.info(f"✅ Loaded: {file_name}")
             except Exception as e:
                 logger.warning(f"⏩ Skipping {file_name}: {e}")
@@ -49,65 +40,40 @@ class SystemController:
     def run_agent_safely(self, name, agent):
         try:
             logger.info(f"📡 Executing {name.upper()}...")
-            # Aggressive Discovery: Find any method starting with 'scan', 'run', or 'execute'
-            method = None
-            for attr in dir(agent):
-                if any(attr.startswith(p) for p in ['scan', 'run', 'execute', 'analyze']) and callable(getattr(agent, attr)):
-                    method = getattr(agent, attr)
-                    break
+            report = None
             
-            if method:
-                report = method()
-                # ANTI-EMPTY MESSAGE LOGIC
-                if not report or str(report).strip() == "":
-                    report = f"🔍 {name.replace('_', ' ').title()}: No specific institutional volume footprints detected in this cycle."
-                
-                self.route_report(name, report)
-                logger.info(f"🟢 {name} completed.")
+            # ✅ FIX: Specifically target your F&O function name
+            if name == 'fno_agent':
+                data = agent.scan_institutional_build(symbol="NIFTY")
+                if data:
+                    report = "🏦 *Institutional F&O Build-up*\n\n"
+                    for item in data:
+                        report += f"🔹 {item['expiry_type']}: {item['sentiment']} @ {item['price']}\n"
             else:
-                logger.warning(f"❓ {name} has no recognized execution method")
+                # Standard discovery for others
+                for m in ['run', 'scan', 'execute', 'analyze_news']:
+                    if hasattr(agent, m):
+                        report = getattr(agent, m)()
+                        break
+            
+            if report:
+                target = 'premium' if name in ['fno_agent', 'commodity_agent', 'currency_agent'] else ('education' if name == 'edu_news_agent' else 'free')
+                self.telegram.send_message(target, report)
         except Exception as e:
             logger.error(f"❌ {name} execution failed: {e}")
 
-    def route_report(self, agent_name, report):
-        # Map agent names to your 3 consolidated channels
-        target = 'free'
-        if agent_name in ['fno_agent', 'commodity_agent', 'currency_agent']:
-            target = 'premium'
-        elif agent_name == 'edu_news_agent':
-            target = 'education'
-        
-        self.telegram.send_message(target, report)
-
-    def run_market_intelligence(self):
-        now = datetime.now()
-        current_time = now.hour * 100 + now.minute
-        
-        # 1. Global Bias
+    def run(self):
+        current_time = datetime.now().hour * 100 + datetime.now().minute
         global_data = self.global_engine.run()
-
-        # 2. Specialty Agents
+        
         for name, agent in self.agents.items():
             self.run_agent_safely(name, agent)
 
-        # 3. EOD Review Fix
+        # ✅ FIX: Trigger EOD and pass the required global_data
         if current_time >= 1535:
-            logger.info("🌙 Phase: EOD REVIEW")
-            try:
-                from src.scanner.eod_engine import EODEngine
-                eod = EODEngine()
-                summary = eod.run(global_data=global_data)
-                if not summary:
-                    summary = "📊 *Market Wrap:* Index remained sideways. No major volume breakout patterns confirmed at EOD."
-                
-                self.telegram.send_message('free', summary)
-                self.telegram.send_message('premium', summary)
-            except Exception as e:
-                logger.error(f"EOD Engine failed: {e}")
-
-    def run(self):
-        self.run_market_intelligence()
+            from src.scanner.eod_engine import EODEngine
+            summary = EODEngine().run(global_data=global_data)
+            self.telegram.send_message('free', summary)
 
 if __name__ == "__main__":
-    controller = SystemController()
-    controller.run()
+    SystemController().run()
