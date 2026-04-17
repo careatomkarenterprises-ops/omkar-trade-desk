@@ -1,9 +1,7 @@
 import json
 
 class EODEngine:
-
     def run(self, global_data):
-
         report = {
             "market_summary": self.summary(),
             "top_gainers": self.top_gainers(),
@@ -13,7 +11,17 @@ class EODEngine:
         }
 
         self.save(report)
-        self.print_report(report)
+        
+        # ✅ FIX: Construct the message string to return to the Controller
+        message = "📊 *OMKAR EOD MARKET REVIEW*\n\n"
+        message += f"📝 *Summary:* {report['market_summary']}\n\n"
+        message += f"📈 *Top Gainers:* {', '.join(report['top_gainers'])}\n"
+        message += f"🔥 *Volume Breakouts:* {', '.join(report['volume_breakouts'])}\n\n"
+        message += "⚡ *Sector Pulse:*\n"
+        for sector, strength in report['sector_strength'].items():
+            message += f"• {sector}: {strength.upper()}\n"
+            
+        return message
 
     def summary(self):
         return "Market showed mixed trend with selective buying in largecaps"
@@ -25,16 +33,8 @@ class EODEngine:
         return ["RELIANCE", "INFY"]
 
     def sectors(self):
-        return {
-            "IT": "strong",
-            "BANKING": "neutral",
-            "AUTO": "positive"
-        }
+        return {"IT": "strong", "BANKING": "neutral", "AUTO": "positive"}
 
     def save(self, report):
         with open("data/eod.json", "w") as f:
             json.dump(report, f, indent=2)
-
-    def print_report(self, report):
-        print("\n📉 EOD REPORT")
-        print("Top Gainers:", report["top_gainers"])
