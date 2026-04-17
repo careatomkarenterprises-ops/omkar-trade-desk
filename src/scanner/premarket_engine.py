@@ -20,18 +20,33 @@ class PreMarketPredictionEngine:
     # -----------------------------
     # MAIN ENTRY
     # -----------------------------
-    def run(self, symbols, global_data):
+    def run(self, symbols=None, global_data=None):
 
         logger.info("🚀 Running Premarket Prediction Engine...")
+
+        if global_data is None:
+            global_data = {}
+
+        # ✅ AUTO SYMBOL FIX
+        if not symbols:
+            logger.warning("⚠ No symbols provided, using default watchlist")
+            symbols = [
+                "RELIANCE", "TCS", "INFY", "HDFCBANK",
+                "ICICIBANK", "SBIN", "LT", "AXISBANK",
+                "KOTAKBANK", "ITC"
+            ]
 
         results = []
 
         for symbol in symbols:
 
             try:
+                logger.info(f"🔍 Scanning {symbol}")
+
                 df = self.fetcher.get_stock_data(symbol)
 
                 if df is None or df.empty:
+                    logger.warning(f"⚠ No data for {symbol}")
                     continue
 
                 analysis = self.detector.analyze(symbol, df)
@@ -46,20 +61,19 @@ class PreMarketPredictionEngine:
                     results.append({
                         "symbol": symbol,
                         "score": round(score, 2),
-                        "price": analysis["price"],
-                        "trigger": analysis["trigger"],
-                        "surge": analysis["surge_ratio"],
-                        "support": analysis["support"],
-                        "resistance": analysis["resistance"]
+                        "price": analysis.get("price"),
+                        "trigger": analysis.get("trigger"),
+                        "surge": analysis.get("surge_ratio"),
+                        "support": analysis.get("support"),
+                        "resistance": analysis.get("resistance")
                     })
 
             except Exception as e:
-                logger.error(f"Error scanning {symbol}: {e}")
+                logger.error(f"❌ Error scanning {symbol}: {e}")
 
         # Sort best setups first
         results = sorted(results, key=lambda x: x["score"], reverse=True)
 
-        # Top 10 only
         top_results = results[:10]
 
         self.save(top_results)
@@ -68,21 +82,18 @@ class PreMarketPredictionEngine:
         return top_results
 
     # -----------------------------
-    # SCORING ENGINE (VERY IMPORTANT)
+    # SCORING ENGINE
     # -----------------------------
     def calculate_score(self, analysis, global_data):
 
         score = 0
 
-        # 1. Volume strength
         surge = analysis.get("surge_ratio", 1)
         score += min(surge / 3, 0.4)
 
-        # 2. Pattern strength
         strength = analysis.get("strength", 0)
         score += strength * 0.3
 
-        # 3. Global market bias influence
         bias = global_data.get("overall_bias", "")
 
         if bias == "BULLISH SETUP":
@@ -90,8 +101,7 @@ class PreMarketPredictionEngine:
         elif bias == "BEARISH SETUP":
             score -= 0.2
 
-        # 4. Breakout preference
-        if "BREAKOUT" in analysis.get("trigger", ""):
+        if "BREAKOUT" in str(analysis.get("trigger", "")):
             score += 0.2
 
         return min(max(score, 0), 1)
@@ -101,8 +111,11 @@ class PreMarketPredictionEngine:
     # -----------------------------
     def save(self, data):
 
-        with open("data/premarket_predictions.json", "w") as f:
-            json.dump(data, f, indent=2)
+        try:
+            with open("data/premarket_predictions.json", "w") as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            logger.error(f"❌ Save failed: {e}")
 
     # -----------------------------
     # PRINT OUTPUT
@@ -111,6 +124,10 @@ class PreMarketPredictionEngine:
 
         print("\n🔥 TOP PREMARKET SETUPS")
         print("========================")
+
+        if not data:
+            print("⚠ No strong setups found")
+            return
 
         for d in data:
             print(
