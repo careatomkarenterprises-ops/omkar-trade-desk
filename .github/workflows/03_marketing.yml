@@ -17,8 +17,9 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-          
+          python-version: '3.11'
+          cache: 'pip'
+      
       - name: Install dependencies
         run: pip install -r requirements.txt
       
@@ -27,6 +28,7 @@ jobs:
           PYTHONPATH: .
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           RAZORPAY_LINK: ${{ secrets.RAZORPAY_LINK }}
+          CHANNEL_FREE: ${{ secrets.CHANNEL_FREE }}
           CHANNEL_EDUCATION: ${{ secrets.CHANNEL_EDUCATION }}
           CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
           CHANNEL_NIFTY: ${{ secrets.CHANNEL_NIFTY }}
@@ -36,5 +38,4 @@ jobs:
           CHANNEL_SWING: ${{ secrets.CHANNEL_SWING }}
           CHANNEL_INTRADAY: ${{ secrets.CHANNEL_INTRADAY }}
           CHANNEL_FNO: ${{ secrets.CHANNEL_FNO }}
-        run: |
-          python -m src.marketing.content
+        run: python -m src.marketing.content
