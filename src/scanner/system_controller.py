@@ -24,7 +24,7 @@ class SystemController:
         self.global_engine = GlobalMarketEngine()
         self.telegram = TelegramPoster()
 
-        # ✅ DEPENDENCIES
+        # ✅ CORE DEPENDENCIES
         self.kite = get_kite_instance()
         self.data_fetcher = DataFetcher()
         self.pattern_detector = PatternDetector()
@@ -43,6 +43,9 @@ class SystemController:
         try:
             global_data = self.global_engine.run()
 
+            if not global_data:
+                global_data = {}
+
             msg = f"""
 🌍 GLOBAL MARKET UPDATE
 
@@ -57,8 +60,8 @@ Crude: {global_data.get('crude_oil', {}).get('trend')}
             logger.error(f"❌ Global Engine Failed: {e}")
             global_data = {}
 
-        # 🌅 PREMARKET
-        if now.hour < 9:
+        # 🌅 PREMARKET (Before 9:15 AM)
+        if now.hour < 9 or (now.hour == 9 and now.minute < 15):
 
             logger.info("🔥 PREMARKET MODE")
 
@@ -68,11 +71,10 @@ Crude: {global_data.get('crude_oil', {}).get('trend')}
                     self.pattern_detector
                 )
 
-                # ✅ SAFE CALL (handles both types)
-                try:
-                    engine.run([], global_data)
-                except TypeError:
-                    engine.run()
+                # ✅ CORRECT FIX
+                engine.run([], global_data)
+
+                logger.info("✅ Premarket Completed")
 
             except Exception as e:
                 logger.error(f"❌ Premarket Failed: {e}")
@@ -108,24 +110,24 @@ Crude: {global_data.get('crude_oil', {}).get('trend')}
             except Exception as e:
                 logger.error(f"❌ Options Failed: {e}")
 
-            # 💱 CURRENCY
+            # 💱 CURRENCY (DO NOT CHANGE)
             try:
                 if self.kite:
                     CurrencyAgent(self.kite).scan()
                     self.telegram.send_message("free", "💱 Currency Done")
                 else:
-                    logger.warning("⚠ Skipping Currency - No Kite")
+                    logger.warning("⚠ Currency Skipped - No Kite")
 
             except Exception as e:
                 logger.error(f"❌ Currency Failed: {e}")
 
-            # 🛢️ COMMODITY
+            # 🛢️ COMMODITY (DO NOT CHANGE)
             try:
                 if self.kite:
                     CommodityAgent(self.kite).scan()
                     self.telegram.send_message("free", "🛢️ Commodity Done")
                 else:
-                    logger.warning("⚠ Skipping Commodity - No Kite")
+                    logger.warning("⚠ Commodity Skipped - No Kite")
 
             except Exception as e:
                 logger.error(f"❌ Commodity Failed: {e}")
