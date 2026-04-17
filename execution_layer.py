@@ -1,5 +1,5 @@
 """
-OMKAR TRADE DESK - PRODUCTION EXECUTION LAYER (DEBUG ENABLED)
+OMKAR TRADE DESK - PRODUCTION EXECUTION LAYER (STABLE + DEBUG)
 """
 
 import sys
@@ -37,7 +37,6 @@ def preflight_check():
         "src/scanner/data_fetcher.py",
         "src/scanner/patterns.py",
         "src/scanner/global_market_engine.py",
-        "src/scanner/options_intelligence_engine.py",
         "src/scanner/system_controller.py",
         "src/scanner/full_market_scanner.py"
     ]
@@ -63,31 +62,23 @@ def main():
     logger.info("🚀 OMKAR TRADE DESK STARTED")
     logger.info(f"🕒 Time: {datetime.now()}")
 
-    # STEP 1: FILE CHECK
     if not preflight_check():
-        logger.critical("❌ SYSTEM STOPPED - FILE STRUCTURE ISSUE")
+        logger.critical("❌ SYSTEM STOPPED - FILE ISSUE")
         return
 
-    # STEP 2: CONTROLLER CHECK
     if SystemController is None:
-        logger.critical("❌ SYSTEM STOPPED - CONTROLLER NOT LOADED")
+        logger.critical("❌ SYSTEM STOPPED - CONTROLLER ISSUE")
         return
 
-    # STEP 3: RUN SYSTEM WITH FULL DEBUG
     try:
-        logger.info("🔥 INITIALIZING SYSTEM CONTROLLER...")
         controller = SystemController()
-
-        logger.info("🔥 RUNNING FULL SYSTEM...")
         controller.run()
-
-        logger.info("✅ SYSTEM EXECUTION COMPLETED SUCCESSFULLY")
+        logger.info("✅ SYSTEM EXECUTION COMPLETED")
 
     except Exception as e:
         logger.critical("❌ SYSTEM CRASH DETECTED")
         logger.exception(e)
 
 
-# ---------------- ENTRY POINT ----------------
 if __name__ == "__main__":
     main()
