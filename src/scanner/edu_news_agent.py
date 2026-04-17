@@ -2,6 +2,7 @@ import os
 import random
 import logging
 from src.telegram.poster import TelegramPoster
+
 # Using a safer import for kite instance
 try:
     from src.scanner.morning_setup import get_kite_instance
@@ -12,13 +13,12 @@ logger = logging.getLogger(__name__)
 
 class EduNewsAgent:
     def __init__(self, kite=None):
-        # Allow passing kite from controller, or fetch new one if running standalone
         self.kite = kite or get_kite_instance()
         self.telegram = TelegramPoster()
 
     def run(self):
         """Standardized entry point for the System Controller"""
-        logger.info("📡 EduNewsAgent: Triggering educational post...")
+        logger.info("📡 EduNewsAgent: Starting Education Cycle...")
         self.post_education()
 
     def post_education(self):
@@ -38,7 +38,7 @@ class EduNewsAgent:
                 if rel_data and "NSE:RELIANCE" in rel_data:
                     real_price = rel_data["NSE:RELIANCE"]["last_price"]
         except Exception as e:
-            logger.warning(f"Could not fetch Reliance price for Edu post: {e}")
+            logger.warning(f"Could not fetch Reliance price: {e}")
 
         msg = (
             f"🎓 **OMKAR ELITE EDUCATION**\n\n"
@@ -50,20 +50,18 @@ class EduNewsAgent:
             f"🔍 *Master the Volume, Master the Market.*"
         )
         
-        # This sends to the 'education' channel secret defined in your config
         try:
-            self.telegram.send_message("education", msg)
-            logger.info("✅ Educational post sent to Telegram.")
+            # Check if education secret exists, else force fallback to free
+            if not os.getenv("CHANNEL_EDUCATION"):
+                logger.error("❌ CHANNEL_EDUCATION not found in env, falling back to FREE")
+                self.telegram.send_message("free", msg)
+            else:
+                self.telegram.send_message("education", msg)
+                logger.info("✅ Educational post sent to Education Channel.")
         except Exception as e:
             logger.error(f"Failed to send Edu post: {e}")
-            # Fallback to free channel if education channel is not configured
             self.telegram.send_message("free", msg)
 
 if __name__ == "__main__":
-    # This allows the file to be run manually for testing
-    kite_instance = get_kite_instance()
-    if kite_instance:
-        agent = EduNewsAgent(kite_instance)
-        agent.run()
-    else:
-        print("❌ Could not initialize Kite for standalone run.")
+    agent = EduNewsAgent()
+    agent.run()
