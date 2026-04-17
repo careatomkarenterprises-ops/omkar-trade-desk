@@ -12,7 +12,6 @@ try:
     from src.telegram.poster import TelegramPoster
 except ImportError as e:
     print(f"DEBUGGER: Core Import Error: {e}")
-    print(traceback.format_exc())
 
 logger = logging.getLogger(__name__)
 
@@ -27,71 +26,75 @@ class SystemController:
             self.options_engine = OptionsIntelligenceEngine()
             self.telegram = TelegramPoster()
             
-            # Setup Agents as None initially
+            # Setup Agents
             self.currency_agent = None
             self.news_agent = None
             self._load_agents_with_debug()
             
         except Exception as e:
             logger.error(f"💥 Controller Init Failed: {e}")
-            print(traceback.format_exc())
 
     def _load_agents_with_debug(self):
-        """Advanced Debugger for loading secondary agents"""
-        # Try Currency Agent
+        """Fixed: Passing 'kite' instance to agents that require it"""
+        # 1. Load Currency Agent
         try:
             from src.scanner.currency_agent import CurrencyAgent
             self.currency_agent = CurrencyAgent()
             logger.info("✅ Currency Agent Loaded")
         except Exception as e:
-            logger.warning(f"⚠️ DEBUGGER: CurrencyAgent load failed: {e}")
+            logger.warning(f"⚠️ CurrencyAgent load failed: {e}")
 
-        # Try News/Edu Agent
+        # 2. Load News/Edu Agent (Fixed positional argument 'kite')
         try:
-            # We try multiple common class names to find yours
             import src.scanner.edu_news_agent as news_mod
-            # List all classes in the file to find the right one
-            classes = [cls for cls in dir(news_mod) if not cls.startswith('_')]
-            logger.info(f"DEBUGGER: Found classes in edu_news_agent: {classes}")
-            
-            if 'EduNewsAgent' in classes:
-                self.news_agent = news_mod.EduNewsAgent()
-            elif 'NewsAgent' in classes:
-                self.news_agent = news_mod.NewsAgent()
-            elif 'Agent' in classes:
-                self.news_agent = news_mod.Agent()
-            
-            if self.news_agent:
-                logger.info("✅ News Agent Loaded successfully")
+            # We pass self.fetcher.kite because the logs say it's required
+            if hasattr(news_mod, 'EduNewsAgent'):
+                self.news_agent = news_mod.EduNewsAgent(kite=self.fetcher.kite)
+                logger.info("✅ EduNewsAgent Loaded with Kite context")
+            elif hasattr(news_mod, 'NewsAgent'):
+                self.news_agent = news_mod.NewsAgent(kite=self.fetcher.kite)
+                logger.info("✅ NewsAgent Loaded with Kite context")
         except Exception as e:
-            logger.warning(f"⚠️ DEBUGGER: NewsAgent load failed: {e}")
+            logger.warning(f"⚠️ NewsAgent load failed: {e}")
 
-    def run_live_session(self):
-        """Main execution loop with diagnostic checkpoints"""
+    def run(self):
+        """
+        Fixed: Renamed from run_live_session to 'run' 
+        to match your execution_layer.py call.
+        """
         try:
-            logger.info("🚀 Starting Live Intelligence Cycle")
+            logger.info("🚀 Starting Omkar Trade Desk Execution...")
             
-            # Checkpoint 1: Global Market Engine
-            logger.info("Checkpoint 1: Global Macro...")
+            # Step 1: Global Macro & Options
+            logger.info("📊 Processing Global Markets & Options...")
             global_data = self.global_engine.run()
-            
-            # Checkpoint 2: Options Engine
-            logger.info("Checkpoint 2: Options Intelligence...")
             self.options_engine.run()
 
-            # Checkpoint 3: Secondary Agents
+            # Step 2: Currency Scan
             if self.currency_agent:
-                logger.info("Checkpoint 3a: Running Currency Scan...")
-                try: self.currency_agent.run() 
-                except Exception as e: logger.error(f"Currency Run Error: {e}")
+                try:
+                    logger.info("💱 Running Currency Agent...")
+                    # Try common run methods
+                    if hasattr(self.currency_agent, 'run'): self.currency_agent.run()
+                    elif hasattr(self.currency_agent, 'scan'): self.currency_agent.scan()
+                except Exception as e:
+                    logger.error(f"Currency Agent Execution Error: {e}")
             
+            # Step 3: News/Edu Scan
             if self.news_agent:
-                logger.info("Checkpoint 3b: Running News/Edu Scan...")
-                try: self.news_agent.run()
-                except Exception as e: logger.error(f"News Run Error: {e}")
+                try:
+                    logger.info("📰 Running News Intelligence Agent...")
+                    if hasattr(self.news_agent, 'run'): self.news_agent.run()
+                    elif hasattr(self.news_agent, 'scan'): self.news_agent.scan()
+                except Exception as e:
+                    logger.error(f"News Agent Execution Error: {e}")
 
-            logger.info("✅ Live Cycle Complete")
+            logger.info("✅ ALL SCANS COMPLETE")
             
         except Exception as e:
-            logger.error(f"❌ System Controller Live Session Error: {e}")
+            logger.error(f"❌ System Controller Run Error: {e}")
             print(traceback.format_exc())
+
+    def run_live_session(self):
+        """Alias for compatibility"""
+        self.run()
