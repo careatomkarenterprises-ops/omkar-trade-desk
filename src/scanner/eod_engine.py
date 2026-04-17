@@ -9,19 +9,14 @@ class EODEngine:
             "sector_strength": self.sectors(),
             "global_context": global_data
         }
-
         self.save(report)
         
-        # ✅ FIX: Construct the message string to return to the Controller
-        message = "📊 *OMKAR EOD MARKET REVIEW*\n\n"
-        message += f"📝 *Summary:* {report['market_summary']}\n\n"
-        message += f"📈 *Top Gainers:* {', '.join(report['top_gainers'])}\n"
-        message += f"🔥 *Volume Breakouts:* {', '.join(report['volume_breakouts'])}\n\n"
-        message += "⚡ *Sector Pulse:*\n"
-        for sector, strength in report['sector_strength'].items():
-            message += f"• {sector}: {strength.upper()}\n"
-            
-        return message
+        # Format the message for Telegram
+        msg = "📊 *OMKAR EOD MARKET REVIEW*\n\n"
+        msg += f"📝 *Summary:* {report['market_summary']}\n"
+        msg += f"📈 *Gainers:* {', '.join(report['top_gainers'])}\n"
+        msg += f"🔥 *Volume:* {', '.join(report['volume_breakouts'])}\n"
+        return msg
 
     def summary(self):
         return "Market showed mixed trend with selective buying in largecaps"
