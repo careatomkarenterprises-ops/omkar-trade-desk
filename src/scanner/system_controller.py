@@ -1,68 +1,97 @@
-Skip to content
-careatomkarenterprises-ops
-omkar-trade-desk
-Repository navigation
-Code
-Issues
-Pull requests
-Agents
-Actions
-Projects
-Security and quality
-Insights
-Settings
-Hedge Fund Market Intelligence
-Hedge Fund Market Intelligence #41
-All jobs
-Run details
-run
-succeeded now in 30s
-Search logs
-1s
-1s
-0s
-19s
-4s
-1s
-Run python execution_layer.py
-  python execution_layer.py
-  shell: /usr/bin/bash -e {0}
-  env:
-    pythonLocation: /opt/hostedtoolcache/Python/3.11.15/x64
-    PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.15/x64/lib/pkgconfig
-    Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.15/x64
-    Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.15/x64
-    Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.15/x64
-    LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.15/x64/lib
-  
-2026-04-17 11:58:18,278 - CRITICAL - ❌ IMPORT FAILED: system_controller not loading
-2026-04-17 11:58:18,278 - ERROR - cannot import name 'NewsAgent' from 'src.scanner.edu_news_agent' (/home/runner/work/omkar-trade-desk/omkar-trade-desk/src/scanner/edu_news_agent.py)
-Traceback (most recent call last):
-  File "/home/runner/work/omkar-trade-desk/omkar-trade-desk/execution_layer.py", line 24, in <module>
-    from src.scanner.system_controller import SystemController
-  File "/home/runner/work/omkar-trade-desk/omkar-trade-desk/src/scanner/system_controller.py", line 12, in <module>
-    from src.scanner.edu_news_agent import NewsAgent as CommodityAgent
-ImportError: cannot import name 'NewsAgent' from 'src.scanner.edu_news_agent' (/home/runner/work/omkar-trade-desk/omkar-trade-desk/src/scanner/edu_news_agent.py)
-2026-04-17 11:58:18,279 - INFO - 🚀 OMKAR TRADE DESK STARTED
-2026-04-17 11:58:18,279 - INFO - 🕒 Time: 2026-04-17 11:58:18.279220
-2026-04-17 11:58:18,279 - INFO - 🧪 Running Preflight System Check...
-2026-04-17 11:58:18,279 - INFO - ✅ Preflight Check Passed
-2026-04-17 11:58:18,279 - CRITICAL - ❌ SYSTEM STOPPED - CONTROLLER ISSUE
-0s
-Post job cleanup.
-0s
-Post job cleanup.
-/usr/bin/git version
-git version 2.53.0
-Temporarily overriding HOME='/home/runner/work/_temp/1c041020-0dc2-4508-a051-66f5fe91a9d9' before making global git config changes
-Adding repository directory to the temporary git global config as a safe directory
-/usr/bin/git config --global --add safe.directory /home/runner/work/omkar-trade-desk/omkar-trade-desk
-/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
-/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
-/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
-http.https://github.com/.extraheader
-/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
-/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
-/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
-/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
-0s
+import logging
+import sys
+import traceback
+
+# Core Engine Imports
+try:
+    from src.scanner.zerodha_fetcher import DataFetcher
+    from src.scanner.patterns import PatternDetector
+    from src.scanner.premarket_engine import PreMarketPredictionEngine
+    from src.scanner.global_market_engine import GlobalMarketEngine
+    from src.scanner.options_intelligence_engine import OptionsIntelligenceEngine
+    from src.telegram.poster import TelegramPoster
+except ImportError as e:
+    print(f"DEBUGGER: Core Import Error: {e}")
+    print(traceback.format_exc())
+
+logger = logging.getLogger(__name__)
+
+class SystemController:
+    def __init__(self):
+        logger.info("🛠️ Initializing System Controller...")
+        try:
+            self.fetcher = DataFetcher()
+            self.detector = PatternDetector()
+            self.premarket = PreMarketPredictionEngine(self.fetcher, self.detector)
+            self.global_engine = GlobalMarketEngine()
+            self.options_engine = OptionsIntelligenceEngine()
+            self.telegram = TelegramPoster()
+            
+            # Setup Agents as None initially
+            self.currency_agent = None
+            self.news_agent = None
+            self._load_agents_with_debug()
+            
+        except Exception as e:
+            logger.error(f"💥 Controller Init Failed: {e}")
+            print(traceback.format_exc())
+
+    def _load_agents_with_debug(self):
+        """Advanced Debugger for loading secondary agents"""
+        # Try Currency Agent
+        try:
+            from src.scanner.currency_agent import CurrencyAgent
+            self.currency_agent = CurrencyAgent()
+            logger.info("✅ Currency Agent Loaded")
+        except Exception as e:
+            logger.warning(f"⚠️ DEBUGGER: CurrencyAgent load failed: {e}")
+
+        # Try News/Edu Agent
+        try:
+            # We try multiple common class names to find yours
+            import src.scanner.edu_news_agent as news_mod
+            # List all classes in the file to find the right one
+            classes = [cls for cls in dir(news_mod) if not cls.startswith('_')]
+            logger.info(f"DEBUGGER: Found classes in edu_news_agent: {classes}")
+            
+            if 'EduNewsAgent' in classes:
+                self.news_agent = news_mod.EduNewsAgent()
+            elif 'NewsAgent' in classes:
+                self.news_agent = news_mod.NewsAgent()
+            elif 'Agent' in classes:
+                self.news_agent = news_mod.Agent()
+            
+            if self.news_agent:
+                logger.info("✅ News Agent Loaded successfully")
+        except Exception as e:
+            logger.warning(f"⚠️ DEBUGGER: NewsAgent load failed: {e}")
+
+    def run_live_session(self):
+        """Main execution loop with diagnostic checkpoints"""
+        try:
+            logger.info("🚀 Starting Live Intelligence Cycle")
+            
+            # Checkpoint 1: Global Market Engine
+            logger.info("Checkpoint 1: Global Macro...")
+            global_data = self.global_engine.run()
+            
+            # Checkpoint 2: Options Engine
+            logger.info("Checkpoint 2: Options Intelligence...")
+            self.options_engine.run()
+
+            # Checkpoint 3: Secondary Agents
+            if self.currency_agent:
+                logger.info("Checkpoint 3a: Running Currency Scan...")
+                try: self.currency_agent.run() 
+                except Exception as e: logger.error(f"Currency Run Error: {e}")
+            
+            if self.news_agent:
+                logger.info("Checkpoint 3b: Running News/Edu Scan...")
+                try: self.news_agent.run()
+                except Exception as e: logger.error(f"News Run Error: {e}")
+
+            logger.info("✅ Live Cycle Complete")
+            
+        except Exception as e:
+            logger.error(f"❌ System Controller Live Session Error: {e}")
+            print(traceback.format_exc())
