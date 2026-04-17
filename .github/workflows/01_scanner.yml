@@ -32,6 +32,7 @@ jobs:
           ZERODHA_TOTP_SECRET: ${{ secrets.ZERODHA_TOTP_SECRET }}
           
           # TELEGRAM CHANNELS (Standardized Names)
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           CHANNEL_FREE: ${{ secrets.CHANNEL_FREE }}
           CHANNEL_EDUCATION: ${{ secrets.CHANNEL_EDUCATION }}
           CHANNEL_CURRENCY: ${{ secrets.CHANNEL_CURRENCY }}
