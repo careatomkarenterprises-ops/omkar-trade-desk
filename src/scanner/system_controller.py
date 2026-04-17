@@ -61,7 +61,6 @@ class SystemController:
     def run_agent_safely(self, name, agent):
         try:
             logger.info(f"📡 Executing {name.upper()}...")
-            # Added 'scan_fno' to priority to fix your F&O agent issue
             priority_methods = ['run', 'scan', 'scan_fno', 'analyze_news', 'execute']
             method = None
             for m in priority_methods:
@@ -73,6 +72,7 @@ class SystemController:
                 report = method()
                 if report:
                     self.route_report(name, report)
+                logger.info(f"🟢 {name} completed successfully.")
             else:
                 logger.warning(f"❓ {name} has no recognized execution method")
         except Exception as e:
@@ -80,7 +80,7 @@ class SystemController:
 
     def route_report(self, agent_name, report):
         if not report: return
-        # Routing Logic for your 3 consolidated channels
+        # Routing Logic for 3 Main Categories
         if agent_name in ['fno_agent', 'commodity_agent', 'currency_agent']:
             self.telegram.send_message('premium', report)
         elif agent_name in ['edu_news_agent']:
@@ -92,21 +92,39 @@ class SystemController:
         now = datetime.now()
         current_time = now.hour * 100 + now.minute
         
-        # 1. Run Global Engine first to get data for EOD
-        global_data = self.global_engine.run() 
+        logger.info(f"🚀 OMKAR INTELLIGENCE CYCLE STARTING")
 
-        # 2. Live Market Agents
+        # 1. Pre-Market Phase (9:00 - 9:15 AM IST)
+        if 900 <= current_time <= 915:
+            try:
+                from src.scanner.premarket_engine import PreMarketEngine
+                pm = PreMarketEngine()
+                top_bottom = pm.run()
+                self.telegram.send_message('free', top_bottom)
+            except Exception as e:
+                logger.error(f"Pre-Market Engine failed: {e}")
+
+        # 2. Run Global Data (Needed for EOD)
+        try:
+            global_data = self.global_engine.run()
+        except:
+            global_data = {}
+
+        # 3. Live Agents
         for name, agent in self.agents.items():
             self.run_agent_safely(name, agent)
 
-        # 3. FIX: EOD Review (Passing the required global_data)
+        # 4. End of Day Review (Triggers after 3:35 PM IST)
         if current_time >= 1535:
             logger.info("🌙 Phase: EOD REVIEW")
-            from src.scanner.eod_engine import EODEngine
-            eod = EODEngine()
-            # Pass global_data to fix the crash
-            summary = eod.run(global_data=global_data) 
-            self.telegram.send_message('free', summary)
+            try:
+                from src.scanner.eod_engine import EODEngine
+                eod = EODEngine()
+                summary = eod.run(global_data=global_data)
+                self.telegram.send_message('free', summary)
+                self.telegram.send_message('premium', summary)
+            except Exception as e:
+                logger.error(f"EOD Engine failed: {e}")
 
     def run(self):
         self.run_market_intelligence()
