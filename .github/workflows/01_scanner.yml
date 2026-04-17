@@ -1,16 +1,15 @@
-name: 🔍 Omkar Scanner - Multi-Segment Elite
+name: Hedge Fund Market Intelligence
 
 on:
   schedule:
-    - cron: '*/30 3-18 * * 1-5' # Runs every 30 mins during market hours
-  workflow_dispatch: 
+    - cron: '*/15 03-10 * * 1-5' # Runs every 15 mins during market hours
+  workflow_dispatch:
 
 jobs:
-  scan:
-    name: Execute Omkar Multi-Agent Engine
+  run-intelligence:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Setup Python
@@ -19,37 +18,28 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
 
-      - name: Run Multi-Agent Engine
+      - name: Run Omkar Intelligence
         env:
-          PYTHONPATH: .
-          # ✅ Essential Credentials
+          # CORE AUTH
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           KITE_API_KEY: ${{ secrets.KITE_API_KEY }}
           KITE_ACCESS_TOKEN: ${{ secrets.KITE_ACCESS_TOKEN }}
-          ZERODHA_API_SECRET: ${{ secrets.ZERODHA_API_SECRET }}
+          ZERODHA_USER_ID: ${{ secrets.ZERODHA_USER_ID }}
+          ZERODHA_PASSWORD: ${{ secrets.ZERODHA_PASSWORD }}
           ZERODHA_TOTP_SECRET: ${{ secrets.ZERODHA_TOTP_SECRET }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           
-          # ✅ Channel Mapping
+          # TELEGRAM CHANNELS
           CHANNEL_FREE: ${{ secrets.CHANNEL_FREE }}
-          CHANNEL_CURRENCY: ${{ secrets.CHANNEL_CURRENCY }}
           CHANNEL_EDUCATION: ${{ secrets.CHANNEL_EDUCATION }}
+          CHANNEL_CURRENCY: ${{ secrets.CHANNEL_CURRENCY }}
           CHANNEL_COMMODITY: ${{ secrets.CHANNEL_COMMODITY }}
-          
-        run: |
-          mkdir -p data
-          
-          # 1. Verify connection first (If this fails, the rest won't run)
-          python system_health_check.py
-          
-          # 2. Run the Execution Layer (The Brain)
-          python execution_layer.py || echo "Execution layer had an issue, moving to individual agents"
-          
-          # 3. Individual Agent Fallbacks
-          python -m src.scanner.currency_agent || echo "Currency agent failed"
-          python -m src.scanner.edu_news_agent || echo "News agent failed"
+          CHANNEL_FNO: ${{ secrets.CHANNEL_FNO }}
+          CHANNEL_SWING: ${{ secrets.CHANNEL_SWING }}
+          CHANNEL_NIFTY: ${{ secrets.CHANNEL_NIFTY }}
+          CHANNEL_BANKNIFTY: ${{ secrets.CHANNEL_BANKNIFTY }}
+          CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
+          CHANNEL_INTRADAY: ${{ secrets.CHANNEL_INTRADAY }}
+        run: python execution_layer.py
