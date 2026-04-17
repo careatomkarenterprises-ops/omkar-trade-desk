@@ -1,5 +1,6 @@
 import pandas as pd
 import time
+import json
 import logging
 
 from src.scanner.data_fetcher import DataFetcher
@@ -9,12 +10,9 @@ from src.telegram.poster import TelegramPoster
 logger = logging.getLogger(__name__)
 
 
-# ---------------- LOAD SYMBOLS ----------------
-
 def load_fno_symbols():
     try:
         df = pd.read_csv("fno_stocks.csv")
-
         symbols = df["symbol"].dropna().unique().tolist()
 
         logger.info(f"📊 Loaded F&O Symbols: {len(symbols)}")
@@ -25,8 +23,6 @@ def load_fno_symbols():
         return []
 
 
-# ---------------- MAIN SCANNER ----------------
-
 def run_full_scan():
 
     fetcher = DataFetcher()
@@ -34,10 +30,6 @@ def run_full_scan():
     telegram = TelegramPoster()
 
     symbols = load_fno_symbols()
-
-    if not symbols:
-        logger.error("❌ No symbols loaded. Scanner stopped.")
-        return []
 
     results = []
     scanned = 0
@@ -54,7 +46,6 @@ def run_full_scan():
             data = fetcher.get_stock_data(symbol)
 
             if data is None or data.empty:
-                logger.warning(f"⚠ No data: {symbol}")
                 continue
 
             result = detector.analyze(symbol, data)
@@ -73,37 +64,33 @@ def run_full_scan():
 
                 logger.info(f"🔥 SIGNAL: {symbol} | {output['signal']}")
 
-            # prevent API overload
             time.sleep(0.2)
 
         except Exception as e:
             logger.error(f"{symbol} error: {e}")
 
-    # ---------------- SUMMARY ----------------
-
     logger.info("📊 FULL SCAN COMPLETE")
     logger.info(f"Total Scanned: {scanned}")
     logger.info(f"Signals Found: {signals}")
 
-    # ---------------- TELEGRAM OUTPUT ----------------
+    if results:
 
-    try:
-        if results:
+        message = "🔥 TOP MARKET SETUPS\n\n"
 
-            message = "🔥 TOP MARKET SETUPS\n\n"
+        for t in results[:10]:
+            message += f"{t['symbol']} | {t['signal']} | {t['trend']}\n"
 
-            for t in results[:10]:
-                message += f"{t['symbol']} | {t['signal']} | {t['trend']}\n"
+        telegram.send_message("free", message)
 
-            telegram.send_message("free", message)
-
-        else:
-            telegram.send_message(
-                "free",
-                "⚠ No strong setups found in current market conditions."
-            )
-
-    except Exception as e:
-        logger.error(f"❌ Telegram send failed: {e}")
+    else:
+        telegram.send_message(
+            "free",
+            "⚠ No strong setups found in current market conditions."
+        )
 
     return results
+
+
+# ✅ VERY IMPORTANT (THIS FIXES YOUR ISSUE)
+if __name__ == "__main__":
+    run_full_scan()
