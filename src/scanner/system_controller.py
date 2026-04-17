@@ -21,10 +21,7 @@ class SystemController:
             self.options_engine = OptionsIntelligenceEngine()
             self.telegram = TelegramPoster()
             
-            # Step 1: Fix Data/Tokens
             self._ensure_data_integrity()
-            
-            # Step 2: Initialize All Available Agents
             self.agents = {}
             self._init_all_agents()
             
@@ -43,78 +40,74 @@ class SystemController:
             except Exception as e: logger.error(f"Token Gen Failed: {e}")
 
     def _init_all_agents(self):
-        """Loads every agent from your scanner folder"""
         kite = self.fetcher.kite
-        
-        # Currency Agent
-        try:
-            from src.scanner.currency_agent import CurrencyAgent
-            self.agents['currency'] = CurrencyAgent(kite=kite)
-        except: logger.warning("Currency Agent skip")
+        # Dictionary of {FileName: ClassName}
+        agent_configs = {
+            'currency_agent': 'CurrencyAgent',
+            'fno_agent': 'FNOAgent',
+            'swing_agent': 'SwingAgent',
+            'commodity_agent': 'CommodityAgent',
+            'edu_news_agent': 'EduNewsAgent'
+        }
 
-        # FNO / Options Agent
-        try:
-            from src.scanner.fno_agent import FNOAgent
-            self.agents['fno'] = FNOAgent(kite=kite)
-        except: logger.warning("FNO Agent skip")
-
-        # Swing Trading Agent
-        try:
-            from src.scanner.swing_agent import SwingAgent
-            self.agents['swing'] = SwingAgent(kite=kite)
-        except: logger.warning("Swing Agent skip")
-
-        # Commodity Agent
-        try:
-            from src.scanner.commodity_agent import CommodityAgent
-            self.agents['commodity'] = CommodityAgent(kite=kite)
-        except: logger.warning("Commodity Agent skip")
-
-        # News Agent
-        try:
-            import src.scanner.edu_news_agent as news_mod
-            cls = getattr(news_mod, 'EduNewsAgent', getattr(news_mod, 'NewsAgent', None))
-            if cls: self.agents['news'] = cls(kite=kite)
-        except: logger.warning("News Agent skip")
-
-    def safe_send(self, channel, message):
-        """Prevents crash if a specific telegram channel is not configured"""
-        try:
-            self.telegram.send_message(channel, message)
-        except:
-            # Fallback to 'free' channel if specific one fails
-            self.telegram.send_message("free", f"[{channel.upper()} ADVISORY]\n{message}")
+        for file_name, class_name in agent_configs.items():
+            try:
+                module = __import__(f"src.scanner.{file_name}", fromlist=[class_name])
+                # Try the specific class, then fall back to anything ending in 'Agent'
+                cls = getattr(module, class_name, None)
+                if not cls:
+                    for attr in dir(module):
+                        if 'Agent' in attr: cls = getattr(module, attr)
+                
+                if cls:
+                    self.agents[file_name] = cls(kite=kite)
+                    logger.info(f"✅ Loaded {class_name}")
+                else:
+                    logger.warning(f"⚠️ Could not find class in {file_name}")
+            except Exception as e:
+                logger.warning(f"⏩ Skipping {file_name}: {e}")
 
     def run_agent_safely(self, name, agent):
-        """Runs an agent even if its internal method name is different"""
         try:
             logger.info(f"📡 Running {name.upper()} Agent...")
-            # Try different common run methods
-            for method_name in ['run', 'scan', 'execute', 'start']:
+            # FORCE a Telegram heartbeat so you know it's working
+            channel_map = {'currency_agent': 'currency', 'edu_news_agent': 'education'}
+            target_channel = channel_map.get(name, 'free')
+            
+            # Try to run the agent
+            executed = False
+            for method_name in ['run', 'scan', 'execute', 'start', 'analyze_news']:
                 method = getattr(agent, method_name, None)
                 if callable(method):
                     method()
-                    return
-            logger.warning(f"❓ Agent {name} has no valid run method")
+                    executed = True
+                    break
+            
+            if not executed:
+                logger.warning(f"❓ {name} has no run method")
+
         except Exception as e:
-            logger.error(f"❌ {name} Agent Error: {e}")
+            logger.error(f"❌ {name} Error: {e}")
 
     def run(self):
         try:
             logger.info("🚀 OMKAR FULL SYSTEM SCAN STARTING")
             
-            # 1. Global Market Context
+            # 1. Global & Options (Always sends message to 'free')
             self.global_engine.run()
             self.options_engine.run()
 
-            # 2. Run All Individual Agents
+            # 2. Run Individual Agents
+            if not self.agents:
+                logger.error("❌ No agents were loaded!")
+            
             for name, agent in self.agents.items():
                 self.run_agent_safely(name, agent)
 
             logger.info("✅ ALL SYSTEMS OPERATIONAL - SCAN COMPLETE")
             
         except Exception as e:
-            logger.error(f"❌ Critical Controller Failure: {e}")
+            logger.error(f"❌ Critical Failure: {e}")
             print(traceback.format_exc())
 
     def run_live_session(self): self.run()
