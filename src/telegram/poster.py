@@ -1,44 +1,45 @@
-import os
+import logging
 import requests
-from dotenv import load_dotenv
+import os
 
-# Load environment variables
-load_dotenv()
+logger = logging.getLogger(__name__)
+
 
 class TelegramPoster:
+
     def __init__(self):
-        self.bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+        self.bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+        self.chat_id = os.getenv("TELEGRAM_CHAT_ID")
 
-        self.channels = {
-            'premium': os.getenv('CHANNEL_PREMIUM'),
-            'free': os.getenv('CHANNEL_FREE'),
-            'test': os.getenv('CHANNEL_TEST')
-        }
+        if not self.bot_token or not self.chat_id:
+            logger.warning("⚠ Telegram credentials missing")
 
-        self.base_url = f"https://api.telegram.org/bot{self.bot_token}"
+    def send_message(self, chat_type, message):
 
-    def send_message(self, channel, message):
         try:
-            chat_id = self.channels.get(channel)
-
-            if not chat_id:
-                print(f"❌ Invalid channel: {channel}")
+            if not self.bot_token or not self.chat_id:
+                logger.error("❌ Cannot send message - Missing credentials")
                 return
 
-            url = f"{self.base_url}/sendMessage"
+            url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
 
             payload = {
-                "chat_id": chat_id,
+                "chat_id": self.chat_id,
                 "text": message,
                 "parse_mode": "Markdown"
             }
 
-            response = requests.post(url, json=payload, timeout=10)
+            requests.post(url, data=payload)
 
-            if response.status_code == 200:
-                print(f"✅ Message sent to {channel}")
-            else:
-                print(f"❌ Telegram Error: {response.text}")
+            logger.info(f"✅ Message sent to {chat_type}")
 
         except Exception as e:
-            print(f"❌ Error sending message: {e}")
+            logger.error(f"❌ Telegram Error: {e}")
+
+
+# ✅ SUPPORT FUNCTION FOR AGENTS
+def send_to_telegram(chat_type, message):
+    try:
+        TelegramPoster().send_message(chat_type, message)
+    except Exception as e:
+        logger.error(f"❌ send_to_telegram failed: {e}")
