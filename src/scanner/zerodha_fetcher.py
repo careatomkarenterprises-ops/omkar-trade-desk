@@ -1,65 +1,84 @@
-import logging
 import os
-# Match your actual class name
-from src.scanner.zerodha_fetcher import ZerodhaFetcher as DataFetcher
-from src.scanner.patterns import PatternDetector
-from src.scanner.premarket_engine import PreMarketPredictionEngine
-from src.scanner.global_market_engine import GlobalMarketEngine
-from src.scanner.options_intelligence_engine import OptionsIntelligenceEngine
-from src.telegram.poster import TelegramPoster
-from src.agents.currency_agent import CurrencyAgent 
-from src.agents.commodity_agent import CommodityAgent
+import logging
+import pandas as pd
+from datetime import datetime, timedelta
+from kiteconnect import KiteConnect
+from typing import Optional, Dict, List
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-class SystemController:
+class DataFetcher:
     def __init__(self):
+        self.api_key = os.getenv("KITE_API_KEY")
+        self.access_token = os.getenv("KITE_ACCESS_TOKEN")
+
+        if not self.api_key or not self.access_token:
+            logger.error("❌ Missing KITE API credentials in environment")
+            self.kite = None
+            return
+
         try:
-            # Initialize core components
-            self.fetcher = DataFetcher()
-            self.detector = PatternDetector()
-            self.premarket = PreMarketPredictionEngine(self.fetcher, self.detector)
-            self.global_engine = GlobalMarketEngine()
-            self.options_engine = OptionsIntelligenceEngine()
-            self.telegram = TelegramPoster()
+            self.kite = KiteConnect(api_key=self.api_key)
+            self.kite.set_access_token(self.access_token)
+            # Basic connectivity test
+            self.kite.profile()
+            logger.info("✅ Zerodha Connection Successful")
         except Exception as e:
-            logger.error(f"⚠️ Controller Init Warning: {e}")
+            logger.error(f"❌ Zerodha Connection Failed: {e}")
+            self.kite = None
 
-    def run_premarket(self):
-        """Phase 1: Analysis before market opens"""
+        self.cache_file = "data/zerodha_instruments.csv"
+        os.makedirs("data", exist_ok=True)
+        self.load_instruments()
+
+    def load_instruments(self):
+        if not self.kite: return
         try:
-            logger.info("🎬 Starting Premarket Routine...")
-            global_data = self.global_engine.run()
-            
-            # Run premarket scan
-            results = self.premarket.run(global_data=global_data)
-            
-            # Send results to Telegram only if they exist
-            if results:
-                self.telegram.send_message(f"🚀 TOP PREMARKET SETUPS FOUND: {len(results)}")
-            else:
-                self.telegram.send_message("🔍 Premarket: No specific volume shocks detected.")
-                
+            if os.path.exists(self.cache_file):
+                mod_time = datetime.fromtimestamp(os.path.getmtime(self.cache_file))
+                if mod_time.date() == datetime.now().date():
+                    return
+            instruments = self.kite.instruments("NSE")
+            pd.DataFrame(instruments).to_csv(self.cache_file, index=False)
+            logger.info("✅ Instruments cache updated")
         except Exception as e:
-            logger.error(f"❌ Premarket routine failed: {e}")
+            logger.error(f"Error loading instruments: {e}")
 
-    def run_live_session(self):
-        """Phase 2: Continuous monitoring during market hours"""
+    def get_instrument_token(self, symbol: str) -> Optional[str]:
         try:
-            # 1. Update Macro Bias
-            global_data = self.global_engine.run()
-            
-            # 2. Update Options (FII/DII logic)
-            self.options_engine.run()
+            df = pd.read_csv(self.cache_file)
+            match = df[df["tradingsymbol"] == symbol]
+            if not match.empty:
+                return str(match.iloc[0]["instrument_token"])
+            return None
+        except:
+            return None
 
-            # 3. Currency & Commodity (Fixed Agent calls)
-            try:
-                CurrencyAgent().scan() 
-                CommodityAgent().scan()
-            except Exception as e:
-                logger.warning(f"Non-critical agent failure: {e}")
-
-            logger.info("✅ Live Cycle Completed Successfully")
+    def get_stock_data(self, symbol: str, interval: str = "day", days: int = 30) -> Optional[pd.DataFrame]:
+        if not self.kite: return None
+        try:
+            token = self.get_instrument_token(symbol)
+            if not token: return None
             
+            to_date = datetime.now()
+            from_date = to_date - timedelta(days=days)
+            
+            candles = self.kite.historical_data(
+                int(token), 
+                from_date.strftime("%Y-%m-%d"), 
+                to_date.strftime("%Y-%m-%d"), 
+                interval
+            )
+            if candles:
+                df = pd.DataFrame(candles)
+                # Ensure lowercase columns for compatibility
+                df.columns = [c.lower() for c in df.columns]
+                return df
+            return None
         except Exception as e:
-            logger.error(f"❌ Live session cycle error: {e}")
+            logger.error(f"Error fetching {symbol}: {e}")
+            return None
