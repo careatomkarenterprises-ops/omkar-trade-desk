@@ -1,5 +1,4 @@
 import logging
-import sys
 import traceback
 
 # Core Engine Imports
@@ -17,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 class SystemController:
     def __init__(self):
-        logger.info("🛠️ Initializing System Controller...")
+        logger.info("🛠️ Initializing Omkar System Controller...")
         try:
             self.fetcher = DataFetcher()
             self.detector = PatternDetector()
@@ -29,13 +28,13 @@ class SystemController:
             # Setup Agents
             self.currency_agent = None
             self.news_agent = None
-            self._load_agents_with_debug()
+            self._load_agents_with_context()
             
         except Exception as e:
             logger.error(f"💥 Controller Init Failed: {e}")
 
-    def _load_agents_with_debug(self):
-        """Fixed: Passing 'kite' instance to agents that require it"""
+    def _load_agents_with_context(self):
+        """Passes the active Kite instance to agents requiring it"""
         # 1. Load Currency Agent
         try:
             from src.scanner.currency_agent import CurrencyAgent
@@ -44,10 +43,10 @@ class SystemController:
         except Exception as e:
             logger.warning(f"⚠️ CurrencyAgent load failed: {e}")
 
-        # 2. Load News/Edu Agent (Fixed positional argument 'kite')
+        # 2. Load News/Edu Agent (Providing 'kite' argument)
         try:
             import src.scanner.edu_news_agent as news_mod
-            # We pass self.fetcher.kite because the logs say it's required
+            # We pass self.fetcher.kite directly as the required argument
             if hasattr(news_mod, 'EduNewsAgent'):
                 self.news_agent = news_mod.EduNewsAgent(kite=self.fetcher.kite)
                 logger.info("✅ EduNewsAgent Loaded with Kite context")
@@ -58,43 +57,39 @@ class SystemController:
             logger.warning(f"⚠️ NewsAgent load failed: {e}")
 
     def run(self):
-        """
-        Fixed: Renamed from run_live_session to 'run' 
-        to match your execution_layer.py call.
-        """
+        """Main execution method called by execution_layer.py"""
         try:
-            logger.info("🚀 Starting Omkar Trade Desk Execution...")
+            logger.info("🚀 OMKAR INTELLIGENCE CYCLE STARTING")
             
-            # Step 1: Global Macro & Options
+            # 1. Macro & Options Intelligence
             logger.info("📊 Processing Global Markets & Options...")
-            global_data = self.global_engine.run()
+            self.global_engine.run()
             self.options_engine.run()
 
-            # Step 2: Currency Scan
+            # 2. Currency Intelligence
             if self.currency_agent:
                 try:
-                    logger.info("💱 Running Currency Agent...")
-                    # Try common run methods
+                    logger.info("💱 Running Currency Scan...")
                     if hasattr(self.currency_agent, 'run'): self.currency_agent.run()
                     elif hasattr(self.currency_agent, 'scan'): self.currency_agent.scan()
                 except Exception as e:
-                    logger.error(f"Currency Agent Execution Error: {e}")
+                    logger.error(f"Currency Agent Run Error: {e}")
             
-            # Step 3: News/Edu Scan
+            # 3. News & Education Intelligence
             if self.news_agent:
                 try:
-                    logger.info("📰 Running News Intelligence Agent...")
+                    logger.info("📰 Running News Intelligence...")
                     if hasattr(self.news_agent, 'run'): self.news_agent.run()
                     elif hasattr(self.news_agent, 'scan'): self.news_agent.scan()
                 except Exception as e:
-                    logger.error(f"News Agent Execution Error: {e}")
+                    logger.error(f"News Agent Run Error: {e}")
 
-            logger.info("✅ ALL SCANS COMPLETE")
+            logger.info("✅ ALL INTELLIGENCE SEGMENTS COMPLETE")
             
         except Exception as e:
-            logger.error(f"❌ System Controller Run Error: {e}")
+            logger.error(f"❌ System Controller Critical Run Error: {e}")
             print(traceback.format_exc())
 
     def run_live_session(self):
-        """Alias for compatibility"""
+        """Legacy alias for backward compatibility"""
         self.run()
