@@ -1,6 +1,5 @@
 """
-OMKAR TRADE DESK - PRODUCTION EXECUTION LAYER
-FINAL CLEAN VERSION (LIVE SCANNER ENABLED)
+OMKAR TRADE DESK - PRODUCTION EXECUTION LAYER (DEBUG ENABLED)
 """
 
 import sys
@@ -8,7 +7,7 @@ import os
 import logging
 from datetime import datetime
 
-# ---------------- SAFE PATH FIX ----------------
+# ---------------- PATH FIX ----------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BASE_DIR)
 
@@ -20,15 +19,16 @@ logging.basicConfig(
 
 logger = logging.getLogger("EXECUTION_LAYER")
 
-# ---------------- IMPORT SCANNER ----------------
+# ---------------- IMPORT CONTROLLER ----------------
 try:
-    from src.scanner.full_market_scanner import run_full_scan
+    from src.scanner.system_controller import SystemController
 except Exception as e:
-    logger.critical(f"❌ IMPORT FAILED: {e}")
-    run_full_scan = None
+    logger.critical("❌ IMPORT FAILED: system_controller not loading")
+    logger.exception(e)
+    SystemController = None
 
 
-# ---------------- PRE-FLIGHT CHECK ----------------
+# ---------------- PREFLIGHT CHECK ----------------
 def preflight_check():
 
     logger.info("🧪 Running Preflight System Check...")
@@ -36,8 +36,10 @@ def preflight_check():
     required_files = [
         "src/scanner/data_fetcher.py",
         "src/scanner/patterns.py",
-        "src/scanner/full_market_scanner.py",
-        "src/telegram/poster.py"
+        "src/scanner/global_market_engine.py",
+        "src/scanner/options_intelligence_engine.py",
+        "src/scanner/system_controller.py",
+        "src/scanner/full_market_scanner.py"
     ]
 
     missing = []
@@ -58,25 +60,32 @@ def preflight_check():
 # ---------------- MAIN EXECUTION ----------------
 def main():
 
-    logger.info("🚀 OMKAR TRADE DESK LIVE SYSTEM STARTED")
+    logger.info("🚀 OMKAR TRADE DESK STARTED")
     logger.info(f"🕒 Time: {datetime.now()}")
 
-    # STEP 1: Safety Check
+    # STEP 1: FILE CHECK
     if not preflight_check():
         logger.critical("❌ SYSTEM STOPPED - FILE STRUCTURE ISSUE")
         return
 
-    # STEP 2: Run Scanner
-    if run_full_scan is None:
-        logger.critical("❌ SYSTEM STOPPED - SCANNER NOT LOADED")
+    # STEP 2: CONTROLLER CHECK
+    if SystemController is None:
+        logger.critical("❌ SYSTEM STOPPED - CONTROLLER NOT LOADED")
         return
 
+    # STEP 3: RUN SYSTEM WITH FULL DEBUG
     try:
-        results = run_full_scan()
-        logger.info(f"✅ Scan Completed | Signals Found: {len(results)}")
+        logger.info("🔥 INITIALIZING SYSTEM CONTROLLER...")
+        controller = SystemController()
+
+        logger.info("🔥 RUNNING FULL SYSTEM...")
+        controller.run()
+
+        logger.info("✅ SYSTEM EXECUTION COMPLETED SUCCESSFULLY")
 
     except Exception as e:
-        logger.critical(f"❌ SYSTEM FAILURE: {e}")
+        logger.critical("❌ SYSTEM CRASH DETECTED")
+        logger.exception(e)
 
 
 # ---------------- ENTRY POINT ----------------
