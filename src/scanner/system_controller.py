@@ -2,12 +2,13 @@ import logging
 import os
 import json
 import traceback
+import inspect
 
 logger = logging.getLogger(__name__)
 
 class SystemController:
     def __init__(self):
-        logger.info("🛠️ Initializing Omkar Full-Stack Controller...")
+        logger.info("🛠️ Initializing Omkar Enterprise Grade Controller...")
         try:
             from src.scanner.zerodha_fetcher import DataFetcher
             from src.scanner.patterns import PatternDetector
@@ -53,55 +54,51 @@ class SystemController:
             try:
                 module = __import__(f"src.scanner.{file_name}", fromlist=[class_name])
                 cls = getattr(module, class_name, None)
-                
+                if not cls:
+                    for attr in dir(module):
+                        if 'Agent' in attr: cls = getattr(module, attr)
+
                 if cls:
-                    try:
-                        # Attempt 1: Standard init
+                    # ✅ FIXED: Dynamically check for 'kite' vs 'kite_instance'
+                    sig = inspect.signature(cls.__init__)
+                    if 'kite_instance' in sig.parameters:
+                        self.agents[file_name] = cls(kite_instance=kite)
+                    elif 'kite' in sig.parameters:
                         self.agents[file_name] = cls(kite=kite)
-                    except TypeError:
-                        # Attempt 2: If agent doesn't take 'kite' in __init__
+                    else:
                         self.agents[file_name] = cls()
-                        if hasattr(self.agents[file_name], 'kite'):
-                            self.agents[file_name].kite = kite
                     
-                    logger.info(f"✅ Loaded {class_name}")
+                    logger.info(f"✅ Loaded {file_name}")
             except Exception as e:
                 logger.warning(f"⏩ Skipping {file_name}: {e}")
 
     def run_agent_safely(self, name, agent):
         try:
-            logger.info(f"📡 Running {name.upper()}...")
-            # Try all common execution method names
-            methods = ['run', 'scan', 'execute', 'analyze_news', 'start', 'post_updates']
-            executed = False
+            logger.info(f"📡 Executing {name.upper()}...")
+            # Try all your specific method names
+            methods = ['run', 'scan', 'post_education', 'analyze_news', 'execute']
             for m in methods:
                 method = getattr(agent, m, None)
                 if callable(method):
                     method()
-                    executed = True
-                    break
-            
-            if not executed:
-                logger.warning(f"❓ {name} has no recognized run method.")
+                    return
+            logger.warning(f"❓ {name} has no recognized execution method")
         except Exception as e:
-            logger.error(f"❌ {name} execution error: {e}")
+            logger.error(f"❌ {name} execution failed: {e}")
 
     def run(self):
         try:
             logger.info("🚀 OMKAR INTELLIGENCE CYCLE STARTING")
-            
-            # 1. Global Context
+            # Run Global Market Logic
             self.global_engine.run()
             self.options_engine.run()
 
-            # 2. Sequential Agent Execution
+            # Run loaded agents
             for name, agent in self.agents.items():
                 self.run_agent_safely(name, agent)
 
             logger.info("✅ ALL SYSTEMS OPERATIONAL - SCAN COMPLETE")
-            
         except Exception as e:
-            logger.error(f"❌ Critical Controller Failure: {e}")
-            print(traceback.format_exc())
+            logger.error(f"❌ Run Failure: {e}")
 
     def run_live_session(self): self.run()
