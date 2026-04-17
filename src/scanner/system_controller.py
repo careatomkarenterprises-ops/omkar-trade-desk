@@ -42,6 +42,7 @@ class SystemController:
 
     def _init_all_agents(self):
         kite = self.fetcher.kite
+        # Mapping files to their primary class names
         agent_configs = {
             'currency_agent': 'CurrencyAgent',
             'fno_agent': 'FnOAgent',
@@ -54,12 +55,14 @@ class SystemController:
             try:
                 module = __import__(f"src.scanner.{file_name}", fromlist=[class_name])
                 cls = getattr(module, class_name, None)
+                
+                # If specific class name fails, look for any class containing 'Agent'
                 if not cls:
                     for attr in dir(module):
                         if 'Agent' in attr: cls = getattr(module, attr)
 
                 if cls:
-                    # ✅ FIXED: Dynamically check for 'kite' vs 'kite_instance'
+                    # Dynamically check for 'kite' vs 'kite_instance' to avoid init errors
                     sig = inspect.signature(cls.__init__)
                     if 'kite_instance' in sig.parameters:
                         self.agents[file_name] = cls(kite_instance=kite)
@@ -68,19 +71,20 @@ class SystemController:
                     else:
                         self.agents[file_name] = cls()
                     
-                    logger.info(f"✅ Loaded {file_name}")
+                    logger.info(f"✅ Successfully Loaded: {file_name}")
             except Exception as e:
                 logger.warning(f"⏩ Skipping {file_name}: {e}")
 
     def run_agent_safely(self, name, agent):
         try:
             logger.info(f"📡 Executing {name.upper()}...")
-            # Try all your specific method names
+            # Try all known execution method names used across your files
             methods = ['run', 'scan', 'post_education', 'analyze_news', 'execute']
             for m in methods:
                 method = getattr(agent, m, None)
                 if callable(method):
                     method()
+                    logger.info(f"🟢 {name} completed via {m}()")
                     return
             logger.warning(f"❓ {name} has no recognized execution method")
         except Exception as e:
@@ -89,16 +93,19 @@ class SystemController:
     def run(self):
         try:
             logger.info("🚀 OMKAR INTELLIGENCE CYCLE STARTING")
-            # Run Global Market Logic
+            
+            # 1. Run Core Engines (Market context & Options)
             self.global_engine.run()
             self.options_engine.run()
 
-            # Run loaded agents
+            # 2. Run Individual Specialized Agents
             for name, agent in self.agents.items():
                 self.run_agent_safely(name, agent)
 
             logger.info("✅ ALL SYSTEMS OPERATIONAL - SCAN COMPLETE")
         except Exception as e:
-            logger.error(f"❌ Run Failure: {e}")
+            logger.error(f"❌ Critical System Failure: {e}")
+            print(traceback.format_exc())
 
-    def run_live_session(self): self.run()
+    def run_live_session(self): 
+        self.run()
