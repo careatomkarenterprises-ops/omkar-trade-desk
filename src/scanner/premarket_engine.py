@@ -1,14 +1,10 @@
-"""
-Premarket Prediction Engine - Institutional Setup Scanner
-"""
-
 import logging
 import json
 
 logger = logging.getLogger(__name__)
 
 
-class PreMarketPredictionEngine: ,
+class PreMarketPredictionEngine:
 
     def __init__(self, data_fetcher, pattern_detector):
         self.fetcher = data_fetcher
@@ -22,8 +18,8 @@ class PreMarketPredictionEngine: ,
 
         logger.info("🚀 Running Premarket Prediction Engine...")
 
-        # ✅ FIX: handle missing inputs
-        if symbols is None or len(symbols) == 0:
+        # ✅ DEFAULT SYMBOLS
+        if not symbols:
             logger.warning("⚠ No symbols provided, using default watchlist")
             symbols = [
                 "RELIANCE", "TCS", "INFY", "HDFCBANK",
@@ -31,7 +27,7 @@ class PreMarketPredictionEngine: ,
                 "KOTAKBANK", "ITC"
             ]
 
-        if global_data is None:
+        if not global_data:
             global_data = {}
 
         results = []
@@ -44,6 +40,7 @@ class PreMarketPredictionEngine: ,
                 df = self.fetcher.get_stock_data(symbol)
 
                 if df is None or df.empty:
+                    logger.warning(f"⚠ No data for {symbol}")
                     continue
 
                 analysis = self.detector.analyze(symbol, df)
@@ -67,7 +64,7 @@ class PreMarketPredictionEngine: ,
             except Exception as e:
                 logger.error(f"❌ Error scanning {symbol}: {e}")
 
-        # Sort best setups first
+        # SORT
         results = sorted(results, key=lambda x: x["score"], reverse=True)
 
         top_results = results[:10]
