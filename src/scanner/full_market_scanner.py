@@ -9,14 +9,11 @@ from src.telegram.poster import TelegramPoster
 logger = logging.getLogger(__name__)
 
 
-# -----------------------------
-# LOAD SYMBOLS (FIXED)
-# -----------------------------
 def load_fno_symbols():
     try:
         df = pd.read_csv("fno_stocks.csv")
 
-        # ✅ FLEXIBLE COLUMN HANDLING
+        # ✅ FIX: handle both cases
         if "symbol" in df.columns:
             symbols = df["symbol"].dropna().tolist()
         else:
@@ -30,9 +27,6 @@ def load_fno_symbols():
         return []
 
 
-# -----------------------------
-# MAIN SCANNER
-# -----------------------------
 def run_full_scan():
 
     fetcher = DataFetcher()
@@ -40,10 +34,6 @@ def run_full_scan():
     telegram = TelegramPoster()
 
     symbols = load_fno_symbols()
-
-    if not symbols:
-        logger.warning("⚠ No symbols found - scanner skipped")
-        return []
 
     results = []
     scanned = 0
@@ -81,19 +71,14 @@ def run_full_scan():
             time.sleep(0.2)
 
         except Exception as e:
-            logger.error(f"❌ {symbol} error: {e}")
+            logger.error(f"{symbol} error: {e}")
 
     logger.info("📊 FULL SCAN COMPLETE")
     logger.info(f"Total Scanned: {scanned}")
     logger.info(f"Signals Found: {signals}")
 
-    # -----------------------------
-    # TELEGRAM OUTPUT
-    # -----------------------------
     if results:
-
         message = "🔥 TOP MARKET SETUPS\n\n"
-
         for t in results[:10]:
             message += f"{t['symbol']} | {t['signal']} | {t['trend']}\n"
 
@@ -108,8 +93,5 @@ def run_full_scan():
     return results
 
 
-# -----------------------------
-# ENTRY POINT
-# -----------------------------
 if __name__ == "__main__":
     run_full_scan()
