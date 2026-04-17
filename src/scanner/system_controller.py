@@ -24,10 +24,13 @@ class SystemController:
         self.global_engine = GlobalMarketEngine()
         self.telegram = TelegramPoster()
 
-        # ✅ FIXED DEPENDENCIES
+        # ✅ DEPENDENCIES
         self.kite = get_kite_instance()
         self.data_fetcher = DataFetcher()
         self.pattern_detector = PatternDetector()
+
+        if not self.kite:
+            logger.warning("⚠ Kite instance NOT initialized")
 
     def run(self):
 
@@ -60,10 +63,17 @@ Crude: {global_data.get('crude_oil', {}).get('trend')}
             logger.info("🔥 PREMARKET MODE")
 
             try:
-                PreMarketPredictionEngine(
+                engine = PreMarketPredictionEngine(
                     self.data_fetcher,
                     self.pattern_detector
-                ).run()
+                )
+
+                # ✅ SAFE CALL (handles both types)
+                try:
+                    engine.run([], global_data)
+                except TypeError:
+                    engine.run()
+
             except Exception as e:
                 logger.error(f"❌ Premarket Failed: {e}")
 
@@ -103,6 +113,8 @@ Crude: {global_data.get('crude_oil', {}).get('trend')}
                 if self.kite:
                     CurrencyAgent(self.kite).scan()
                     self.telegram.send_message("free", "💱 Currency Done")
+                else:
+                    logger.warning("⚠ Skipping Currency - No Kite")
 
             except Exception as e:
                 logger.error(f"❌ Currency Failed: {e}")
@@ -112,6 +124,8 @@ Crude: {global_data.get('crude_oil', {}).get('trend')}
                 if self.kite:
                     CommodityAgent(self.kite).scan()
                     self.telegram.send_message("free", "🛢️ Commodity Done")
+                else:
+                    logger.warning("⚠ Skipping Commodity - No Kite")
 
             except Exception as e:
                 logger.error(f"❌ Commodity Failed: {e}")
