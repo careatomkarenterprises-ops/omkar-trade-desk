@@ -41,10 +41,9 @@ class SystemController:
 
     def _init_all_agents(self):
         kite = self.fetcher.kite
-        # Dictionary of {FileName: ClassName}
         agent_configs = {
             'currency_agent': 'CurrencyAgent',
-            'fno_agent': 'FNOAgent',
+            'fno_agent': 'FnOAgent',
             'swing_agent': 'SwingAgent',
             'commodity_agent': 'CommodityAgent',
             'edu_news_agent': 'EduNewsAgent'
@@ -53,61 +52,56 @@ class SystemController:
         for file_name, class_name in agent_configs.items():
             try:
                 module = __import__(f"src.scanner.{file_name}", fromlist=[class_name])
-                # Try the specific class, then fall back to anything ending in 'Agent'
                 cls = getattr(module, class_name, None)
-                if not cls:
-                    for attr in dir(module):
-                        if 'Agent' in attr: cls = getattr(module, attr)
                 
                 if cls:
-                    self.agents[file_name] = cls(kite=kite)
+                    try:
+                        # Attempt 1: Standard init
+                        self.agents[file_name] = cls(kite=kite)
+                    except TypeError:
+                        # Attempt 2: If agent doesn't take 'kite' in __init__
+                        self.agents[file_name] = cls()
+                        if hasattr(self.agents[file_name], 'kite'):
+                            self.agents[file_name].kite = kite
+                    
                     logger.info(f"✅ Loaded {class_name}")
-                else:
-                    logger.warning(f"⚠️ Could not find class in {file_name}")
             except Exception as e:
                 logger.warning(f"⏩ Skipping {file_name}: {e}")
 
     def run_agent_safely(self, name, agent):
         try:
-            logger.info(f"📡 Running {name.upper()} Agent...")
-            # FORCE a Telegram heartbeat so you know it's working
-            channel_map = {'currency_agent': 'currency', 'edu_news_agent': 'education'}
-            target_channel = channel_map.get(name, 'free')
-            
-            # Try to run the agent
+            logger.info(f"📡 Running {name.upper()}...")
+            # Try all common execution method names
+            methods = ['run', 'scan', 'execute', 'analyze_news', 'start', 'post_updates']
             executed = False
-            for method_name in ['run', 'scan', 'execute', 'start', 'analyze_news']:
-                method = getattr(agent, method_name, None)
+            for m in methods:
+                method = getattr(agent, m, None)
                 if callable(method):
                     method()
                     executed = True
                     break
             
             if not executed:
-                logger.warning(f"❓ {name} has no run method")
-
+                logger.warning(f"❓ {name} has no recognized run method.")
         except Exception as e:
-            logger.error(f"❌ {name} Error: {e}")
+            logger.error(f"❌ {name} execution error: {e}")
 
     def run(self):
         try:
-            logger.info("🚀 OMKAR FULL SYSTEM SCAN STARTING")
+            logger.info("🚀 OMKAR INTELLIGENCE CYCLE STARTING")
             
-            # 1. Global & Options (Always sends message to 'free')
+            # 1. Global Context
             self.global_engine.run()
             self.options_engine.run()
 
-            # 2. Run Individual Agents
-            if not self.agents:
-                logger.error("❌ No agents were loaded!")
-            
+            # 2. Sequential Agent Execution
             for name, agent in self.agents.items():
                 self.run_agent_safely(name, agent)
 
             logger.info("✅ ALL SYSTEMS OPERATIONAL - SCAN COMPLETE")
             
         except Exception as e:
-            logger.error(f"❌ Critical Failure: {e}")
+            logger.error(f"❌ Critical Controller Failure: {e}")
             print(traceback.format_exc())
 
     def run_live_session(self): self.run()
