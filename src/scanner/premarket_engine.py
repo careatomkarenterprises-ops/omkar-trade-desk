@@ -8,7 +8,7 @@ import json
 logger = logging.getLogger(__name__)
 
 
-class PreMarketPredictionEngine:
+class PreMarketPredictionEngine: ,
 
     def __init__(self, data_fetcher, pattern_detector):
         self.fetcher = data_fetcher
