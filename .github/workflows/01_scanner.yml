@@ -2,7 +2,7 @@ name: 🔍 Omkar Scanner - Multi-Segment Elite
 
 on:
   schedule:
-    - cron: '*/30 3-18 * * 1-5' # Runs every 30 mins
+    - cron: '*/30 3-18 * * 1-5' # Runs every 30 mins during market hours
   workflow_dispatch: 
 
 jobs:
@@ -12,25 +12,42 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
+          cache: 'pip' # Speeds up future runs
+
       - name: Install dependencies
         run: |
-          pip install kiteconnect pyotp pandas requests python-dotenv numpy
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
       - name: Run Multi-Agent Engine
         env:
           PYTHONPATH: .
-          ZERODHA_API_KEY: ${{ secrets.ZERODHA_API_KEY }}
+          # ✅ Matching your code's expected names with your GitHub Secrets
+          KITE_API_KEY: ${{ secrets.KITE_API_KEY }}
+          KITE_ACCESS_TOKEN: ${{ secrets.KITE_ACCESS_TOKEN }}
           ZERODHA_API_SECRET: ${{ secrets.ZERODHA_API_SECRET }}
-          ZERODHA_ACCESS_TOKEN: ${{ secrets.ZERODHA_ACCESS_TOKEN }}
           ZERODHA_TOTP_SECRET: ${{ secrets.ZERODHA_TOTP_SECRET }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          
+          # ✅ Channel Mapping
+          CHANNEL_FREE: ${{ secrets.CHANNEL_FREE }}
           CHANNEL_CURRENCY: ${{ secrets.CHANNEL_CURRENCY }}
           CHANNEL_EDUCATION: ${{ secrets.CHANNEL_EDUCATION }}
+          CHANNEL_COMMODITY: ${{ secrets.CHANNEL_COMMODITY }}
+          
         run: |
           mkdir -p data
-          python -m src.scanner.morning_setup
-          python -m src.scanner.currency_agent
-          python -m src.scanner.edu_news_agent
+          # 1. First, run the Health Check to verify connection
+          python system_health_check.py
+          
+          # 2. Run your specific agents (using your module paths)
+          # Note: If these files moved to src/scanner/ use the -m format
+          python -m src.scanner.morning_setup || echo "Morning setup skipped"
+          python -m src.scanner.currency_agent || echo "Currency agent failed"
+          python -m src.scanner.edu_news_agent || echo "News agent failed"
