@@ -17,7 +17,7 @@ class FnOAgent:
         
         # Filter for the specific index/stock futures
         fut_df = df[(df['segment'] == 'NFO-FUT') & (df['name'] == underlying)]
-        fut_df['expiry'] = pd.to_datetime(fut_df['expiry'])
+        fut_df.loc[:, 'expiry'] = pd.to_datetime(fut_df['expiry'])
         
         # Sort by expiry to get Current (0), Next (1), and Far (2)
         fut_df = fut_df.sort_values('expiry').head(3)
