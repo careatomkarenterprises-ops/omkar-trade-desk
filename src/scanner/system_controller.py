@@ -23,7 +23,8 @@ class SystemController:
 
         now = datetime.datetime.now()
 
-        logger.info(f"🚀 SYSTEM START | TIME: {now}")
+        logger.info("🔥 CONTROLLER RUNNING")
+        logger.info(f"🕒 TIME: {now}")
 
         # 🌍 GLOBAL MARKET
         global_data = self.global_engine.run()
@@ -40,18 +41,11 @@ class SystemController:
 
             logger.info("📊 LIVE MARKET MODE")
 
-            # 🔥 MAIN SCANNER (YOUR CORE LOGIC)
             results = run_full_scan()
-
             logger.info(f"🔥 Signals Found: {len(results)}")
 
-            # 📊 OPTIONS
             OptionsIntelligenceEngine().run()
-
-            # 💱 CURRENCY
             CurrencyAgent().run()
-
-            # 🛢️ COMMODITY
             CommodityAgent().run()
 
         # 🌙 EOD
