@@ -1,26 +1,21 @@
 import logging
 import traceback
 
-# Core Engine Imports
-try:
-    from src.scanner.zerodha_fetcher import DataFetcher
-    from src.scanner.patterns import PatternDetector
-    from src.scanner.premarket_engine import PreMarketPredictionEngine
-    from src.scanner.global_market_engine import GlobalMarketEngine
-    from src.scanner.options_intelligence_engine import OptionsIntelligenceEngine
-    from src.telegram.poster import TelegramPoster
-except ImportError as e:
-    print(f"DEBUGGER: Core Import Error: {e}")
-
 logger = logging.getLogger(__name__)
 
 class SystemController:
     def __init__(self):
         logger.info("🛠️ Initializing Omkar System Controller...")
         try:
+            # Import inside init to avoid circular dependency
+            from src.scanner.zerodha_fetcher import DataFetcher
+            from src.scanner.patterns import PatternDetector
+            from src.scanner.global_market_engine import GlobalMarketEngine
+            from src.scanner.options_intelligence_engine import OptionsIntelligenceEngine
+            from src.telegram.poster import TelegramPoster
+            
             self.fetcher = DataFetcher()
             self.detector = PatternDetector()
-            self.premarket = PreMarketPredictionEngine(self.fetcher, self.detector)
             self.global_engine = GlobalMarketEngine()
             self.options_engine = OptionsIntelligenceEngine()
             self.telegram = TelegramPoster()
@@ -34,30 +29,29 @@ class SystemController:
             logger.error(f"💥 Controller Init Failed: {e}")
 
     def _load_agents_with_context(self):
-        """Passes the active Kite instance to agents requiring it"""
+        """Fixed: Ensuring BOTH agents receive the Kite connection"""
         # 1. Load Currency Agent
         try:
             from src.scanner.currency_agent import CurrencyAgent
             self.currency_agent = CurrencyAgent()
-            logger.info("✅ Currency Agent Loaded")
+            # INJECTION: Pass the kite instance directly to fix 'Kite not available'
+            if hasattr(self.currency_agent, 'kite'):
+                self.currency_agent.kite = self.fetcher.kite
+            logger.info("✅ Currency Agent Loaded & Kite Injected")
         except Exception as e:
             logger.warning(f"⚠️ CurrencyAgent load failed: {e}")
 
-        # 2. Load News/Edu Agent (Providing 'kite' argument)
+        # 2. Load News/Edu Agent
         try:
             import src.scanner.edu_news_agent as news_mod
-            # We pass self.fetcher.kite directly as the required argument
             if hasattr(news_mod, 'EduNewsAgent'):
                 self.news_agent = news_mod.EduNewsAgent(kite=self.fetcher.kite)
-                logger.info("✅ EduNewsAgent Loaded with Kite context")
-            elif hasattr(news_mod, 'NewsAgent'):
-                self.news_agent = news_mod.NewsAgent(kite=self.fetcher.kite)
-                logger.info("✅ NewsAgent Loaded with Kite context")
+                logger.info("✅ EduNewsAgent Loaded")
         except Exception as e:
             logger.warning(f"⚠️ NewsAgent load failed: {e}")
 
     def run(self):
-        """Main execution method called by execution_layer.py"""
+        """Main execution method"""
         try:
             logger.info("🚀 OMKAR INTELLIGENCE CYCLE STARTING")
             
@@ -70,6 +64,10 @@ class SystemController:
             if self.currency_agent:
                 try:
                     logger.info("💱 Running Currency Scan...")
+                    # Ensure it has kite one last time before running
+                    if hasattr(self.currency_agent, 'kite') and not self.currency_agent.kite:
+                        self.currency_agent.kite = self.fetcher.kite
+                    
                     if hasattr(self.currency_agent, 'run'): self.currency_agent.run()
                     elif hasattr(self.currency_agent, 'scan'): self.currency_agent.scan()
                 except Exception as e:
@@ -89,7 +87,3 @@ class SystemController:
         except Exception as e:
             logger.error(f"❌ System Controller Critical Run Error: {e}")
             print(traceback.format_exc())
-
-    def run_live_session(self):
-        """Legacy alias for backward compatibility"""
-        self.run()
