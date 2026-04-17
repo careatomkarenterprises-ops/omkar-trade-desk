@@ -9,6 +9,9 @@ from src.scanner.options_intelligence_engine import OptionsIntelligenceEngine
 from src.scanner.full_market_scanner import run_full_scan
 from src.scanner.currency_agent import CurrencyAgent
 from src.scanner.commodity_agent import CommodityAgent
+from src.scanner.morning_setup import get_kite_instance
+from src.scanner.data_fetcher import DataFetcher
+from src.scanner.patterns import PatternDetector
 from src.telegram.poster import TelegramPoster
 
 logging.basicConfig(level=logging.INFO)
@@ -21,6 +24,11 @@ class SystemController:
         self.global_engine = GlobalMarketEngine()
         self.telegram = TelegramPoster()
 
+        # ✅ FIXED DEPENDENCIES
+        self.kite = get_kite_instance()
+        self.data_fetcher = DataFetcher()
+        self.pattern_detector = PatternDetector()
+
     def run(self):
 
         now = datetime.datetime.now()
@@ -29,68 +37,101 @@ class SystemController:
         logger.info(f"🕒 TIME: {now}")
 
         # 🌍 GLOBAL MARKET
-        global_data = self.global_engine.run()
+        try:
+            global_data = self.global_engine.run()
 
-        global_msg = f"""
+            msg = f"""
 🌍 GLOBAL MARKET UPDATE
 
 Bias: {global_data.get('overall_bias')}
 USDINR: {global_data.get('currency', {}).get('usd_inr')}
 Crude: {global_data.get('crude_oil', {}).get('trend')}
-        """
+            """
 
-        self.telegram.send_message("free", global_msg)
+            self.telegram.send_message("free", msg)
+
+        except Exception as e:
+            logger.error(f"❌ Global Engine Failed: {e}")
+            global_data = {}
 
         # 🌅 PREMARKET
         if now.hour < 9:
 
             logger.info("🔥 PREMARKET MODE")
 
-            PreMarketPredictionEngine().run()
+            try:
+                PreMarketPredictionEngine(
+                    self.data_fetcher,
+                    self.pattern_detector
+                ).run()
+            except Exception as e:
+                logger.error(f"❌ Premarket Failed: {e}")
 
         # 📊 LIVE MARKET
         elif 9 <= now.hour < 16:
 
             logger.info("📊 LIVE MARKET MODE")
 
-            # 🔥 MAIN SCANNER
-            results = run_full_scan()
+            # 🔥 SCANNER
+            try:
+                results = run_full_scan()
 
-            if results:
-                msg = "🔥 LIVE MARKET SIGNALS\n\n"
-                for r in results[:10]:
-                    msg += f"{r['symbol']} | {r['signal']} | {r['trend']}\n"
+                if results:
+                    msg = "🔥 LIVE MARKET SIGNALS\n\n"
+                    for r in results[:10]:
+                        msg += f"{r['symbol']} | {r['signal']} | {r['trend']}\n"
 
-                self.telegram.send_message("free", msg)
+                    self.telegram.send_message("free", msg)
+
+            except Exception as e:
+                logger.error(f"❌ Scanner Failed: {e}")
 
             # 📈 OPTIONS
-            opt = OptionsIntelligenceEngine().run()
+            try:
+                opt = OptionsIntelligenceEngine().run()
 
-            self.telegram.send_message(
-                "free",
-                f"📊 OPTIONS UPDATE\nBias: {opt.get('flow', {}).get('signal')}"
-            )
+                self.telegram.send_message(
+                    "free",
+                    f"📊 OPTIONS UPDATE\n{opt}"
+                )
+
+            except Exception as e:
+                logger.error(f"❌ Options Failed: {e}")
 
             # 💱 CURRENCY
-            CurrencyAgent().run()
-            self.telegram.send_message("free", "💱 Currency Engine Updated")
+            try:
+                if self.kite:
+                    CurrencyAgent(self.kite).scan()
+                    self.telegram.send_message("free", "💱 Currency Done")
+
+            except Exception as e:
+                logger.error(f"❌ Currency Failed: {e}")
 
             # 🛢️ COMMODITY
-            CommodityAgent().run()
-            self.telegram.send_message("free", "🛢️ Commodity Engine Updated")
+            try:
+                if self.kite:
+                    CommodityAgent(self.kite).scan()
+                    self.telegram.send_message("free", "🛢️ Commodity Done")
+
+            except Exception as e:
+                logger.error(f"❌ Commodity Failed: {e}")
 
         # 🌙 EOD
         else:
 
             logger.info("📉 EOD MODE")
 
-            EODEngine().run(global_data)
-            LearningEngine().run(global_data)
+            try:
+                EODEngine().run(global_data)
+                LearningEngine().run(global_data)
 
-            self.telegram.send_message(
-                "free",
-                "📉 End of Day Analysis Completed"
-            )
+                self.telegram.send_message(
+                    "free",
+                    "📉 End of Day Completed"
+                )
+
+            except Exception as e:
+                logger.error(f"❌ EOD Failed: {e}")
 
         logger.info("✅ SYSTEM COMPLETE")
 
