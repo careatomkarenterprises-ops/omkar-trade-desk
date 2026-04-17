@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 def load_fno_symbols():
     try:
         df = pd.read_csv("fno_stocks.csv")
-        symbols = df["symbol"].dropna().unique().tolist()
+symbols = df.iloc[:, 0].tolist()
 
         logger.info(f"📊 Loaded F&O Symbols: {len(symbols)}")
         return symbols
