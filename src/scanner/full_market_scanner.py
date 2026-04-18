@@ -3,12 +3,14 @@ import time
 import logging
 
 from src.scanner.data_fetcher import DataFetcher
-from src.scanner.patterns import PatternDetector
 from src.telegram.poster import TelegramPoster
 
 logger = logging.getLogger(__name__)
 
 
+# ================================
+# 📊 LOAD SYMBOLS
+# ================================
 def load_fno_symbols():
     try:
         df = pd.read_csv("fno_stocks.csv")
@@ -26,10 +28,79 @@ def load_fno_symbols():
         return []
 
 
+# ================================
+# 🔥 YOUR VOLUME BREAKOUT STRATEGY
+# ================================
+def detect_volume_breakout(df):
+    try:
+        if df is None or df.empty or len(df) < 20:
+            return None
+
+        df = df.copy()
+
+        # 15 SMA
+        df["SMA15"] = df["Close"].rolling(15).mean()
+
+        # Last 6 candles = setup zone
+        setup = df.tail(6)
+
+        high = setup["High"].max()
+        low = setup["Low"].min()
+
+        # Tight range condition (3%)
+        range_pct = (high - low) / low
+        if range_pct > 0.03:
+            return None
+
+        # Price near SMA
+        last_close = df.iloc[-1]["Close"]
+        sma = df.iloc[-1]["SMA15"]
+
+        if pd.isna(sma):
+            return None
+
+        if abs(last_close - sma) / sma > 0.02:
+            return None
+
+        # Volume condition
+        setup_vol_avg = setup["Volume"].mean()
+        last_vol = df.iloc[-1]["Volume"]
+
+        if setup_vol_avg == 0:
+            return None
+
+        # ONLY 40%–60% volume (your core logic)
+        if not (0.4 * setup_vol_avg <= last_vol <= 0.6 * setup_vol_avg):
+            return None
+
+        # Breakout / Breakdown
+        if last_close > high:
+            return {
+                "signal": "BUY_SIGNAL",
+                "type": "VOLUME_BREAKOUT",
+                "level": round(high, 2)
+            }
+
+        elif last_close < low:
+            return {
+                "signal": "SELL_SIGNAL",
+                "type": "VOLUME_BREAKDOWN",
+                "level": round(low, 2)
+            }
+
+        return None
+
+    except Exception as e:
+        logger.error(f"Pattern error: {e}")
+        return None
+
+
+# ================================
+# 🚀 MAIN SCANNER
+# ================================
 def run_full_scan():
 
     fetcher = DataFetcher()
-    detector = PatternDetector()
     telegram = TelegramPoster()
 
     symbols = load_fno_symbols()
@@ -37,7 +108,7 @@ def run_full_scan():
     results = []
     scanned = 0
 
-    logger.info("🚀 STARTING FULL F&O MARKET SCAN")
+    logger.info("🚀 STARTING VOLUME BREAKOUT SCAN")
 
     for symbol in symbols:
 
@@ -50,51 +121,20 @@ def run_full_scan():
             if data is None or data.empty:
                 continue
 
-            result = detector.analyze(symbol, data)
+            result = detect_volume_breakout(data)
 
-            # ✅ DEBUG (KEEP THIS FOR NOW)
-            logger.info(f"DEBUG RESULT {symbol}: {result}")
+            if result:
+                output = {
+                    "symbol": symbol,
+                    "signal": result["signal"],
+                    "level": result["level"]
+                }
 
-            if not result:
-                continue
+                results.append(output)
 
-            signal = result.get("signal")
-            trend = result.get("trend")
+                logger.info(f"🔥 SIGNAL: {symbol} | {result['signal']}")
 
-            # -----------------------------------
-            # ✅ STRICT SIGNAL FILTER (IMPORTANT)
-            # -----------------------------------
-            valid_signals = ["BUY_SIGNAL", "SELL_SIGNAL"]
-
-            if signal not in valid_signals:
-                continue
-
-            # ❌ Reject weak alignment
-            if signal == "BUY_SIGNAL" and trend != "UPTREND":
-                continue
-
-            if signal == "SELL_SIGNAL" and trend != "DOWNTREND":
-                continue
-
-            # ❌ Reject sideways market
-            if trend == "SIDEWAYS":
-                continue
-
-            # -----------------------------------
-            # ✅ FINAL OUTPUT
-            # -----------------------------------
-            output = {
-                "symbol": symbol,
-                "trend": trend if trend else "Sideways",
-                "signal": signal if signal else "Watch",
-                "volume_spike": result.get("volume_spike", False)
-            }
-
-            results.append(output)
-
-            logger.info(f"🔥 SIGNAL: {symbol} | {signal}")
-
-            time.sleep(0.15)
+            time.sleep(0.2)
 
         except Exception as e:
             logger.error(f"{symbol} error: {e}")
@@ -103,37 +143,37 @@ def run_full_scan():
     logger.info(f"Total Scanned: {scanned}")
     logger.info(f"Signals Generated: {len(results)}")
 
-    # -----------------------------------
+    # ================================
     # 📢 TELEGRAM OUTPUT
-    # -----------------------------------
+    # ================================
     if results:
 
-        message = "🔥 <b>TOP MARKET SETUPS</b>\n\n"
+        message = "🔥 <b>VOLUME BREAKOUT SETUPS</b>\n\n"
 
         for t in results[:10]:
             message += f"📊 <b>{t['symbol']}</b>\n"
             message += f"Signal: {t['signal']}\n"
-            message += f"Trend: {t['trend']}\n\n"
+            message += f"Level: {t['level']}\n\n"
 
-        message += "⚠️ For educational purposes only"
+        message += "⚠️ Based on Volume Compression Strategy"
 
         telegram.send_message("free", message)
 
     else:
-        # ✅ SMART FALLBACK (IMPORTANT FOR TRUST)
         telegram.send_message(
             "free",
-            "📊 <b>Market Update</b>\n\n"
-            "No high-probability setups detected.\n"
-            "Market is currently sideways / low momentum.\n\n"
-            "👉 Stay disciplined. Avoid overtrading.\n"
-            "👉 Wait for high-quality setups only."
+            "📊 Market Update:\n\n"
+            "No valid volume breakout setups found.\n"
+            "Market in compression / no clear move.\n\n"
+            "👉 Wait for clean breakout."
         )
 
     return results
 
 
-# ✅ WRAPPER (DO NOT TOUCH)
+# ================================
+# SAFE WRAPPER
+# ================================
 def run_full_market_scan():
     try:
         return run_full_scan()
@@ -142,5 +182,8 @@ def run_full_market_scan():
         return []
 
 
+# ================================
+# ENTRY POINT
+# ================================
 if __name__ == "__main__":
     run_full_scan()
