@@ -1,46 +1,123 @@
-import logging
+import pandas as pd
+import numpy as np
 
-logger = logging.getLogger(__name__)
 
 class PatternDetector:
-    def analyze(self, symbol, df):
+
+    def analyze(self, symbol, df: pd.DataFrame):
+
+        if df is None or len(df) < 25:
+            return None
+
         try:
-            if df is None or len(df) < 15:
-                return {"symbol": symbol, "has_pattern": False}
+            df = df.copy()
 
-            # 1. Check Trend (Price higher than 5 days ago)
-            current_close = df["close"].iloc[-1]
-            prev_close = df["close"].iloc[-5]
-            trend = "UPTREND" if current_close > prev_close else "DOWNTREND"
+            # ============================
+            # 🔹 MOVING AVERAGE
+            # ============================
+            df["SMA15"] = df["Close"].rolling(15).mean()
 
-            # 2. Volume Shock (Volume 1.5x higher than 10-day average)
-            avg_volume = df["volume"].iloc[-11:-1].mean()
-            current_volume = df["volume"].iloc[-1]
-            volume_spike = current_volume > (avg_volume * 1.5)
+            recent = df.tail(10)
 
-            # 3. Breakout Logic
-            # Closing above the high of the last 5 days
-            recent_high = df["high"].iloc[-6:-1].max()
-            breakout = current_close > recent_high
-            
-            # Closing below the low of the last 5 days
-            recent_low = df["low"].iloc[-6:-1].min()
-            breakdown = current_close < recent_low
+            # ============================
+            # 🔹 RANGE DETECTION (5-6 candles)
+            # ============================
+            range_high = recent["High"].max()
+            range_low = recent["Low"].min()
+            range_size = range_high - range_low
 
-            signal = None
-            if trend == "UPTREND" and volume_spike and breakout:
-                signal = "BUY_SIGNAL"
-            elif trend == "DOWNTREND" and volume_spike and breakdown:
-                signal = "SELL_SIGNAL"
+            avg_price = recent["Close"].mean()
 
-            return {
-                "symbol": symbol,
-                "trend": trend,
-                "signal": signal,
-                "has_pattern": signal is not None,
-                "price": round(current_close, 2)
-            }
+            # Tight range condition (compression)
+            if range_size / avg_price > 0.025:  # >2.5% = no compression
+                return None
+
+            # ============================
+            # 🔹 VOLUME ANALYSIS
+            # ============================
+            avg_volume = recent["Volume"].mean()
+            last_volume = df.iloc[-1]["Volume"]
+
+            volume_ok = (
+                0.3 * avg_volume <= last_volume <= 0.6 * avg_volume
+            )
+
+            # ============================
+            # 🔹 CURRENT PRICE
+            # ============================
+            last_close = df.iloc[-1]["Close"]
+
+            # ============================
+            # 🔹 TREND CHECK (SMA BASED)
+            # ============================
+            sma = df.iloc[-1]["SMA15"]
+
+            if last_close > sma:
+                trend = "UPTREND"
+            elif last_close < sma:
+                trend = "DOWNTREND"
+            else:
+                trend = "SIDEWAYS"
+
+            # ============================
+            # 🔥 PRE-BREAKOUT LOGIC (MAIN EDGE)
+            # ============================
+
+            proximity_high = abs(last_close - range_high) / range_high
+            proximity_low = abs(last_close - range_low) / range_low
+
+            near_high = proximity_high < 0.005   # within 0.5%
+            near_low = proximity_low < 0.005
+
+            # Last 3 candle stability
+            last3 = df.tail(3)
+            stable_high = all(last3["Close"] > (range_high * 0.995))
+            stable_low = all(last3["Close"] < (range_low * 1.005))
+
+            # ============================
+            # 🔹 FINAL SIGNAL LOGIC
+            # ============================
+
+            # 🚀 PRE-BREAKOUT BUY
+            if trend == "UPTREND" and near_high and stable_high and volume_ok:
+                return {
+                    "symbol": symbol,
+                    "signal": "PRE_BREAKOUT_BUY",
+                    "trend": trend,
+                    "volume_spike": False
+                }
+
+            # 🔻 PRE-BREAKOUT SELL
+            if trend == "DOWNTREND" and near_low and stable_low and volume_ok:
+                return {
+                    "symbol": symbol,
+                    "signal": "PRE_BREAKOUT_SELL",
+                    "trend": trend,
+                    "volume_spike": False
+                }
+
+            # ============================
+            # 🔥 CONFIRM BREAKOUT (OPTIONAL)
+            # ============================
+
+            if last_close > range_high and volume_ok:
+                return {
+                    "symbol": symbol,
+                    "signal": "BREAKOUT_BUY",
+                    "trend": trend,
+                    "volume_spike": True
+                }
+
+            if last_close < range_low and volume_ok:
+                return {
+                    "symbol": symbol,
+                    "signal": "BREAKOUT_SELL",
+                    "trend": trend,
+                    "volume_spike": True
+                }
+
+            return None
 
         except Exception as e:
-            logger.error(f"Pattern error {symbol}: {e}")
-            return {"symbol": symbol, "has_pattern": False}
+            print(f"Pattern error {symbol}: {e}")
+            return None
