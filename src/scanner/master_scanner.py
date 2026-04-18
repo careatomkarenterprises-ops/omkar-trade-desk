@@ -1,6 +1,10 @@
+import sys
+import os
+# Add repository root to path so 'src' imports work in GitHub Actions
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
 import pandas as pd
 import json
-import os
 import logging
 from datetime import datetime
 from src.scanner.volume_analyzer import VolumeSetupAnalyzer
@@ -19,9 +23,11 @@ class MasterScanner:
     def _safe_fetch(self, symbol, interval, days=5):
         try:
             return fetch_historical_data(symbol, interval, days)
-        except:
+        except Exception as e:
+            logger.error(f"Fetch error {symbol}: {e}")
             return None
 
+    # ---------- 1. Morning Pre-Market Gap ----------
     def scan_premarket_gap(self):
         try:
             df = self._safe_fetch("NIFTY", "daily", 20)
@@ -33,9 +39,8 @@ class MasterScanner:
                 msg = "🌅 Pre-Market: No significant volume setup detected."
             else:
                 latest = setups[-1]
-                # Use mock values if real data unavailable
-                global_sentiment = "Mixed (use live API)"
-                current_futures = 24500
+                global_sentiment = "Neutral (live data not configured)"
+                current_futures = 24500  # fallback; replace with real fetch if needed
                 if current_futures > latest['top']:
                     bias = "Upward bias"
                 elif current_futures < latest['bottom']:
@@ -52,10 +57,11 @@ class MasterScanner:
             logger.info("Pre-market gap scan completed")
         except Exception as e:
             logger.error(f"Pre-market scan error: {e}")
-            send_message("free_main", f"⚠️ Pre-market scan temporarily unavailable.")
 
+    # ---------- 2. Pre-Open Top/Bottom Stocks ----------
     def scan_preopen_top_bottom(self):
         try:
+            # Replace with your actual pre-open list from Zerodha
             top_bottom_list = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK"]
             results = []
             for symbol in top_bottom_list[:20]:
@@ -68,11 +74,11 @@ class MasterScanner:
                 latest = setups[-1]
                 current = df['close'].iloc[-1]
                 if current > latest['top']:
-                    side = "above resistance"
+                    side = "above observed resistance"
                 elif current < latest['bottom']:
-                    side = "below support"
+                    side = "below observed support"
                 else:
-                    side = "inside range"
+                    side = "inside observed range"
                 results.append(f"• {symbol}: {side} (range {latest['bottom']}-{latest['top']})")
             if results:
                 msg = "📊 *Pre-Open Stock Patterns*\n" + "\n".join(results) + "\n⚠️ Educational."
@@ -82,6 +88,7 @@ class MasterScanner:
         except Exception as e:
             logger.error(f"Pre-open error: {e}")
 
+    # ---------- 3. Intraday F&O (real-time to premium) ----------
     def scan_intraday_fno(self):
         try:
             symbols = self._get_fno_list() + ["NIFTY", "BANKNIFTY"]
@@ -111,6 +118,7 @@ class MasterScanner:
         except Exception as e:
             logger.error(f"Intraday error: {e}")
 
+    # ---------- 4. Multibagger ----------
     def scan_multibagger(self, asset_list, name="Multibagger"):
         try:
             self.analyzer.min_candles = 6
@@ -135,6 +143,7 @@ class MasterScanner:
         except Exception as e:
             logger.error(f"Multibagger error: {e}")
 
+    # ---------- 5. Currency ----------
     def scan_currency(self):
         try:
             pairs = ["USDINR", "EURINR", "GBPINR", "JPYINR"]
@@ -147,15 +156,21 @@ class MasterScanner:
                     continue
                 latest = setups[-1]
                 current = df['close'].iloc[-1]
-                bias = "upward" if current > latest['top'] else ("downward" if current < latest['bottom'] else "sideways")
+                if current > latest['top']:
+                    bias = "upward bias"
+                elif current < latest['bottom']:
+                    bias = "downward bias"
+                else:
+                    bias = "sideways"
                 msg = (f"💱 *Currency Pattern* – {pair}\n"
                        f"📊 Setup: {latest['candles']} candles\n"
                        f"📐 Range: {latest['bottom']} – {latest['top']}\n"
-                       f"📈 {bias} bias\n⚠️ Educational.")
+                       f"📈 {bias}\n⚠️ Educational.")
                 send_message("premium", msg)
         except Exception as e:
             logger.error(f"Currency error: {e}")
 
+    # ---------- 6. Commodity ----------
     def scan_commodity(self):
         try:
             commodities = ["GOLD", "SILVER", "CRUDEOIL", "NATURALGAS"]
@@ -179,6 +194,7 @@ class MasterScanner:
         except Exception as e:
             logger.error(f"Commodity error: {e}")
 
+    # ---------- Helpers ----------
     def _get_fno_list(self):
         try:
             if os.path.exists("fno_stocks.csv"):
@@ -201,4 +217,4 @@ if __name__ == "__main__":
     scanner.scan_multibagger(scanner._get_fno_list(), "F&O Multibagger")
     scanner.scan_currency()
     scanner.scan_commodity()
-    logger.info("✅ All scanners executed successfully")
+    logger.info("All scanners executed successfully")
