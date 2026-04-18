@@ -53,15 +53,16 @@ def run_full_scan():
 
             result = detector.analyze(symbol, data)
 
-            if result and result.get("has_pattern"):
+            # ✅ TEMP FIX: allow all results for content flow
+            if result:
 
                 signals += 1
 
                 output = {
                     "symbol": symbol,
-                    "trend": result.get("trend"),
-                    "signal": result.get("signal"),
-                    "pattern": result.get("signal"),  # for compatibility
+                    "trend": result.get("trend", "NA"),
+                    "signal": result.get("signal", "No clear signal"),
+                    "pattern": result.get("signal", "NA"),
                     "volume_spike": result.get("volume_spike", False)
                 }
 
@@ -78,27 +79,32 @@ def run_full_scan():
     logger.info(f"Total Scanned: {scanned}")
     logger.info(f"Signals Found: {signals}")
 
+    # ✅ TELEGRAM OUTPUT (CLEAN FORMAT)
     if results:
-        message = "🔥 TOP MARKET SETUPS\n\n"
+
+        message = "🔥 <b>TOP MARKET SETUPS</b>\n\n"
+
         for t in results[:10]:
-            message += f"{t['symbol']} | {t['signal']} | {t['trend']}\n"
+            message += f"📊 <b>{t['symbol']}</b>\n"
+            message += f"Signal: {t['signal']}\n"
+            message += f"Trend: {t['trend']}\n\n"
+
+        message += "⚠️ For educational purposes only"
 
         telegram.send_message("free", message)
 
     else:
+
         telegram.send_message(
             "free",
-            "⚠ No strong setups found in current market conditions."
+            "⚠ No setups generated. Market sideways or low volume."
         )
 
     return results
 
 
-# ✅ NEW WRAPPER (DO NOT REMOVE)
+# ✅ WRAPPER FOR MASTER ENGINE
 def run_full_market_scan():
-    """
-    Wrapper for MasterEngine
-    """
     try:
         return run_full_scan()
     except Exception as e:
