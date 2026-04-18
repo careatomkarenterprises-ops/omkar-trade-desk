@@ -13,11 +13,18 @@ class SystemController:
             from src.scanner.global_market_engine import GlobalMarketEngine
             from src.telegram.poster import TelegramPoster
             
+            # Initialize Fetcher
             self.fetcher = ZerodhaFetcher()
             self.global_engine = GlobalMarketEngine()
             self.telegram = TelegramPoster()
             self.agents = {}
-            self._init_all_agents()
+
+            # CRITICAL CHECK: Only initialize agents if Kite connection is alive
+            if self.fetcher.kite:
+                self._init_all_agents()
+            else:
+                logger.error("⚠️ Kite Connection is NULL. Check your KITE_ACCESS_TOKEN in GitHub Secrets.")
+                
         except Exception as e:
             logger.error(f"💥 Controller Init Failed: {e}")
 
@@ -36,13 +43,23 @@ class SystemController:
                 mod = __import__(f"src.scanner.{file}", fromlist=[cls_name])
                 cls = getattr(mod, cls_name)
                 sig = inspect.signature(cls.__init__)
+                
                 # Inject kite if the agent expects it
-                self.agents[file] = cls(kite_instance=kite) if 'kite_instance' in sig.parameters else cls()
+                if 'kite_instance' in sig.parameters:
+                    self.agents[file] = cls(kite_instance=kite)
+                else:
+                    self.agents[file] = cls()
+                    
                 logger.info(f"✅ Loaded: {file}")
             except Exception as e:
                 logger.warning(f"⏩ Skipping {file}: {e}")
 
     def run_agent_safely(self, name, agent):
+        # Prevent running if kite is dead but agent was somehow loaded
+        if name != 'edu_news_agent' and not self.fetcher.kite:
+            logger.warning(f"🚫 Skipping {name} - No active Kite session.")
+            return
+
         try:
             logger.info(f"📡 Executing {name.upper()}...")
             report = None
@@ -81,15 +98,23 @@ class SystemController:
         # 1. Get Global Data
         global_data = self.global_engine.run()
         
-        # 2. Run All Agents
+        # 2. Run All Agents (only if we have agents loaded)
+        if not self.agents:
+            logger.warning("⚠️ No agents loaded to execute.")
+        
         for name, agent in self.agents.items():
             self.run_agent_safely(name, agent)
 
-        # 3. Trigger EOD Summary (After 3:35 PM)
-        if datetime.now().hour * 100 + datetime.now().minute >= 1535:
-            from src.scanner.eod_engine import EODEngine
-            eod_msg = EODEngine().run(global_data=global_data)
-            self.telegram.send_message('free', eod_msg)
+        # 3. Trigger EOD Summary (After 3:35 PM IST)
+        now = datetime.now()
+        current_time = now.hour * 100 + now.minute
+        if current_time >= 1535:
+            try:
+                from src.scanner.eod_engine import EODEngine
+                eod_msg = EODEngine().run(global_data=global_data)
+                self.telegram.send_message('free', eod_msg)
+            except Exception as e:
+                logger.error(f"EOD Engine Error: {e}")
 
 if __name__ == "__main__":
     SystemController().run()
