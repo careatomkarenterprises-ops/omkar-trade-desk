@@ -3,30 +3,25 @@ from src.telegram.poster import send_message
 
 def route_signal(signal):
 
-    message = format_signal(signal)
+    if not signal:
+        return
 
-    confidence = signal.get("confidence", 0)
+    # BASIC ROUTING LOGIC (KEEP SIMPLE)
+    if signal.get("type") == "intraday":
+        send_message("intraday", format_signal(signal))
 
-    if confidence >= 80:
-        send_message("premium_intraday", message)
+    elif signal.get("type") == "premium":
+        send_message("premium", format_signal(signal))
 
-    elif confidence >= 60:
-        send_message("free_channel", message)
+    else:
+        send_message("free", format_signal(signal))
 
 
 def format_signal(signal):
 
-    return f"""
-📊 {signal.get('symbol', 'N/A')}
-
-Setup: {signal.get('pattern', 'N/A')}
-Entry: {signal.get('entry', 'N/A')}
-SL: {signal.get('sl', 'N/A')}
-Target: {signal.get('target', 'N/A')}
-
-🔥 Confidence: {signal.get('confidence')}%
-
-Market Bias: {signal.get('market_bias')}
-
-#OmkarTradeDesk
-"""
+    return (
+        f"📊 SIGNAL ALERT\n\n"
+        f"Symbol: {signal.get('symbol')}\n"
+        f"Signal: {signal.get('signal')}\n"
+        f"Trend: {signal.get('trend')}\n"
+    )
