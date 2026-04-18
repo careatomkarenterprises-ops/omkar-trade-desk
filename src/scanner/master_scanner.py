@@ -1,6 +1,5 @@
 import sys
 import os
-# Add repository root to path so 'src' imports work in GitHub Actions
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 import pandas as pd
@@ -27,19 +26,14 @@ class MasterScanner:
             logger.error(f"Fetch error {symbol}: {e}")
             return None
 
-    # ---------- Helper: Get Nifty & Bank Nifty futures (current & next expiry) ----------
+    # ---------- Helper: Nifty & Bank Nifty futures (current & next) ----------
     def _get_future_symbols(self):
-        """
-        Returns a list of NFO symbols for Nifty and Bank Nifty futures.
-        Current month + next month (or nearest two expiries).
-        Uses simple logic: if current day > 20, current expiry = next month; else current month.
-        """
         today = datetime.now()
         year = today.year
         month = today.month
         day = today.day
 
-        # If after 20th of the month, the current expiry is actually next month
+        # Determine expiry month (current and next)
         if day > 20:
             curr_month = month + 1
             curr_year = year
@@ -62,20 +56,47 @@ class MasterScanner:
 
         month_names = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN",
                        "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
-        curr_month_name = month_names[curr_month - 1]
-        next_month_name = month_names[next_month - 1]
+        curr_m = month_names[curr_month-1]
+        next_m = month_names[next_month-1]
+        yr_suffix = str(curr_year)[-2:]
+        next_yr = str(next_year)[-2:]
 
-        curr_yr_suffix = str(curr_year)[-2:]
-        next_yr_suffix = str(next_year)[-2:]
+        nifty_curr = f"NFO:NIFTY{yr_suffix}{curr_m}FUT"
+        nifty_next = f"NFO:NIFTY{next_yr}{next_m}FUT"
+        bn_curr = f"NFO:BANKNIFTY{yr_suffix}{curr_m}FUT"
+        bn_next = f"NFO:BANKNIFTY{next_yr}{next_m}FUT"
+        return [nifty_curr, nifty_next, bn_curr, bn_next]
 
-        nifty_curr = f"NFO:NIFTY{curr_yr_suffix}{curr_month_name}FUT"
-        nifty_next = f"NFO:NIFTY{next_yr_suffix}{next_month_name}FUT"
-        banknifty_curr = f"NFO:BANKNIFTY{curr_yr_suffix}{curr_month_name}FUT"
-        banknifty_next = f"NFO:BANKNIFTY{next_yr_suffix}{next_month_name}FUT"
+    # ---------- Helper: Commodity futures (current month) ----------
+    def _get_commodity_futures(self):
+        today = datetime.now()
+        year = today.year
+        month = today.month
+        day = today.day
 
-        return [nifty_curr, nifty_next, banknifty_curr, banknifty_next]
+        # Current expiry month (if after 20th, take next month)
+        if day > 20:
+            curr_month = month + 1
+            curr_year = year
+            if curr_month > 12:
+                curr_month = 1
+                curr_year += 1
+        else:
+            curr_month = month
+            curr_year = year
 
-    # ---------- 1. Morning Pre-Market Gap (Nifty spot) ----------
+        month_names = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+                       "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
+        month_suffix = month_names[curr_month-1]
+        year_suffix = str(curr_year)[-2:]
+
+        gold = f"MCX:GOLD{year_suffix}{month_suffix}FUT"
+        silver = f"MCX:SILVER{year_suffix}{month_suffix}FUT"
+        crude = f"MCX:CRUDEOIL{year_suffix}{month_suffix}FUT"
+        natgas = f"MCX:NATGAS{year_suffix}{month_suffix}FUT"
+        return [gold, silver, crude, natgas]
+
+    # ---------- 1. Morning Pre-Market Gap ----------
     def scan_premarket_gap(self):
         try:
             df = self._safe_fetch("NSE:NIFTY 50", "day", 20)
@@ -87,8 +108,8 @@ class MasterScanner:
                 msg = "🌅 Pre-Market: No significant volume setup detected."
             else:
                 latest = setups[-1]
-                global_sentiment = "Neutral (live data not configured)"
-                current_futures = 24500  # placeholder; replace with real futures price if needed
+                global_sentiment = "Neutral"
+                current_futures = 24500  # placeholder
                 if current_futures > latest['top']:
                     bias = "Upward bias"
                 elif current_futures < latest['bottom']:
@@ -106,7 +127,7 @@ class MasterScanner:
         except Exception as e:
             logger.error(f"Pre-market scan error: {e}")
 
-    # ---------- 2. Pre-Open Top/Bottom Stocks (30-min) ----------
+    # ---------- 2. Pre-Open Top/Bottom Stocks ----------
     def scan_preopen_top_bottom(self):
         try:
             top_bottom_list = ["NSE:RELIANCE", "NSE:TCS", "NSE:INFY", "NSE:HDFCBANK", "NSE:ICICIBANK"]
@@ -135,15 +156,12 @@ class MasterScanner:
         except Exception as e:
             logger.error(f"Pre-open error: {e}")
 
-    # ---------- 3. Intraday F&O + Index Futures (3-min, real-time to premium) ----------
+    # ---------- 3. Intraday F&O + Index Futures ----------
     def scan_intraday_fno(self):
         try:
-            # Get futures symbols for Nifty & Bank Nifty (current + next)
             future_symbols = self._get_future_symbols()
-            # Regular F&O stocks (from CSV, plain symbols)
             stock_symbols = self._get_fno_list()
             symbols = stock_symbols + future_symbols
-
             self.analyzer.min_candles = 6
             alerts = []
             for symbol in symbols:
@@ -170,7 +188,7 @@ class MasterScanner:
         except Exception as e:
             logger.error(f"Intraday error: {e}")
 
-    # ---------- 4. Multibagger (Daily, min 6 candles, low-volume breakout) ----------
+    # ---------- 4. Multibagger ----------
     def scan_multibagger(self, asset_list, name="Multibagger"):
         try:
             self.analyzer.min_candles = 6
@@ -195,7 +213,7 @@ class MasterScanner:
         except Exception as e:
             logger.error(f"Multibagger error: {e}")
 
-    # ---------- 5. Currency (3-min) – using NSE spot rates ----------
+    # ---------- 5. Currency ----------
     def scan_currency(self):
         try:
             pairs = ["NSE:USDINR", "NSE:EURINR", "NSE:GBPINR", "NSE:JPYINR"]
@@ -222,10 +240,10 @@ class MasterScanner:
         except Exception as e:
             logger.error(f"Currency error: {e}")
 
-    # ---------- 6. Commodity (3-min + daily) – corrected MCX symbols ----------
+    # ---------- 6. Commodity (futures) ----------
     def scan_commodity(self):
         try:
-            commodities = ["MCX:GOLD1", "MCX:SILVER1", "MCX:CRUDEOIL1", "MCX:NATGAS1"]
+            commodities = self._get_commodity_futures()
             for comm in commodities:
                 msg = f"🛢️ *Commodity* – {comm}\n"
                 df_intra = self._safe_fetch(comm, "3minute", 2)
