@@ -1,23 +1,34 @@
-name: Real-Time Scanner (Premium)
+name: Omkar Trade Desk Scanner
 
 on:
   schedule:
-    - cron: '*/30 4-10 * * 1-5'   # Every 30 min from 4:00 to 10:30 UTC (9:30 AM to 3:30 PM IST)
-  workflow_dispatch:               # Allow manual trigger
+    - cron: '*/30 4-10 * * 1-5'   # 9:30 AM to 3:30 PM IST (UTC 4:00 to 10:30)
+    - cron: '30 10 * * 1-5'       # End of day 4:00 PM IST (UTC 10:30) – promotion report
+  workflow_dispatch:
 
 jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - name: Set up Python
-        uses: actions/setup-python@v2
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.11'
       - name: Install dependencies
         run: pip install -r requirements.txt
-      - name: Run Master Scanner (Premium real-time)
+      - name: Run Master Scanner (Intraday)
+        if: github.event.schedule == '*/30 4-10 * * 1-5' || github.event_name == 'workflow_dispatch'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           RAZORPAY_LINK: ${{ secrets.RAZORPAY_LINK }}
+          CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
+          CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
+          CHANNEL_PREMIUM_ELITE: ${{ secrets.CHANNEL_PREMIUM_ELITE }}
         run: python src/scanner/master_scanner.py
+      - name: Run Promotion Report (End of Day)
+        if: github.event.schedule == '30 10 * * 1-5'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          RAZORPAY_LINK: ${{ secrets.RAZORPAY_LINK }}
+        run: python src/scanner/promotion_engine.py
