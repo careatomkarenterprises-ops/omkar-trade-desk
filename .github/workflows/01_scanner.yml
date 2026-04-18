@@ -1,53 +1,54 @@
-name: Omkar Trade Desk Scanner
+import os
+import logging
+import requests
 
-on:
-  schedule:
-    - cron: '*/30 4-10 * * 1-5'   # Every 30 min 9:30 AM – 3:30 PM IST
-    - cron: '30 10 * * 1-5'       # End of day report at 4:00 PM IST
-  workflow_dispatch:               # Manual trigger
+logger = logging.getLogger(__name__)
 
-jobs:
-  scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-      
-      # DEBUG: Test if Python can import modules (this will reveal errors)
-      - name: Test imports
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-        run: |
-          python -c "print('Python OK')"
-          python -c "import sys; print(sys.path)"
-          python -c "from src.telegram.poster import send_message; print('poster OK')" || echo "poster import failed"
-          python -c "from src.scanner.volume_analyzer import VolumeSetupAnalyzer; print('volume_analyzer OK')" || echo "volume_analyzer import failed"
-      
-      # Run Master Scanner (unconditionally on all triggers – schedule OR manual)
-      - name: Run Master Scanner
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          KITE_API_KEY: ${{ secrets.KITE_API_KEY }}
-          KITE_ACCESS_TOKEN: ${{ secrets.KITE_ACCESS_TOKEN }}
-          CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
-          CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
-          CHANNEL_PREMIUM_ELITE: ${{ secrets.CHANNEL_PREMIUM_ELITE }}
-        run: |
-          python src/scanner/master_scanner.py || echo "Scanner failed with exit code $?"
-      
-      # End of Day Report (only on schedule, but always runs the message)
-      - name: End of Day Report
-        if: github.event_name == 'schedule' && github.event.schedule == '30 10 * * 1-5'
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
-        run: |
-          python -c "
-from src.telegram.poster import send_message
-send_message('free_main', '📊 *End of Day* – Scanners completed. Check premium channel for real-time patterns tomorrow.')
-"
+class TelegramPoster:
+    def __init__(self):
+        self.token = os.getenv("TELEGRAM_BOT_TOKEN")
+        # ONLY 4 channels – read from environment
+        self.channels = {
+            "free_main": os.getenv("CHANNEL_FREE_MAIN", "@OmkarFree"),
+            "free_signals": os.getenv("CHANNEL_FREE_SIGNALS", "@OmkarFreeSignals"),
+            "premium": os.getenv("CHANNEL_PREMIUM", "@OmkarPro"),
+            "premium_elite": os.getenv("CHANNEL_PREMIUM_ELITE", "@OmkarProElite"),
+        }
+
+    def send_message(self, channel_type, message):
+        try:
+            chat_id = self.channels.get(channel_type)
+            if not chat_id:
+                logger.error(f"Channel {channel_type} not configured")
+                return
+            url = f"https://api.telegram.org/bot{self.token}/sendMessage"
+            payload = {
+                "chat_id": chat_id,
+                "text": message,
+                "parse_mode": "Markdown"
+            }
+            response = requests.post(url, json=payload, timeout=10)
+            if response.status_code == 200:
+                logger.info(f"Sent to {channel_type} ({chat_id})")
+            else:
+                logger.error(f"Telegram error: {response.text}")
+        except Exception as e:
+            logger.error(f"Send failed: {e}")
+
+_poster = TelegramPoster()
+
+def send_message(channel_type, message):
+    _poster.send_message(channel_type, message)
+
+# Legacy support for old code that uses send_alert(channel_username, message)
+def send_alert(message, channel_username):
+    for ctype, cid in _poster.channels.items():
+        if cid == channel_username:
+            _poster.send_message(ctype, message)
+            return
+    # Fallback: try direct send
+    try:
+        url = f"https://api.telegram.org/bot{_poster.token}/sendMessage"
+        requests.post(url, json={"chat_id": channel_username, "text": message, "parse_mode": "Markdown"})
+    except:
+        logger.error(f"Failed to send to {channel_username}")
