@@ -185,3 +185,22 @@ class GlobalMarketEngine:
             return "BEARISH SETUP"
         else:
             return "SIDEWAYS / STOCK SPECIFIC"
+
+# ✅ WRAPPER FOR MASTER ENGINE (DO NOT REMOVE)
+def run_global_market_analysis():
+    """
+    Wrapper to connect GlobalMarketEngine with MasterEngine
+    """
+    try:
+        engine = GlobalMarketEngine()
+        result = engine.run()
+
+        # Return only bias (what MasterEngine expects)
+        if isinstance(result, dict):
+            return result.get("overall_bias", "NEUTRAL")
+
+        return "NEUTRAL"
+
+    except Exception as e:
+        print(f"Global market wrapper error: {e}")
+        return "NEUTRAL"
