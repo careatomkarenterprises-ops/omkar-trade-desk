@@ -1,131 +1,87 @@
 import pandas as pd
-import numpy as np
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class PatternDetector:
 
-    def analyze(self, symbol, df: pd.DataFrame):
+    def normalize_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Convert all column names to lowercase
+        So no case mismatch ever again
+        """
+        df.columns = [col.lower() for col in df.columns]
+        return df
 
-        if df is None or len(df) < 25:
-            return None
+    def analyze(self, symbol: str, df: pd.DataFrame):
 
         try:
-            df = df.copy()
-
-            # ============================
-            # 🔥 FORCE CLEAN COLUMN NAMES
-            # ============================
-            df.columns = df.columns.str.strip().str.lower()
-
-            column_map = {
-                "open": "Open",
-                "high": "High",
-                "low": "Low",
-                "close": "Close",
-                "volume": "Volume"
-            }
-
-            df = df.rename(columns=column_map)
-
-            # ✅ FINAL CHECK
-            required_cols = ["Open", "High", "Low", "Close", "Volume"]
-
-            if not all(col in df.columns for col in required_cols):
-                print(f"{symbol} missing columns: {df.columns}")
+            if df is None or df.empty:
                 return None
 
-            # ============================
-            # 🔹 MOVING AVERAGE
-            # ============================
-            df["SMA15"] = df["Close"].rolling(15).mean()
+            # ✅ FIX: normalize column names
+            df = self.normalize_columns(df)
 
-            recent = df.tail(10)
+            # Now ALWAYS use lowercase
+            close = df["close"]
+            high = df["high"]
+            low = df["low"]
+            volume = df["volume"]
 
-            # ============================
-            # 🔹 RANGE DETECTION
-            # ============================
-            range_high = recent["High"].max()
-            range_low = recent["Low"].min()
-            range_size = range_high - range_low
+            # -------------------------------
+            # 📊 YOUR LOGIC STARTS HERE
+            # -------------------------------
 
-            avg_price = recent["Close"].mean()
+            # 15 candle range
+            recent = df.tail(15)
 
-            if range_size / avg_price > 0.025:
-                return None
+            resistance = recent["high"].max()
+            support = recent["low"].min()
 
-            # ============================
-            # 🔹 VOLUME LOGIC
-            # ============================
-            avg_volume = recent["Volume"].mean()
-            last_volume = df.iloc[-1]["Volume"]
+            avg_volume = recent["volume"].mean()
 
-            volume_ok = 0.3 * avg_volume <= last_volume <= 0.6 * avg_volume
+            last_close = close.iloc[-1]
+            prev_close = close.iloc[-2]
+            last_volume = volume.iloc[-1]
 
-            # ============================
-            # 🔹 PRICE
-            # ============================
-            last_close = df.iloc[-1]["Close"]
+            # -----------------------------------
+            # 🔥 PRE-BREAKOUT LOGIC (YOUR IDEA)
+            # -----------------------------------
 
-            # ============================
-            # 🔹 TREND
-            # ============================
-            sma = df.iloc[-1]["SMA15"]
+            near_resistance = (resistance - last_close) / resistance <= 0.005
+            near_support = (last_close - support) / support <= 0.005
 
-            if last_close > sma:
-                trend = "UPTREND"
-            elif last_close < sma:
-                trend = "DOWNTREND"
-            else:
-                trend = "SIDEWAYS"
+            low_volume = last_volume <= (avg_volume * 0.6)
 
-            # ============================
-            # 🔥 PRE-BREAKOUT LOGIC
-            # ============================
-            proximity_high = abs(last_close - range_high) / range_high
-            proximity_low = abs(last_close - range_low) / range_low
+            sustained_up = (
+                close.iloc[-1] > close.iloc[-2] > close.iloc[-3]
+            )
 
-            near_high = proximity_high < 0.005
-            near_low = proximity_low < 0.005
+            sustained_down = (
+                close.iloc[-1] < close.iloc[-2] < close.iloc[-3]
+            )
 
-            last3 = df.tail(3)
+            # -----------------------------------
+            # 🚀 SIGNAL GENERATION
+            # -----------------------------------
 
-            stable_high = all(last3["Close"] > (range_high * 0.995))
-            stable_low = all(last3["Close"] < (range_low * 1.005))
-
-            # ============================
-            # 🚀 SIGNALS
-            # ============================
-
-            if trend == "UPTREND" and near_high and stable_high and volume_ok:
+            if near_resistance and low_volume and sustained_up:
                 return {
-                    "symbol": symbol,
                     "signal": "PRE_BREAKOUT_BUY",
-                    "trend": trend
+                    "trend": "UPTREND",
+                    "volume_spike": False
                 }
 
-            if trend == "DOWNTREND" and near_low and stable_low and volume_ok:
+            elif near_support and low_volume and sustained_down:
                 return {
-                    "symbol": symbol,
                     "signal": "PRE_BREAKOUT_SELL",
-                    "trend": trend
-                }
-
-            if last_close > range_high and volume_ok:
-                return {
-                    "symbol": symbol,
-                    "signal": "BREAKOUT_BUY",
-                    "trend": trend
-                }
-
-            if last_close < range_low and volume_ok:
-                return {
-                    "symbol": symbol,
-                    "signal": "BREAKOUT_SELL",
-                    "trend": trend
+                    "trend": "DOWNTREND",
+                    "volume_spike": False
                 }
 
             return None
 
         except Exception as e:
-            print(f"Pattern error: {e}")
+            logger.error(f"Pattern error: {e}")
             return None
