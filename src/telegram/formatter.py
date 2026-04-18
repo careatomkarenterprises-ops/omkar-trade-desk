@@ -27,3 +27,10 @@ def format_premarket_gap(gap_dir, global_sentiment, setup_range, fab_zone):
            f"🎯 Statistical projection zone: ₹{fab_zone}\n"
            f"⚠️ This is an educational observation of market data. Not a trading recommendation.")
     return msg
+# Existing send_alert() remains. Add this new function:
+
+def send_delayed_alert(msg, channel):
+    """For free channels: add a 30-minute delay (simulate by storing in JSON and posting later)"""
+    # Implementation: store message with timestamp, GitHub Action runs every 30 min
+    # to post delayed messages to free channel while premium gets real-time.
+    pass
