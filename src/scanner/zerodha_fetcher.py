@@ -66,11 +66,11 @@ class ZerodhaFetcher:
         """
         Accepts symbols like:
           - "NSE:RELIANCE"
-          - "CDS:USDINR"
-          - "MCX:GOLD"
-          - "NFO:NIFTY25APRFUT" (if needed)
+          - "NSE:USDINR" (spot)
+          - "MCX:GOLD1"
+          - "NFO:NIFTY25APRFUT"
         Also handles plain symbols (e.g., "RELIANCE") by assuming NSE.
-        Special handling for indices: "NIFTY" -> "NIFTY 50", "BANKNIFTY" -> "BANK NIFTY"
+        Special handling: "NIFTY" -> "NIFTY 50". "BANKNIFTY" is kept as is.
         """
         # Parse exchange prefix if present
         if ":" in symbol:
@@ -81,11 +81,10 @@ class ZerodhaFetcher:
             exchange = "NSE"
             tradingsymbol = symbol
 
-        # Special mapping for indices
+        # Special mapping for NIFTY index (BANKNIFTY is already correct)
         if tradingsymbol.upper() == "NIFTY":
             tradingsymbol = "NIFTY 50"
-        elif tradingsymbol.upper() == "BANKNIFTY":
-            tradingsymbol = "BANK NIFTY"
+        # No mapping for BANKNIFTY – keep as "BANKNIFTY" (no space)
 
         # Get cache for this exchange
         df = self.instrument_cache.get(exchange)
