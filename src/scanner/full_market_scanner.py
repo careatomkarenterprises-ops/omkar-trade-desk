@@ -52,24 +52,47 @@ def run_full_scan():
 
             result = detector.analyze(symbol, data)
 
-            # DEBUG (keep this for now)
+            # ✅ DEBUG (KEEP THIS FOR NOW)
             logger.info(f"DEBUG RESULT {symbol}: {result}")
 
-            signal_value = result.get("signal")
+            if not result:
+                continue
 
-            # ✅ FILTER ONLY VALID SIGNALS
-            if result and signal_value and signal_value != "None":
+            signal = result.get("signal")
+            trend = result.get("trend")
 
-                output = {
-                    "symbol": symbol,
-                    "trend": result.get("trend", "Sideways"),
-                    "signal": signal_value,
-                    "volume_spike": result.get("volume_spike", False)
-                }
+            # -----------------------------------
+            # ✅ STRICT SIGNAL FILTER (IMPORTANT)
+            # -----------------------------------
+            valid_signals = ["BUY_SIGNAL", "SELL_SIGNAL"]
 
-                results.append(output)
+            if signal not in valid_signals:
+                continue
 
-                logger.info(f"🔥 SIGNAL: {symbol} | {signal_value}")
+            # ❌ Reject weak alignment
+            if signal == "BUY_SIGNAL" and trend != "UPTREND":
+                continue
+
+            if signal == "SELL_SIGNAL" and trend != "DOWNTREND":
+                continue
+
+            # ❌ Reject sideways market
+            if trend == "SIDEWAYS":
+                continue
+
+            # -----------------------------------
+            # ✅ FINAL OUTPUT
+            # -----------------------------------
+            output = {
+                "symbol": symbol,
+                "trend": trend if trend else "Sideways",
+                "signal": signal if signal else "Watch",
+                "volume_spike": result.get("volume_spike", False)
+            }
+
+            results.append(output)
+
+            logger.info(f"🔥 SIGNAL: {symbol} | {signal}")
 
             time.sleep(0.15)
 
@@ -80,9 +103,9 @@ def run_full_scan():
     logger.info(f"Total Scanned: {scanned}")
     logger.info(f"Signals Generated: {len(results)}")
 
-    # -------------------------------
+    # -----------------------------------
     # 📢 TELEGRAM OUTPUT
-    # -------------------------------
+    # -----------------------------------
     if results:
 
         message = "🔥 <b>TOP MARKET SETUPS</b>\n\n"
@@ -97,17 +120,20 @@ def run_full_scan():
         telegram.send_message("free", message)
 
     else:
+        # ✅ SMART FALLBACK (IMPORTANT FOR TRUST)
         telegram.send_message(
             "free",
-            "📊 Market Update:\n\n"
+            "📊 <b>Market Update</b>\n\n"
             "No high-probability setups detected.\n"
-            "Market currently sideways / low momentum.\n\n"
-            "👉 Stay disciplined. Avoid overtrading."
+            "Market is currently sideways / low momentum.\n\n"
+            "👉 Stay disciplined. Avoid overtrading.\n"
+            "👉 Wait for high-quality setups only."
         )
 
     return results
 
 
+# ✅ WRAPPER (DO NOT TOUCH)
 def run_full_market_scan():
     try:
         return run_full_scan()
