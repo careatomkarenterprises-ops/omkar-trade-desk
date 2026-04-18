@@ -1,58 +1,52 @@
+import os
 import logging
 import requests
-import os
-from dotenv import load_dotenv
 
-load_dotenv()
 logger = logging.getLogger(__name__)
 
+
 class TelegramPoster:
+
     def __init__(self):
-        self.bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+        self.token = os.getenv("TELEGRAM_BOT_TOKEN")
+
         self.channels = {
             "free": os.getenv("CHANNEL_FREE"),
             "premium": os.getenv("CHANNEL_PREMIUM"),
-            "education": os.getenv("CHANNEL_EDUCATION"),
-            "currency": os.getenv("CHANNEL_CURRENCY"),
-            "commodity": os.getenv("CHANNEL_COMMODITY"),
+            "intraday": os.getenv("CHANNEL_INTRADAY"),
         }
 
-    def send_message(self, chat_type, message):
+    def send_message(self, channel_type, message):
+
         try:
-            chat_id = self.channels.get(chat_type)
-            if not self.bot_token or not chat_id:
-                logger.error(f"❌ Missing Telegram config for {chat_type}")
-                return False
+            chat_id = self.channels.get(channel_type)
 
-            if not message or len(str(message).strip()) == 0:
-                return False
+            if not chat_id:
+                logger.error(f"❌ Channel not found: {channel_type}")
+                return
 
-            url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
+            url = f"https://api.telegram.org/bot{self.token}/sendMessage"
+
             payload = {
                 "chat_id": chat_id,
                 "text": message,
-                "parse_mode": "Markdown"
+                "parse_mode": "HTML"
             }
-            response = requests.post(url, data=payload, timeout=10)
-            
+
+            response = requests.post(url, json=payload)
+
             if response.status_code == 200:
-                logger.info(f"✅ Message sent to {chat_type}")
-                return True
+                logger.info(f"✅ Sent to {channel_type}")
             else:
-                logger.error(f"❌ Telegram API Error for {chat_type}: {response.text}")
-                return False
+                logger.error(f"❌ Telegram error: {response.text}")
+
         except Exception as e:
-            logger.error(f"❌ Telegram Error: {e}")
-            return False
+            logger.error(f"Telegram send failed: {e}")
 
 
-# ✅ GLOBAL WRAPPER FOR ROUTER (DO NOT REMOVE)
+# ✅ IMPORTANT: FUNCTION EXPORT (THIS FIXES YOUR ERROR)
+poster = TelegramPoster()
+
+
 def send_message(channel, message):
-    """
-    Wrapper function to use TelegramPoster inside router
-    """
-    try:
-        poster = TelegramPoster()
-        return poster.send_message(channel, message)
-    except Exception as e:
-        print(f"Telegram send error: {e}")
+    poster.send_message(channel, message)
