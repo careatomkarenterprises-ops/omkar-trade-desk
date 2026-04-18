@@ -29,6 +29,33 @@ def load_fno_symbols():
 
 
 # ================================
+# 🔥 COLUMN STANDARDIZATION FIX
+# ================================
+def fix_columns(df):
+    """
+    Fix column case issue from data source
+    """
+    try:
+        # convert all to lowercase
+        df.columns = [col.lower() for col in df.columns]
+
+        # rename to expected format
+        df.rename(columns={
+            'close': 'Close',
+            'open': 'Open',
+            'high': 'High',
+            'low': 'Low',
+            'volume': 'Volume'
+        }, inplace=True)
+
+        return df
+
+    except Exception as e:
+        logger.error(f"Column Fix Error: {e}")
+        return df
+
+
+# ================================
 # 🔥 YOUR VOLUME BREAKOUT STRATEGY
 # ================================
 def detect_volume_breakout(df):
@@ -73,7 +100,19 @@ def detect_volume_breakout(df):
         if not (0.4 * setup_vol_avg <= last_vol <= 0.6 * setup_vol_avg):
             return None
 
-        # Breakout / Breakdown
+        # =========================
+        # 🔥 PRE-BREAKOUT LOGIC (NEW)
+        # =========================
+        if low < last_close < high:
+            return {
+                "signal": "PRE_BREAKOUT",
+                "type": "COMPRESSION",
+                "level": round(high, 2)
+            }
+
+        # =========================
+        # 🔥 BREAKOUT CONFIRMATION
+        # =========================
         if last_close > high:
             return {
                 "signal": "BUY_SIGNAL",
@@ -121,6 +160,9 @@ def run_full_scan():
             if data is None or data.empty:
                 continue
 
+            # ✅ FIX APPLIED HERE (CRITICAL)
+            data = fix_columns(data)
+
             result = detect_volume_breakout(data)
 
             if result:
@@ -148,14 +190,21 @@ def run_full_scan():
     # ================================
     if results:
 
-        message = "🔥 <b>VOLUME BREAKOUT SETUPS</b>\n\n"
+        message = "🔥 <b>SMART MONEY SETUPS</b>\n\n"
 
         for t in results[:10]:
-            message += f"📊 <b>{t['symbol']}</b>\n"
-            message += f"Signal: {t['signal']}\n"
-            message += f"Level: {t['level']}\n\n"
 
-        message += "⚠️ Based on Volume Compression Strategy"
+            if t["signal"] == "PRE_BREAKOUT":
+                message += f"⚡ <b>{t['symbol']}</b>\n"
+                message += f"Setup: Pre-Breakout Zone\n"
+                message += f"Trigger: {t['level']}\n\n"
+
+            else:
+                message += f"🚀 <b>{t['symbol']}</b>\n"
+                message += f"Signal: {t['signal']}\n"
+                message += f"Level: {t['level']}\n\n"
+
+        message += "⚠️ Volume Compression Strategy"
 
         telegram.send_message("free", message)
 
@@ -163,7 +212,7 @@ def run_full_scan():
         telegram.send_message(
             "free",
             "📊 Market Update:\n\n"
-            "No valid volume breakout setups found.\n"
+            "No valid volume setups found.\n"
             "Market in compression / no clear move.\n\n"
             "👉 Wait for clean breakout."
         )
