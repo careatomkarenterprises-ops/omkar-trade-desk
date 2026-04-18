@@ -2,8 +2,8 @@ name: Omkar Trade Desk Scanner
 
 on:
   schedule:
-    - cron: '*/30 4-10 * * 1-5'   # Every 30 min 9:30 AM – 3:30 PM IST
-    - cron: '30 10 * * 1-5'       # End of day report at 4:00 PM IST
+    - cron: '*/30 4-10 * * 1-5'   # 9:30 AM – 3:30 PM IST
+    - cron: '30 10 * * 1-5'       # 4:00 PM IST end-of-day report
   workflow_dispatch:
 
 jobs:
@@ -20,17 +20,13 @@ jobs:
         run: pip install -r requirements.txt
       - name: Run Master Scanner
         env:
-          # Core auth
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           KITE_API_KEY: ${{ secrets.KITE_API_KEY }}
           KITE_ACCESS_TOKEN: ${{ secrets.KITE_ACCESS_TOKEN }}
           ZERODHA_USER_ID: ${{ secrets.ZERODHA_USER_ID }}
           ZERODHA_PASSWORD: ${{ secrets.ZERODHA_PASSWORD }}
           ZERODHA_TOTP_SECRET: ${{ secrets.ZERODHA_TOTP_SECRET }}
-          # ONLY 4 channels – as per our blueprint
-          CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
-          CHANNEL_FREE_SIGNALS: ${{ secrets.CHANNEL_FREE_SIGNALS }}
+          CHANNEL_FREE: ${{ secrets.CHANNEL_FREE }}
           CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
-          CHANNEL_PREMIUM_ELITE: ${{ secrets.CHANNEL_PREMIUM_ELITE }}
           PYTHONUNBUFFERED: "1"
         run: python src/scanner/master_scanner.py
