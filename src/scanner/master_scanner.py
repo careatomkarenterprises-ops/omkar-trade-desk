@@ -30,7 +30,6 @@ class MasterScanner:
     # ---------- 1. Morning Pre-Market Gap (Nifty) ----------
     def scan_premarket_gap(self):
         try:
-            # NOTE: Zerodha expects interval "day" not "daily"
             df = self._safe_fetch("NSE:NIFTY 50", "day", 20)
             if df is None:
                 send_message("free_main", "🌅 Pre-Market: Unable to fetch NIFTY data.")
@@ -63,7 +62,7 @@ class MasterScanner:
     # ---------- 2. Pre-Open Top/Bottom Stocks (30-min) ----------
     def scan_preopen_top_bottom(self):
         try:
-            # Use NSE prefix for equities (adjust if your ZerodhaFetcher expects plain symbols)
+            # Use NSE prefix for equities
             top_bottom_list = ["NSE:RELIANCE", "NSE:TCS", "NSE:INFY", "NSE:HDFCBANK", "NSE:ICICIBANK"]
             results = []
             for symbol in top_bottom_list[:20]:
@@ -93,7 +92,9 @@ class MasterScanner:
     # ---------- 3. Intraday F&O + Index (3-min, real-time to premium) ----------
     def scan_intraday_fno(self):
         try:
-            symbols = self._get_fno_list() + ["NSE:NIFTY 50", "NSE:BANK NIFTY"]
+            # Use plain symbols for F&O (zerodha_fetcher defaults to NSE)
+            # For indices: NSE:NIFTY 50 and NSE:BANKNIFTY (no space)
+            symbols = self._get_fno_list() + ["NSE:NIFTY 50", "NSE:BANKNIFTY"]
             self.analyzer.min_candles = 6
             alerts = []
             for symbol in symbols:
@@ -145,11 +146,11 @@ class MasterScanner:
         except Exception as e:
             logger.error(f"Multibagger error: {e}")
 
-    # ---------- 5. Currency (3-min) ----------
+    # ---------- 5. Currency (3-min) – using NSE spot rates ----------
     def scan_currency(self):
         try:
-            # CDS exchange for currency derivatives
-            pairs = ["CDS:USDINR", "CDS:EURINR", "CDS:GBPINR", "CDS:JPYINR"]
+            # NSE provides spot rates for USDINR, EURINR, GBPINR, JPYINR
+            pairs = ["NSE:USDINR", "NSE:EURINR", "NSE:GBPINR", "NSE:JPYINR"]
             for pair in pairs:
                 df = self._safe_fetch(pair, "3minute", 2)
                 if df is None:
@@ -173,11 +174,11 @@ class MasterScanner:
         except Exception as e:
             logger.error(f"Currency error: {e}")
 
-    # ---------- 6. Commodity (3-min + daily) ----------
+    # ---------- 6. Commodity (3-min + daily) – corrected MCX symbols ----------
     def scan_commodity(self):
         try:
-            # MCX exchange for commodities
-            commodities = ["MCX:GOLD", "MCX:SILVER", "MCX:CRUDEOIL", "MCX:NATURALGAS"]
+            # Correct Zerodha symbols for commodities: GOLD1, SILVER1, CRUDEOIL1, NATGAS1
+            commodities = ["MCX:GOLD1", "MCX:SILVER1", "MCX:CRUDEOIL1", "MCX:NATGAS1"]
             for comm in commodities:
                 msg = f"🛢️ *Commodity* – {comm}\n"
                 df_intra = self._safe_fetch(comm, "3minute", 2)
@@ -204,12 +205,12 @@ class MasterScanner:
             if os.path.exists("fno_stocks.csv"):
                 df = pd.read_csv("fno_stocks.csv")
                 if 'symbol' in df.columns:
-                    # Return raw symbols; your zerodha_fetcher will map to tokens
+                    # Return raw symbols (no prefix); zerodha_fetcher defaults to NSE
                     return df['symbol'].tolist()[:50]
         except Exception as e:
             logger.error(f"Error reading fno_stocks.csv: {e}")
-        # Fallback with NSE prefix
-        return ["NSE:RELIANCE", "NSE:TCS", "NSE:INFY", "NSE:HDFCBANK", "NSE:ICICIBANK"]
+        # Fallback with plain symbols (NSE assumed)
+        return ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK"]
 
     def _cache_alerts(self, alerts):
         with open(self.cache_file, 'w') as f:
