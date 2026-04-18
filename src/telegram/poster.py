@@ -44,3 +44,15 @@ class TelegramPoster:
         except Exception as e:
             logger.error(f"❌ Telegram Error: {e}")
             return False
+
+
+# ✅ GLOBAL WRAPPER FOR ROUTER (DO NOT REMOVE)
+def send_message(channel, message):
+    """
+    Wrapper function to use TelegramPoster inside router
+    """
+    try:
+        poster = TelegramPoster()
+        return poster.send_message(channel, message)
+    except Exception as e:
+        print(f"Telegram send error: {e}")
