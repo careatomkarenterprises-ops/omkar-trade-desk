@@ -36,7 +36,6 @@ def run_full_scan():
 
     results = []
     scanned = 0
-    signals = 0
 
     logger.info("🚀 STARTING FULL F&O MARKET SCAN")
 
@@ -53,16 +52,16 @@ def run_full_scan():
 
             result = detector.analyze(symbol, data)
 
-            # ✅ TEMP FIX: allow all results for content flow
-            if result:
+            # ✅ DEBUG LOG (IMPORTANT)
+            logger.info(f"DEBUG RESULT {symbol}: {result}")
 
-                signals += 1
+            # ✅ TEMP FORCE SIGNAL (ENSURE CONTENT FLOW)
+            if result:
 
                 output = {
                     "symbol": symbol,
-                    "trend": result.get("trend", "NA"),
-                    "signal": result.get("signal", "No clear signal"),
-                    "pattern": result.get("signal", "NA"),
+                    "trend": result.get("trend", "Sideways"),
+                    "signal": result.get("signal", "Watch"),
                     "volume_spike": result.get("volume_spike", False)
                 }
 
@@ -70,16 +69,18 @@ def run_full_scan():
 
                 logger.info(f"🔥 SIGNAL: {symbol} | {output['signal']}")
 
-            time.sleep(0.2)
+            time.sleep(0.15)
 
         except Exception as e:
             logger.error(f"{symbol} error: {e}")
 
     logger.info("📊 FULL SCAN COMPLETE")
     logger.info(f"Total Scanned: {scanned}")
-    logger.info(f"Signals Found: {signals}")
+    logger.info(f"Signals Generated: {len(results)}")
 
-    # ✅ TELEGRAM OUTPUT (CLEAN FORMAT)
+    # -------------------------------
+    # 📢 TELEGRAM OUTPUT
+    # -------------------------------
     if results:
 
         message = "🔥 <b>TOP MARKET SETUPS</b>\n\n"
@@ -94,16 +95,19 @@ def run_full_scan():
         telegram.send_message("free", message)
 
     else:
-
+        # ✅ FALLBACK CONTENT (VERY IMPORTANT FOR BUSINESS)
         telegram.send_message(
             "free",
-            "⚠ No setups generated. Market sideways or low volume."
+            "📊 Market Update:\n\n"
+            "No high-probability setups detected.\n"
+            "Market currently sideways / low momentum.\n\n"
+            "👉 Stay disciplined. Avoid overtrading."
         )
 
     return results
 
 
-# ✅ WRAPPER FOR MASTER ENGINE
+# ✅ WRAPPER (DO NOT TOUCH)
 def run_full_market_scan():
     try:
         return run_full_scan()
