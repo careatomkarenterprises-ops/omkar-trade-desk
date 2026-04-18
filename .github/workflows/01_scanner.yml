@@ -46,4 +46,5 @@ jobs:
           
           # LOGGING SETTINGS
           PYTHONUNBUFFERED: "1"
-        run: python execution_layer.py
+
+        run: python main.py
