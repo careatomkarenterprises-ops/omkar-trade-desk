@@ -13,7 +13,6 @@ def load_fno_symbols():
     try:
         df = pd.read_csv("fno_stocks.csv")
 
-        # ✅ FIX: handle both cases
         if "symbol" in df.columns:
             symbols = df["symbol"].dropna().tolist()
         else:
@@ -62,6 +61,8 @@ def run_full_scan():
                     "symbol": symbol,
                     "trend": result.get("trend"),
                     "signal": result.get("signal"),
+                    "pattern": result.get("signal"),  # for compatibility
+                    "volume_spike": result.get("volume_spike", False)
                 }
 
                 results.append(output)
@@ -91,6 +92,18 @@ def run_full_scan():
         )
 
     return results
+
+
+# ✅ NEW WRAPPER (DO NOT REMOVE)
+def run_full_market_scan():
+    """
+    Wrapper for MasterEngine
+    """
+    try:
+        return run_full_scan()
+    except Exception as e:
+        logger.error(f"Wrapper error: {e}")
+        return []
 
 
 if __name__ == "__main__":
