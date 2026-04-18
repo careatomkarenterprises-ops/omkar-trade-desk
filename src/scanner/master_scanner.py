@@ -27,7 +27,55 @@ class MasterScanner:
             logger.error(f"Fetch error {symbol}: {e}")
             return None
 
-    # ---------- 1. Morning Pre-Market Gap (Nifty) ----------
+    # ---------- Helper: Get Nifty & Bank Nifty futures (current & next expiry) ----------
+    def _get_future_symbols(self):
+        """
+        Returns a list of NFO symbols for Nifty and Bank Nifty futures.
+        Current month + next month (or nearest two expiries).
+        Uses simple logic: if current day > 20, current expiry = next month; else current month.
+        """
+        today = datetime.now()
+        year = today.year
+        month = today.month
+        day = today.day
+
+        # If after 20th of the month, the current expiry is actually next month
+        if day > 20:
+            curr_month = month + 1
+            curr_year = year
+            if curr_month > 12:
+                curr_month = 1
+                curr_year += 1
+            next_month = curr_month + 1
+            next_year = curr_year
+            if next_month > 12:
+                next_month = 1
+                next_year += 1
+        else:
+            curr_month = month
+            curr_year = year
+            next_month = month + 1
+            next_year = year
+            if next_month > 12:
+                next_month = 1
+                next_year += 1
+
+        month_names = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+                       "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
+        curr_month_name = month_names[curr_month - 1]
+        next_month_name = month_names[next_month - 1]
+
+        curr_yr_suffix = str(curr_year)[-2:]
+        next_yr_suffix = str(next_year)[-2:]
+
+        nifty_curr = f"NFO:NIFTY{curr_yr_suffix}{curr_month_name}FUT"
+        nifty_next = f"NFO:NIFTY{next_yr_suffix}{next_month_name}FUT"
+        banknifty_curr = f"NFO:BANKNIFTY{curr_yr_suffix}{curr_month_name}FUT"
+        banknifty_next = f"NFO:BANKNIFTY{next_yr_suffix}{next_month_name}FUT"
+
+        return [nifty_curr, nifty_next, banknifty_curr, banknifty_next]
+
+    # ---------- 1. Morning Pre-Market Gap (Nifty spot) ----------
     def scan_premarket_gap(self):
         try:
             df = self._safe_fetch("NSE:NIFTY 50", "day", 20)
@@ -40,8 +88,7 @@ class MasterScanner:
             else:
                 latest = setups[-1]
                 global_sentiment = "Neutral (live data not configured)"
-                # TODO: replace with real futures price from Zerodha if needed
-                current_futures = 24500
+                current_futures = 24500  # placeholder; replace with real futures price if needed
                 if current_futures > latest['top']:
                     bias = "Upward bias"
                 elif current_futures < latest['bottom']:
@@ -62,7 +109,6 @@ class MasterScanner:
     # ---------- 2. Pre-Open Top/Bottom Stocks (30-min) ----------
     def scan_preopen_top_bottom(self):
         try:
-            # Use NSE prefix for equities
             top_bottom_list = ["NSE:RELIANCE", "NSE:TCS", "NSE:INFY", "NSE:HDFCBANK", "NSE:ICICIBANK"]
             results = []
             for symbol in top_bottom_list[:20]:
@@ -89,12 +135,15 @@ class MasterScanner:
         except Exception as e:
             logger.error(f"Pre-open error: {e}")
 
-    # ---------- 3. Intraday F&O + Index (3-min, real-time to premium) ----------
+    # ---------- 3. Intraday F&O + Index Futures (3-min, real-time to premium) ----------
     def scan_intraday_fno(self):
         try:
-            # Use plain symbols for F&O (zerodha_fetcher defaults to NSE)
-            # For indices: NSE:NIFTY 50 and NSE:BANKNIFTY (no space)
-            symbols = self._get_fno_list() + ["NSE:NIFTY 50", "NSE:BANKNIFTY"]
+            # Get futures symbols for Nifty & Bank Nifty (current + next)
+            future_symbols = self._get_future_symbols()
+            # Regular F&O stocks (from CSV, plain symbols)
+            stock_symbols = self._get_fno_list()
+            symbols = stock_symbols + future_symbols
+
             self.analyzer.min_candles = 6
             alerts = []
             for symbol in symbols:
@@ -127,7 +176,7 @@ class MasterScanner:
             self.analyzer.min_candles = 6
             results = []
             for symbol in asset_list[:100]:
-                df = self._safe_fetch(symbol, "day", 60)   # "day" not "daily"
+                df = self._safe_fetch(symbol, "day", 60)
                 if df is None:
                     continue
                 setups = self.analyzer.detect_setups(df)
@@ -149,7 +198,6 @@ class MasterScanner:
     # ---------- 5. Currency (3-min) – using NSE spot rates ----------
     def scan_currency(self):
         try:
-            # NSE provides spot rates for USDINR, EURINR, GBPINR, JPYINR
             pairs = ["NSE:USDINR", "NSE:EURINR", "NSE:GBPINR", "NSE:JPYINR"]
             for pair in pairs:
                 df = self._safe_fetch(pair, "3minute", 2)
@@ -177,7 +225,6 @@ class MasterScanner:
     # ---------- 6. Commodity (3-min + daily) – corrected MCX symbols ----------
     def scan_commodity(self):
         try:
-            # Correct Zerodha symbols for commodities: GOLD1, SILVER1, CRUDEOIL1, NATGAS1
             commodities = ["MCX:GOLD1", "MCX:SILVER1", "MCX:CRUDEOIL1", "MCX:NATGAS1"]
             for comm in commodities:
                 msg = f"🛢️ *Commodity* – {comm}\n"
@@ -187,7 +234,7 @@ class MasterScanner:
                     if setups:
                         s = setups[-1]
                         msg += f"📊 Intraday range: {s['bottom']} – {s['top']}\n"
-                df_daily = self._safe_fetch(comm, "day", 30)   # "day" not "daily"
+                df_daily = self._safe_fetch(comm, "day", 30)
                 if df_daily is not None:
                     setups = self.analyzer.detect_setups(df_daily)
                     if setups:
@@ -205,11 +252,9 @@ class MasterScanner:
             if os.path.exists("fno_stocks.csv"):
                 df = pd.read_csv("fno_stocks.csv")
                 if 'symbol' in df.columns:
-                    # Return raw symbols (no prefix); zerodha_fetcher defaults to NSE
                     return df['symbol'].tolist()[:50]
         except Exception as e:
             logger.error(f"Error reading fno_stocks.csv: {e}")
-        # Fallback with plain symbols (NSE assumed)
         return ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK"]
 
     def _cache_alerts(self, alerts):
