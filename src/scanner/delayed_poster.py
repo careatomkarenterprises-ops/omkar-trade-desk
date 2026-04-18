@@ -1,6 +1,9 @@
-import json
+import sys
 import os
-from src.telegram.poster import send_alert
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+import json
+from src.telegram.poster import send_message
 
 def post_delayed_alerts():
     cache_file = "data/last_scanner_cache.json"
@@ -12,14 +15,12 @@ def post_delayed_alerts():
     for alert in alerts:
         symbol = alert['symbol']
         setup = alert['setup']
-        msg = (f"📊 *Delayed Pattern Observation* (30 min ago) – {symbol}\n"
+        msg = (f"📊 *Delayed Pattern* (30 min ago) – {symbol}\n"
                f"📈 Setup: {setup['candles']} high-volume candles\n"
                f"🔴 Upper bound: {setup['top']}\n"
                f"🟢 Lower bound: {setup['bottom']}\n"
-               f"🎯 Statistical zone: {setup['fab_50']}\n"
-               f"⚠️ Educational purpose only.")
-        send_alert(msg, "@OmkarFree")
-    # Clear cache after posting
+               f"🎯 Statistical zone: {setup['fab_50']}\n⚠️ Educational.")
+        send_message("free_main", msg)
     os.remove(cache_file)
 
 if __name__ == "__main__":
