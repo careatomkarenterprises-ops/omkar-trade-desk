@@ -2,8 +2,8 @@ name: Omkar Trade Desk Scanner
 
 on:
   schedule:
-    - cron: '*/30 4-10 * * 1-5'   # 9:30 AM to 3:30 PM IST (UTC 4:00 to 10:30)
-    - cron: '30 10 * * 1-5'       # End of day 4:00 PM IST (UTC 10:30) – promotion report
+    - cron: '*/30 4-10 * * 1-5'   # Every 30 min 9:30 AM – 3:30 PM IST
+    - cron: '30 10 * * 1-5'       # End of day report at 4:00 PM IST
   workflow_dispatch:
 
 jobs:
@@ -17,18 +17,21 @@ jobs:
           python-version: '3.11'
       - name: Install dependencies
         run: pip install -r requirements.txt
-      - name: Run Master Scanner (Intraday)
+      - name: Run Master Scanner
         if: github.event.schedule == '*/30 4-10 * * 1-5' || github.event_name == 'workflow_dispatch'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          RAZORPAY_LINK: ${{ secrets.RAZORPAY_LINK }}
           CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
           CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
           CHANNEL_PREMIUM_ELITE: ${{ secrets.CHANNEL_PREMIUM_ELITE }}
         run: python src/scanner/master_scanner.py
-      - name: Run Promotion Report (End of Day)
+      - name: End of Day Report
         if: github.event.schedule == '30 10 * * 1-5'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          RAZORPAY_LINK: ${{ secrets.RAZORPAY_LINK }}
-        run: python src/scanner/promotion_engine.py
+          CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
+        run: |
+          python -c "
+from src.telegram.poster import send_message
+send_message('free_main', '📊 *End of Day* – Scanners completed. Check premium channel for real-time patterns tomorrow.')
+"
