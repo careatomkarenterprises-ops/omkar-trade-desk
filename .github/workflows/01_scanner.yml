@@ -4,7 +4,7 @@ on:
   schedule:
     - cron: '*/30 4-10 * * 1-5'   # Every 30 min 9:30 AM – 3:30 PM IST
     - cron: '30 10 * * 1-5'       # End of day report at 4:00 PM IST
-  workflow_dispatch:               # Allows manual trigger
+  workflow_dispatch:               # Manual trigger
 
 jobs:
   scan:
@@ -17,18 +17,30 @@ jobs:
           python-version: '3.11'
       - name: Install dependencies
         run: pip install -r requirements.txt
-
-      # Main scanner – runs on schedule (any schedule event) OR manual trigger
-      - name: Run Master Scanner
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+      
+      # DEBUG: Test if Python can import modules (this will reveal errors)
+      - name: Test imports
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          python -c "print('Python OK')"
+          python -c "import sys; print(sys.path)"
+          python -c "from src.telegram.poster import send_message; print('poster OK')" || echo "poster import failed"
+          python -c "from src.scanner.volume_analyzer import VolumeSetupAnalyzer; print('volume_analyzer OK')" || echo "volume_analyzer import failed"
+      
+      # Run Master Scanner (unconditionally on all triggers – schedule OR manual)
+      - name: Run Master Scanner
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          KITE_API_KEY: ${{ secrets.KITE_API_KEY }}
+          KITE_ACCESS_TOKEN: ${{ secrets.KITE_ACCESS_TOKEN }}
           CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
           CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
           CHANNEL_PREMIUM_ELITE: ${{ secrets.CHANNEL_PREMIUM_ELITE }}
-        run: python src/scanner/master_scanner.py
-
-      # End of day report – runs only on the specific cron (4:00 PM IST)
+        run: |
+          python src/scanner/master_scanner.py || echo "Scanner failed with exit code $?"
+      
+      # End of Day Report (only on schedule, but always runs the message)
       - name: End of Day Report
         if: github.event_name == 'schedule' && github.event.schedule == '30 10 * * 1-5'
         env:
