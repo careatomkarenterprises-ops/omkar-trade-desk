@@ -53,3 +53,6 @@ def send_alert(message, channel_username):
         requests.post(url, json={"chat_id": channel_username, "text": message, "parse_mode": "Markdown"})
     except:
         logger.error(f"Failed to send to {channel_username}")
+
+
+here is my poster.py file can you please regnerate with all correction details with to copy and past it to our location of src/telegram/poster.py
