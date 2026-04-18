@@ -1,8 +1,10 @@
 import pandas as pd
 import time
+import json
 import logging
 
 from src.scanner.data_fetcher import DataFetcher
+from src.scanner.patterns import PatternDetector
 from src.telegram.poster import TelegramPoster
 
 logger = logging.getLogger(__name__)
@@ -16,122 +18,16 @@ def load_fno_symbols():
         df = pd.read_csv("fno_stocks.csv")
 
         if "symbol" in df.columns:
-            symbols = df["symbol"].dropna().tolist()
+            symbols = df["symbol"].dropna().unique().tolist()
         else:
-            symbols = df.iloc[:, 0].dropna().tolist()
+            symbols = df.iloc[:, 0].dropna().unique().tolist()
 
         logger.info(f"📊 Loaded F&O Symbols: {len(symbols)}")
         return symbols
 
     except Exception as e:
         logger.error(f"❌ CSV Load Error: {e}")
-        return []
-
-
-# ================================
-# 🔥 COLUMN STANDARDIZATION FIX
-# ================================
-def fix_columns(df):
-    """
-    Fix column case issue from data source
-    """
-    try:
-        # convert all to lowercase
-        df.columns = [col.lower() for col in df.columns]
-
-        # rename to expected format
-        df.rename(columns={
-            'close': 'Close',
-            'open': 'Open',
-            'high': 'High',
-            'low': 'Low',
-            'volume': 'Volume'
-        }, inplace=True)
-
-        return df
-
-    except Exception as e:
-        logger.error(f"Column Fix Error: {e}")
-        return df
-
-
-# ================================
-# 🔥 YOUR VOLUME BREAKOUT STRATEGY
-# ================================
-def detect_volume_breakout(df):
-    try:
-        if df is None or df.empty or len(df) < 20:
-            return None
-
-        df = df.copy()
-
-        # 15 SMA
-        df["SMA15"] = df["Close"].rolling(15).mean()
-
-        # Last 6 candles = setup zone
-        setup = df.tail(6)
-
-        high = setup["High"].max()
-        low = setup["Low"].min()
-
-        # Tight range condition (3%)
-        range_pct = (high - low) / low
-        if range_pct > 0.03:
-            return None
-
-        # Price near SMA
-        last_close = df.iloc[-1]["Close"]
-        sma = df.iloc[-1]["SMA15"]
-
-        if pd.isna(sma):
-            return None
-
-        if abs(last_close - sma) / sma > 0.02:
-            return None
-
-        # Volume condition
-        setup_vol_avg = setup["Volume"].mean()
-        last_vol = df.iloc[-1]["Volume"]
-
-        if setup_vol_avg == 0:
-            return None
-
-        # ONLY 40%–60% volume (your core logic)
-        if not (0.4 * setup_vol_avg <= last_vol <= 0.6 * setup_vol_avg):
-            return None
-
-        # =========================
-        # 🔥 PRE-BREAKOUT LOGIC (NEW)
-        # =========================
-        if low < last_close < high:
-            return {
-                "signal": "PRE_BREAKOUT",
-                "type": "COMPRESSION",
-                "level": round(high, 2)
-            }
-
-        # =========================
-        # 🔥 BREAKOUT CONFIRMATION
-        # =========================
-        if last_close > high:
-            return {
-                "signal": "BUY_SIGNAL",
-                "type": "VOLUME_BREAKOUT",
-                "level": round(high, 2)
-            }
-
-        elif last_close < low:
-            return {
-                "signal": "SELL_SIGNAL",
-                "type": "VOLUME_BREAKDOWN",
-                "level": round(low, 2)
-            }
-
-        return None
-
-    except Exception as e:
-        logger.error(f"Pattern error: {e}")
-        return None
+        return ["RELIANCE", "TCS", "INFY", "HDFCBANK"]
 
 
 # ================================
@@ -140,14 +36,16 @@ def detect_volume_breakout(df):
 def run_full_scan():
 
     fetcher = DataFetcher()
+    detector = PatternDetector()
     telegram = TelegramPoster()
 
     symbols = load_fno_symbols()
 
     results = []
     scanned = 0
+    signals = 0
 
-    logger.info("🚀 STARTING VOLUME BREAKOUT SCAN")
+    logger.info("🚀 STARTING FULL MARKET SCAN")
 
     for symbol in symbols:
 
@@ -160,51 +58,67 @@ def run_full_scan():
             if data is None or data.empty:
                 continue
 
-            # ✅ FIX APPLIED HERE (CRITICAL)
-            data = fix_columns(data)
+            # ================================
+            # 🔥 YOUR REAL STRATEGY (IMPORTANT)
+            # ================================
+            result = detector.analyze(symbol, data)
 
-            result = detect_volume_breakout(data)
+            if result and result.get("has_pattern"):
 
-            if result:
+                signals += 1
+
                 output = {
                     "symbol": symbol,
-                    "signal": result["signal"],
-                    "level": result["level"]
+                    "signal": result.get("trigger"),
+                    "price": result.get("price"),
+                    "strength": round(result.get("strength", 0), 2),
+                    "surge": result.get("surge_ratio"),
+                    "type": result.get("pattern_type", "SMART_SETUP")
                 }
 
                 results.append(output)
 
-                logger.info(f"🔥 SIGNAL: {symbol} | {result['signal']}")
+                logger.info(f"🔥 SIGNAL: {symbol} | Score: {output['strength']}")
 
             time.sleep(0.2)
 
         except Exception as e:
             logger.error(f"{symbol} error: {e}")
 
+    # ================================
+    # 📊 SUMMARY
+    # ================================
     logger.info("📊 FULL SCAN COMPLETE")
     logger.info(f"Total Scanned: {scanned}")
-    logger.info(f"Signals Generated: {len(results)}")
+    logger.info(f"Signals Found: {signals}")
+
+    # ================================
+    # 💾 SAVE RESULTS
+    # ================================
+    try:
+        with open("data/full_fno_scan_results.json", "w") as f:
+            json.dump(results, f, indent=2)
+    except Exception as e:
+        logger.error(f"Save error: {e}")
 
     # ================================
     # 📢 TELEGRAM OUTPUT
     # ================================
     if results:
 
+        # sort by strength
+        top = sorted(results, key=lambda x: x["strength"], reverse=True)[:10]
+
         message = "🔥 <b>SMART MONEY SETUPS</b>\n\n"
 
-        for t in results[:10]:
+        for t in top:
+            message += f"📊 <b>{t['symbol']}</b>\n"
+            message += f"Signal: {t['signal']}\n"
+            message += f"Strength: {t['strength']}\n"
+            message += f"Price: {t['price']}\n"
+            message += f"Volume Surge: {t['surge']}\n\n"
 
-            if t["signal"] == "PRE_BREAKOUT":
-                message += f"⚡ <b>{t['symbol']}</b>\n"
-                message += f"Setup: Pre-Breakout Zone\n"
-                message += f"Trigger: {t['level']}\n\n"
-
-            else:
-                message += f"🚀 <b>{t['symbol']}</b>\n"
-                message += f"Signal: {t['signal']}\n"
-                message += f"Level: {t['level']}\n\n"
-
-        message += "⚠️ Volume Compression Strategy"
+        message += "⚠️ Ranked by Strength Engine"
 
         telegram.send_message("free", message)
 
@@ -212,9 +126,9 @@ def run_full_scan():
         telegram.send_message(
             "free",
             "📊 Market Update:\n\n"
-            "No valid volume setups found.\n"
-            "Market in compression / no clear move.\n\n"
-            "👉 Wait for clean breakout."
+            "No strong setups found.\n"
+            "Market in compression.\n\n"
+            "👉 Smart money waiting."
         )
 
     return results
