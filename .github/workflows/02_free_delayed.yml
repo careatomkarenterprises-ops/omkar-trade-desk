@@ -1,0 +1,23 @@
+name: Delayed Free Posts
+
+on:
+  schedule:
+    - cron: '0 5-11 * * 1-5'   # Run at :00 every hour from 5:00 to 11:00 UTC (10:30 AM to 4:30 PM IST)
+  workflow_dispatch:
+
+jobs:
+  delayed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Post delayed alerts to free channel
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
+        run: python src/scanner/delayed_poster.py
