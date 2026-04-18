@@ -13,15 +13,26 @@ class PatternDetector:
             df = df.copy()
 
             # ============================
-            # 🔥 FIX: STANDARDIZE COLUMNS
+            # 🔥 FORCE CLEAN COLUMN NAMES
             # ============================
-            df.columns = [c.capitalize() for c in df.columns]
+            df.columns = df.columns.str.strip().str.lower()
 
+            column_map = {
+                "open": "Open",
+                "high": "High",
+                "low": "Low",
+                "close": "Close",
+                "volume": "Volume"
+            }
+
+            df = df.rename(columns=column_map)
+
+            # ✅ FINAL CHECK
             required_cols = ["Open", "High", "Low", "Close", "Volume"]
 
-            for col in required_cols:
-                if col not in df.columns:
-                    return None
+            if not all(col in df.columns for col in required_cols):
+                print(f"{symbol} missing columns: {df.columns}")
+                return None
 
             # ============================
             # 🔹 MOVING AVERAGE
@@ -39,7 +50,6 @@ class PatternDetector:
 
             avg_price = recent["Close"].mean()
 
-            # Compression filter
             if range_size / avg_price > 0.025:
                 return None
 
@@ -90,33 +100,28 @@ class PatternDetector:
                 return {
                     "symbol": symbol,
                     "signal": "PRE_BREAKOUT_BUY",
-                    "trend": trend,
-                    "volume_spike": False
+                    "trend": trend
                 }
 
             if trend == "DOWNTREND" and near_low and stable_low and volume_ok:
                 return {
                     "symbol": symbol,
                     "signal": "PRE_BREAKOUT_SELL",
-                    "trend": trend,
-                    "volume_spike": False
+                    "trend": trend
                 }
 
-            # Breakout confirmation (optional)
             if last_close > range_high and volume_ok:
                 return {
                     "symbol": symbol,
                     "signal": "BREAKOUT_BUY",
-                    "trend": trend,
-                    "volume_spike": True
+                    "trend": trend
                 }
 
             if last_close < range_low and volume_ok:
                 return {
                     "symbol": symbol,
                     "signal": "BREAKOUT_SELL",
-                    "trend": trend,
-                    "volume_spike": True
+                    "trend": trend
                 }
 
             return None
