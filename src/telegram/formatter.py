@@ -1,13 +1,13 @@
-def format_volume_alert(stock, setup, direction, current_price):
-    msg = f"📊 *{stock}* - Volume Setup Detected\n"
-    msg += f"🔹 Setup candles: {setup['setup_candles']} (≥5)\n"
-    msg += f"🔹 Resistance: ₹{setup['top_resistance']:.2f}\n"
-    msg += f"🔹 Support: ₹{setup['bottom_support']:.2f}\n"
-    msg += f"🔹 Current: ₹{current_price:.2f}\n"
-    if direction == 'long':
-        msg += f"✅ Breakout above resistance → Target 50%: ₹{setup['fab_targets']['50%']:.2f}\n"
-        msg += f"🚀 Extensions: 1.272 | 1.618 | 2.0\n"
-    else:
-        msg += f"⬇️ Breakdown below support → Target -50%: ₹{setup['fab_targets']['50%']:.2f}\n"
-    msg += f"🛑 Stop: ₹{setup['bottom_support'] - (setup['range']*0.25):.2f}\n"
+def format_volume_alert(symbol, signal_type, entry, target, stop, setup):
+    """Formats volume setup alert with horizontal lines and FAB levels"""
+    msg = (f"📊 *VOLUME SETUP ALERT* - {symbol}\n"
+           f"🔹 Signal: {signal_type}\n"
+           f"📊 Setup candles: {setup['candles']} (≥5)\n"
+           f"🔴 Resistance (top): ₹{setup['top']}\n"
+           f"🟢 Support (bottom): ₹{setup['bottom']}\n"
+           f"💰 Entry: ₹{entry}\n"
+           f"🎯 Primary target (50%): ₹{target}\n"
+           f"🛑 Stop loss: ₹{stop}\n"
+           f"🚀 FAB extensions: {setup['fab_127']} | {setup['fab_162']} | {setup['fab_200']}\n"
+           f"📐 Range: ₹{setup['range']}")
     return msg
