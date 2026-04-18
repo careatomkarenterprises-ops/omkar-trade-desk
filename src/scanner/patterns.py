@@ -13,6 +13,17 @@ class PatternDetector:
             df = df.copy()
 
             # ============================
+            # 🔥 FIX: STANDARDIZE COLUMNS
+            # ============================
+            df.columns = [c.capitalize() for c in df.columns]
+
+            required_cols = ["Open", "High", "Low", "Close", "Volume"]
+
+            for col in required_cols:
+                if col not in df.columns:
+                    return None
+
+            # ============================
             # 🔹 MOVING AVERAGE
             # ============================
             df["SMA15"] = df["Close"].rolling(15).mean()
@@ -20,7 +31,7 @@ class PatternDetector:
             recent = df.tail(10)
 
             # ============================
-            # 🔹 RANGE DETECTION (5-6 candles)
+            # 🔹 RANGE DETECTION
             # ============================
             range_high = recent["High"].max()
             range_low = recent["Low"].min()
@@ -28,27 +39,25 @@ class PatternDetector:
 
             avg_price = recent["Close"].mean()
 
-            # Tight range condition (compression)
-            if range_size / avg_price > 0.025:  # >2.5% = no compression
+            # Compression filter
+            if range_size / avg_price > 0.025:
                 return None
 
             # ============================
-            # 🔹 VOLUME ANALYSIS
+            # 🔹 VOLUME LOGIC
             # ============================
             avg_volume = recent["Volume"].mean()
             last_volume = df.iloc[-1]["Volume"]
 
-            volume_ok = (
-                0.3 * avg_volume <= last_volume <= 0.6 * avg_volume
-            )
+            volume_ok = 0.3 * avg_volume <= last_volume <= 0.6 * avg_volume
 
             # ============================
-            # 🔹 CURRENT PRICE
+            # 🔹 PRICE
             # ============================
             last_close = df.iloc[-1]["Close"]
 
             # ============================
-            # 🔹 TREND CHECK (SMA BASED)
+            # 🔹 TREND
             # ============================
             sma = df.iloc[-1]["SMA15"]
 
@@ -60,25 +69,23 @@ class PatternDetector:
                 trend = "SIDEWAYS"
 
             # ============================
-            # 🔥 PRE-BREAKOUT LOGIC (MAIN EDGE)
+            # 🔥 PRE-BREAKOUT LOGIC
             # ============================
-
             proximity_high = abs(last_close - range_high) / range_high
             proximity_low = abs(last_close - range_low) / range_low
 
-            near_high = proximity_high < 0.005   # within 0.5%
+            near_high = proximity_high < 0.005
             near_low = proximity_low < 0.005
 
-            # Last 3 candle stability
             last3 = df.tail(3)
+
             stable_high = all(last3["Close"] > (range_high * 0.995))
             stable_low = all(last3["Close"] < (range_low * 1.005))
 
             # ============================
-            # 🔹 FINAL SIGNAL LOGIC
+            # 🚀 SIGNALS
             # ============================
 
-            # 🚀 PRE-BREAKOUT BUY
             if trend == "UPTREND" and near_high and stable_high and volume_ok:
                 return {
                     "symbol": symbol,
@@ -87,7 +94,6 @@ class PatternDetector:
                     "volume_spike": False
                 }
 
-            # 🔻 PRE-BREAKOUT SELL
             if trend == "DOWNTREND" and near_low and stable_low and volume_ok:
                 return {
                     "symbol": symbol,
@@ -96,10 +102,7 @@ class PatternDetector:
                     "volume_spike": False
                 }
 
-            # ============================
-            # 🔥 CONFIRM BREAKOUT (OPTIONAL)
-            # ============================
-
+            # Breakout confirmation (optional)
             if last_close > range_high and volume_ok:
                 return {
                     "symbol": symbol,
@@ -119,5 +122,5 @@ class PatternDetector:
             return None
 
         except Exception as e:
-            print(f"Pattern error {symbol}: {e}")
+            print(f"Pattern error: {e}")
             return None
