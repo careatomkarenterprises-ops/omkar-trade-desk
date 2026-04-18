@@ -52,22 +52,24 @@ def run_full_scan():
 
             result = detector.analyze(symbol, data)
 
-            # ✅ DEBUG LOG (IMPORTANT)
+            # DEBUG (keep this for now)
             logger.info(f"DEBUG RESULT {symbol}: {result}")
 
-            # ✅ TEMP FORCE SIGNAL (ENSURE CONTENT FLOW)
-            if result:
+            signal_value = result.get("signal")
+
+            # ✅ FILTER ONLY VALID SIGNALS
+            if result and signal_value and signal_value != "None":
 
                 output = {
                     "symbol": symbol,
                     "trend": result.get("trend", "Sideways"),
-                    "signal": result.get("signal", "Watch"),
+                    "signal": signal_value,
                     "volume_spike": result.get("volume_spike", False)
                 }
 
                 results.append(output)
 
-                logger.info(f"🔥 SIGNAL: {symbol} | {output['signal']}")
+                logger.info(f"🔥 SIGNAL: {symbol} | {signal_value}")
 
             time.sleep(0.15)
 
@@ -95,7 +97,6 @@ def run_full_scan():
         telegram.send_message("free", message)
 
     else:
-        # ✅ FALLBACK CONTENT (VERY IMPORTANT FOR BUSINESS)
         telegram.send_message(
             "free",
             "📊 Market Update:\n\n"
@@ -107,7 +108,6 @@ def run_full_scan():
     return results
 
 
-# ✅ WRAPPER (DO NOT TOUCH)
 def run_full_market_scan():
     try:
         return run_full_scan()
