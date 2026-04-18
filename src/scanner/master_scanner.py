@@ -27,10 +27,11 @@ class MasterScanner:
             logger.error(f"Fetch error {symbol}: {e}")
             return None
 
-    # ---------- 1. Morning Pre-Market Gap ----------
+    # ---------- 1. Morning Pre-Market Gap (Nifty) ----------
     def scan_premarket_gap(self):
         try:
-            df = self._safe_fetch("NIFTY", "daily", 20)
+            # NOTE: Zerodha expects interval "day" not "daily"
+            df = self._safe_fetch("NSE:NIFTY 50", "day", 20)
             if df is None:
                 send_message("free_main", "🌅 Pre-Market: Unable to fetch NIFTY data.")
                 return
@@ -40,7 +41,8 @@ class MasterScanner:
             else:
                 latest = setups[-1]
                 global_sentiment = "Neutral (live data not configured)"
-                current_futures = 24500  # fallback; replace with real fetch if needed
+                # TODO: replace with real futures price from Zerodha if needed
+                current_futures = 24500
                 if current_futures > latest['top']:
                     bias = "Upward bias"
                 elif current_futures < latest['bottom']:
@@ -58,11 +60,11 @@ class MasterScanner:
         except Exception as e:
             logger.error(f"Pre-market scan error: {e}")
 
-    # ---------- 2. Pre-Open Top/Bottom Stocks ----------
+    # ---------- 2. Pre-Open Top/Bottom Stocks (30-min) ----------
     def scan_preopen_top_bottom(self):
         try:
-            # Replace with your actual pre-open list from Zerodha
-            top_bottom_list = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK"]
+            # Use NSE prefix for equities (adjust if your ZerodhaFetcher expects plain symbols)
+            top_bottom_list = ["NSE:RELIANCE", "NSE:TCS", "NSE:INFY", "NSE:HDFCBANK", "NSE:ICICIBANK"]
             results = []
             for symbol in top_bottom_list[:20]:
                 df = self._safe_fetch(symbol, "30minute", 5)
@@ -88,10 +90,10 @@ class MasterScanner:
         except Exception as e:
             logger.error(f"Pre-open error: {e}")
 
-    # ---------- 3. Intraday F&O (real-time to premium) ----------
+    # ---------- 3. Intraday F&O + Index (3-min, real-time to premium) ----------
     def scan_intraday_fno(self):
         try:
-            symbols = self._get_fno_list() + ["NIFTY", "BANKNIFTY"]
+            symbols = self._get_fno_list() + ["NSE:NIFTY 50", "NSE:BANK NIFTY"]
             self.analyzer.min_candles = 6
             alerts = []
             for symbol in symbols:
@@ -118,13 +120,13 @@ class MasterScanner:
         except Exception as e:
             logger.error(f"Intraday error: {e}")
 
-    # ---------- 4. Multibagger ----------
+    # ---------- 4. Multibagger (Daily, min 6 candles, low-volume breakout) ----------
     def scan_multibagger(self, asset_list, name="Multibagger"):
         try:
             self.analyzer.min_candles = 6
             results = []
             for symbol in asset_list[:100]:
-                df = self._safe_fetch(symbol, "daily", 60)
+                df = self._safe_fetch(symbol, "day", 60)   # "day" not "daily"
                 if df is None:
                     continue
                 setups = self.analyzer.detect_setups(df)
@@ -143,10 +145,11 @@ class MasterScanner:
         except Exception as e:
             logger.error(f"Multibagger error: {e}")
 
-    # ---------- 5. Currency ----------
+    # ---------- 5. Currency (3-min) ----------
     def scan_currency(self):
         try:
-            pairs = ["USDINR", "EURINR", "GBPINR", "JPYINR"]
+            # CDS exchange for currency derivatives
+            pairs = ["CDS:USDINR", "CDS:EURINR", "CDS:GBPINR", "CDS:JPYINR"]
             for pair in pairs:
                 df = self._safe_fetch(pair, "3minute", 2)
                 if df is None:
@@ -170,10 +173,11 @@ class MasterScanner:
         except Exception as e:
             logger.error(f"Currency error: {e}")
 
-    # ---------- 6. Commodity ----------
+    # ---------- 6. Commodity (3-min + daily) ----------
     def scan_commodity(self):
         try:
-            commodities = ["GOLD", "SILVER", "CRUDEOIL", "NATURALGAS"]
+            # MCX exchange for commodities
+            commodities = ["MCX:GOLD", "MCX:SILVER", "MCX:CRUDEOIL", "MCX:NATURALGAS"]
             for comm in commodities:
                 msg = f"🛢️ *Commodity* – {comm}\n"
                 df_intra = self._safe_fetch(comm, "3minute", 2)
@@ -182,7 +186,7 @@ class MasterScanner:
                     if setups:
                         s = setups[-1]
                         msg += f"📊 Intraday range: {s['bottom']} – {s['top']}\n"
-                df_daily = self._safe_fetch(comm, "daily", 30)
+                df_daily = self._safe_fetch(comm, "day", 30)   # "day" not "daily"
                 if df_daily is not None:
                     setups = self.analyzer.detect_setups(df_daily)
                     if setups:
@@ -200,10 +204,12 @@ class MasterScanner:
             if os.path.exists("fno_stocks.csv"):
                 df = pd.read_csv("fno_stocks.csv")
                 if 'symbol' in df.columns:
+                    # Return raw symbols; your zerodha_fetcher will map to tokens
                     return df['symbol'].tolist()[:50]
-        except:
-            pass
-        return ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK"]
+        except Exception as e:
+            logger.error(f"Error reading fno_stocks.csv: {e}")
+        # Fallback with NSE prefix
+        return ["NSE:RELIANCE", "NSE:TCS", "NSE:INFY", "NSE:HDFCBANK", "NSE:ICICIBANK"]
 
     def _cache_alerts(self, alerts):
         with open(self.cache_file, 'w') as f:
