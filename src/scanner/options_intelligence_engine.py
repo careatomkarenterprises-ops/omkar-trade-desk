@@ -50,3 +50,25 @@ class OptionsIntelligenceEngine:
             logger.error("❌ Options Engine Failed")
             logger.exception(e)
             return {}
+
+
+# ✅ WRAPPER FOR MASTER ENGINE (DO NOT REMOVE)
+def run_options_intelligence():
+    """
+    Wrapper to connect Options Engine with MasterEngine
+    """
+    try:
+        # 👇 CHANGE THIS LINE BASED ON YOUR FILE
+
+        # Most likely:
+        result = main()
+
+        # If your function name is different, replace:
+        # result = run()
+        # result = analyze_options()
+
+        return result
+
+    except Exception as e:
+        print(f"Options wrapper error: {e}")
+        return None
