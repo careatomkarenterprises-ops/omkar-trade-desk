@@ -26,7 +26,10 @@ jobs:
           ZERODHA_USER_ID: ${{ secrets.ZERODHA_USER_ID }}
           ZERODHA_PASSWORD: ${{ secrets.ZERODHA_PASSWORD }}
           ZERODHA_TOTP_SECRET: ${{ secrets.ZERODHA_TOTP_SECRET }}
-          CHANNEL_FREE: ${{ secrets.CHANNEL_FREE }}
+          # Your four channel secrets
+          CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
+          CHANNEL_FREE_SIGNALS: ${{ secrets.CHANNEL_FREE_SIGNALS }}
           CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
+          CHANNEL_PREMIUM_ELITE: ${{ secrets.CHANNEL_PREMIUM_ELITE }}
           PYTHONUNBUFFERED: "1"
         run: python src/scanner/master_scanner.py
