@@ -5,6 +5,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 import pandas as pd
 import json
 import logging
+import requests
 from datetime import datetime
 from src.scanner.volume_analyzer import VolumeSetupAnalyzer
 from src.scanner.data_fetcher import fetch_historical_data
@@ -88,6 +89,101 @@ class MasterScanner:
         natgas = f"MCX:NATGAS{year_suffix}{month_suffix}FUT"
         return [gold, silver, crude, natgas]
 
+    # ---------- NEW: NSE Official Pre-Open Top/Bottom Stocks ----------
+    def scan_nse_preopen_top_bottom(self):
+        """Fetch official NSE pre-open top gainers and losers"""
+        try:
+            # NSE pre-open API endpoint
+            url = "https://www.nseindia.com/api/market-data-pre-open"
+            
+            # Headers to mimic a browser (NSE requires these)
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Accept": "application/json",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Referer": "https://www.nseindia.com/"
+            }
+            
+            # First request to get cookies (NSE requires this)
+            session = requests.Session()
+            session.get("https://www.nseindia.com", headers=headers)
+            
+            # Second request to get pre-open data
+            response = session.get(url, headers=headers)
+            data = response.json()
+            
+            if not data or 'data' not in data:
+                send_message("free_main", "📊 Pre-Open: Unable to fetch NSE pre-open data.")
+                return
+            
+            # Parse top gainers (highest percentage change)
+            stocks = data['data']
+            # Sort by percentage change (highest first)
+            stocks_sorted = sorted(stocks, key=lambda x: float(x.get('pChange', 0)), reverse=True)
+            
+            top_gainers = stocks_sorted[:10]
+            top_losers = stocks_sorted[-10:][::-1]  # Reverse to show most negative first
+            
+            # Build message
+            msg = "📊 *NSE Pre-Open Market (Official)*\n\n"
+            
+            msg += "🟢 *Top Gainers:*\n"
+            for stock in top_gainers:
+                symbol = stock.get('symbol', 'N/A')
+                pChange = stock.get('pChange', 0)
+                lastPrice = stock.get('lastPrice', 0)
+                msg += f"• {symbol}: ↑ {pChange}% (₹{lastPrice})\n"
+            
+            msg += "\n🔴 *Top Losers:*\n"
+            for stock in top_losers:
+                symbol = stock.get('symbol', 'N/A')
+                pChange = stock.get('pChange', 0)
+                lastPrice = stock.get('lastPrice', 0)
+                msg += f"• {symbol}: ↓ {abs(pChange)}% (₹{lastPrice})\n"
+            
+            msg += "\n⚠️ Educational purpose only."
+            send_message("free_main", msg)
+            
+            # Now run volume setup analysis on these stocks
+            self._analyze_preopen_stocks(top_gainers + top_losers)
+            
+        except Exception as e:
+            logger.error(f"NSE pre-open fetch error: {e}")
+            send_message("free_main", "📊 Pre-Open: Unable to fetch NSE data. Market may not be open.")
+
+    def _analyze_preopen_stocks(self, stocks):
+        """Run volume setup analysis on pre-open stocks using 30-min chart"""
+        results = []
+        for stock in stocks[:20]:  # Top 20 from gainers+losers
+            symbol = stock.get('symbol')
+            if not symbol:
+                continue
+            
+            # Fetch 30-min chart data for volume setup analysis
+            df = self._safe_fetch(f"NSE:{symbol}", "30minute", 5)
+            if df is None:
+                continue
+            
+            setups = self.analyzer.detect_setups(df)
+            if not setups:
+                continue
+            
+            latest = setups[-1]
+            current = df['close'].iloc[-1]
+            
+            if current > latest['top']:
+                signal = "🔴 Above resistance"
+            elif current < latest['bottom']:
+                signal = "🟢 Below support"
+            else:
+                signal = "⚪ Inside range"
+            
+            results.append(f"• {symbol}: {signal} | Range: {latest['bottom']}-{latest['top']} | Statistical zone: {latest['fab_50']}")
+        
+        if results:
+            msg = "📊 *Volume Setup Analysis (Pre-Open Stocks)*\n" + "\n".join(results[:10]) + "\n⚠️ Educational."
+            send_message("free_main", msg)
+
     # ---------- 1. Morning Pre-Market Gap ----------
     def scan_premarket_gap(self):
         try:
@@ -119,29 +215,18 @@ class MasterScanner:
         except Exception as e:
             logger.error(f"Pre-market scan error: {e}")
 
-    # ---------- 2. Pre-Open Top/Bottom Stocks (LIVE from Zerodha) ----------
-    def scan_preopen_top_bottom(self):
+    # ---------- 2. Pre-Open Top/Bottom Stocks (F&O List) ----------
+    def scan_preopen_top_bottom_fno(self):
         try:
-            # FIX 1: Fetch live pre-open top/bottom from Zerodha
-            from src.scanner.zerodha_fetcher import get_zerodha_fetcher
-            zf = get_zerodha_fetcher()
-            
-            # Get live market status and top gainers/losers from pre-open
-            # Note: Zerodha does not directly provide pre-open top/bottom.
-            # Alternative: Use your fno_stocks.csv and check which are up/down in pre-market.
-            # For now, we use your F&O list and check pre-market movement.
             symbols = self._get_fno_list()
             results = []
             
-            for symbol in symbols[:20]:  # Top 20 F&O stocks
-                # Fetch 1-minute pre-market data (last 30 minutes before market open)
+            for symbol in symbols[:20]:
                 df = self._safe_fetch(symbol, "minute", 1)
                 if df is None or df.empty:
                     continue
                 
-                # Get pre-market open price and previous close
                 pre_open_price = df['open'].iloc[-1]
-                # For previous close, fetch daily data
                 daily_df = self._safe_fetch(symbol, "day", 2)
                 if daily_df is None or len(daily_df) < 2:
                     continue
@@ -149,18 +234,18 @@ class MasterScanner:
                 
                 if pre_open_price > prev_close:
                     change_percent = ((pre_open_price - prev_close) / prev_close) * 100
-                    results.append(f"• {symbol}: ↑ {change_percent:.2f}% (pre-open price: {pre_open_price:.2f})")
+                    results.append(f"• {symbol}: ↑ {change_percent:.2f}% (pre-open: {pre_open_price:.2f})")
                 elif pre_open_price < prev_close:
                     change_percent = ((prev_close - pre_open_price) / prev_close) * 100
-                    results.append(f"• {symbol}: ↓ {change_percent:.2f}% (pre-open price: {pre_open_price:.2f})")
+                    results.append(f"• {symbol}: ↓ {change_percent:.2f}% (pre-open: {pre_open_price:.2f})")
             
             if results:
-                msg = "📊 *Pre-Open Top/Bottom Stocks (Live)*\n" + "\n".join(results[:10]) + "\n⚠️ Educational."
+                msg = "📊 *F&O Pre-Open Movement*\n" + "\n".join(results[:10]) + "\n⚠️ Educational."
             else:
-                msg = "📊 Pre-Open: No significant pre-market movement detected."
+                msg = "📊 Pre-Open: No significant pre-market movement in F&O stocks."
             send_message("free_main", msg)
         except Exception as e:
-            logger.error(f"Pre-open error: {e}")
+            logger.error(f"Pre-open F&O error: {e}")
 
     # ---------- 3. Intraday F&O + Index Futures ----------
     def scan_intraday_fno(self):
@@ -222,7 +307,6 @@ class MasterScanner:
     # ---------- 5. Currency (Zerodha CDS Exchange) ----------
     def scan_currency(self):
         try:
-            # FIX 2: Use CDS exchange for currency (Zerodha only)
             pairs = ["CDS:USDINR", "CDS:EURINR", "CDS:GBPINR", "CDS:JPYINR"]
             for pair in pairs:
                 df = self._safe_fetch(pair, "3minute", 2)
@@ -289,7 +373,8 @@ class MasterScanner:
 if __name__ == "__main__":
     scanner = MasterScanner()
     scanner.scan_premarket_gap()
-    scanner.scan_preopen_top_bottom()
+    scanner.scan_nse_preopen_top_bottom()  # NEW: Official NSE pre-open data
+    scanner.scan_preopen_top_bottom_fno()   # F&O pre-open movement
     scanner.scan_intraday_fno()
     scanner.scan_multibagger(scanner._get_fno_list(), "F&O Multibagger")
     scanner.scan_currency()
