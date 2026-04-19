@@ -1,7 +1,6 @@
 import os
 import logging
 import pandas as pd
-import yfinance as yf
 from datetime import datetime, timedelta
 from kiteconnect import KiteConnect
 from typing import Optional
@@ -34,7 +33,7 @@ class ZerodhaFetcher:
         self._load_all_instruments()
 
     # -------------------------------
-    # 📦 LOAD INSTRUMENTS FOR ALL EXCHANGES (with force refresh)
+    # 📦 LOAD INSTRUMENTS FOR ALL EXCHANGES
     # -------------------------------
     def _load_all_instruments(self, force_refresh=False):
         exchanges = ["NSE", "CDS", "MCX", "NFO"]
@@ -57,10 +56,10 @@ class ZerodhaFetcher:
                 logger.info(f"✅ Loaded {len(df)} instruments for {exchange}")
             except Exception as e:
                 logger.error(f"Error loading {exchange} instruments: {e}")
-                self.instrument_cache[exchange] = pd.DataFrame()  # empty fallback
+                self.instrument_cache[exchange] = pd.DataFrame()
 
     # -------------------------------
-    # 🔍 TOKEN FETCH with fallback and debug logging
+    # 🔍 TOKEN FETCH with dynamic contract search for commodities
     # -------------------------------
     def get_instrument_token(self, symbol: str) -> Optional[str]:
         # Parse exchange and tradingsymbol
@@ -71,45 +70,57 @@ class ZerodhaFetcher:
             exchange = "NSE"
             tradingsymbol = symbol
 
-        # Special mappings
+        # Special mapping for indices
         if tradingsymbol.upper() == "NIFTY":
             tradingsymbol = "NIFTY 50"
-        # BANKNIFTY stays as is (no space)
 
+        # Get cache for this exchange
         df = self.instrument_cache.get(exchange)
         if df is None or df.empty:
-            # Try to reload instruments for this exchange
             self._load_all_instruments(force_refresh=True)
             df = self.instrument_cache.get(exchange)
 
         if df is None or df.empty:
-            logger.warning(f"⚠ No instrument data for {exchange} – cannot find token for {symbol}")
+            logger.warning(f"⚠ No instrument data for {exchange}")
             return None
 
-        # Try exact match
+        # First try exact match
         match = df[df["tradingsymbol"] == tradingsymbol]
-        if match.empty:
-            # Try case‑insensitive
-            match = df[df["tradingsymbol"].str.upper() == tradingsymbol.upper()]
-        if match.empty:
-            # Log some sample symbols for debugging (first 20)
-            sample = df['tradingsymbol'].head(20).tolist()
-            logger.warning(f"⚠ Token not found for {symbol} (exchange={exchange}, tradingsymbol={tradingsymbol})")
-            logger.warning(f"   Sample symbols on {exchange}: {sample}")
-            # Try alternate exchange for BANKNIFTY (maybe it's on NFO)
-            if tradingsymbol.upper() == "BANKNIFTY" and exchange == "NSE":
-                logger.info("   Retrying with NFO exchange...")
-                return self.get_instrument_token(f"NFO:BANKNIFTY")
-            return None
+        if not match.empty:
+            return str(match.iloc[0]["instrument_token"])
 
-        return str(match.iloc[0]["instrument_token"])
+        # For MCX commodities, try to find the nearest expiry futures contract
+        if exchange == "MCX":
+            # Extract underlying from symbol (e.g., "GOLD26APRFUT" -> "GOLD")
+            import re
+            underlying_match = re.match(r"([A-Z]+)\d+", tradingsymbol)
+            if underlying_match:
+                underlying = underlying_match.group(1)
+                # Find all futures contracts for this underlying
+                futures = df[df["tradingsymbol"].str.contains(f"^{underlying}\\d+.*FUT$", regex=True)]
+                if not futures.empty:
+                    # Sort by expiry date (assuming expiry is in the symbol or we have expiry column)
+                    # For simplicity, pick the first one (nearest expiry if sorted by instrument_token or name)
+                    # Better: sort by tradingsymbol (which contains year+month) lexicographically
+                    futures = futures.sort_values("tradingsymbol")
+                    selected = futures.iloc[0]["tradingsymbol"]
+                    token = str(futures.iloc[0]["instrument_token"])
+                    logger.info(f"✅ Using nearest {underlying} futures: {selected}")
+                    return token
+
+        # If still not found, log sample symbols for debugging
+        sample = df['tradingsymbol'].head(20).tolist()
+        logger.warning(f"⚠ Token not found for {symbol} (exchange={exchange}, tradingsymbol={tradingsymbol})")
+        logger.warning(f"   Sample symbols on {exchange}: {sample}")
+        return None
 
     # -------------------------------
-    # 📊 MAIN DATA FUNCTION with yfinance fallback
+    # 📊 MAIN DATA FUNCTION (no yFinance fallback)
     # -------------------------------
     def get_stock_data(self, symbol: str, interval: str = "day", days: int = 30) -> Optional[pd.DataFrame]:
         if not self.kite:
-            return self._fallback_yfinance(symbol, interval, days)
+            logger.error("Kite instance not available")
+            return None
 
         # Fix interval name
         if interval == "daily":
@@ -118,8 +129,8 @@ class ZerodhaFetcher:
         try:
             token = self.get_instrument_token(symbol)
             if not token:
-                logger.warning(f"⚠ No token for {symbol}, falling back to yfinance")
-                return self._fallback_yfinance(symbol, interval, days)
+                logger.warning(f"⚠ No token for {symbol} – skipping (Zerodha only, no fallback)")
+                return None
 
             to_date = datetime.now()
             from_date = to_date - timedelta(days=days)
@@ -132,7 +143,8 @@ class ZerodhaFetcher:
             )
 
             if not candles:
-                return self._fallback_yfinance(symbol, interval, days)
+                logger.warning(f"No historical data for {symbol}")
+                return None
 
             df = pd.DataFrame(candles)
             df.rename(columns={
@@ -149,34 +161,6 @@ class ZerodhaFetcher:
 
         except Exception as e:
             logger.error(f"Error fetching {symbol}: {e}")
-            return self._fallback_yfinance(symbol, interval, days)
-
-    # -------------------------------
-    # 🛡️ FALLBACK to yfinance (works for equities, indices, some currencies)
-    # -------------------------------
-    def _fallback_yfinance(self, symbol: str, interval: str = "day", days: int = 30) -> Optional[pd.DataFrame]:
-        try:
-            # Remove exchange prefix for yfinance
-            if ":" in symbol:
-                clean_symbol = symbol.split(":", 1)[1]
-            else:
-                clean_symbol = symbol
-
-            # Map interval
-            yf_interval = "1d" if interval == "day" else ("5m" if interval == "3minute" else "30m")
-            period = f"{days+2}d"
-            ticker = yf.Ticker(clean_symbol)
-            df = ticker.history(period=period, interval=yf_interval)
-            if df.empty:
-                return None
-            df = df.rename(columns=str.lower)
-            df.index.name = 'date'
-            required = ['open', 'high', 'low', 'close', 'volume']
-            if all(col in df.columns for col in required):
-                return df[required]
-            return None
-        except Exception as e:
-            logger.error(f"yfinance fallback error for {symbol}: {e}")
             return None
 
     # -------------------------------
