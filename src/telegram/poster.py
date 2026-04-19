@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 class TelegramPoster:
     def __init__(self):
         self.token = os.getenv("TELEGRAM_BOT_TOKEN")
-        # Four distinct channel secrets (set in GitHub)
+        # Read the four secrets you created in GitHub
         self.channels = {
             "free_main": os.getenv("CHANNEL_FREE_MAIN", "@OmkarTradeDesk"),
             "free_signals": os.getenv("CHANNEL_FREE_SIGNALS", "@OmkarEducation"),
@@ -56,7 +56,6 @@ def send_alert(message, channel_username):
         if cid == channel_username:
             _poster.send_message(ctype, message)
             return
-    # Fallback direct send
     try:
         url = f"https://api.telegram.org/bot{_poster.token}/sendMessage"
         requests.post(url, json={"chat_id": channel_username, "text": message, "parse_mode": "Markdown"})
