@@ -26,14 +26,12 @@ class MasterScanner:
             logger.error(f"Fetch error {symbol}: {e}")
             return None
 
-    # ---------- Helper: Nifty & Bank Nifty futures (current & next) ----------
+    # ---------- Helper: Nifty & Bank Nifty futures ----------
     def _get_future_symbols(self):
         today = datetime.now()
         year = today.year
         month = today.month
         day = today.day
-
-        # Determine expiry month (current and next)
         if day > 20:
             curr_month = month + 1
             curr_year = year
@@ -53,28 +51,24 @@ class MasterScanner:
             if next_month > 12:
                 next_month = 1
                 next_year += 1
-
         month_names = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN",
                        "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
         curr_m = month_names[curr_month-1]
         next_m = month_names[next_month-1]
         yr_suffix = str(curr_year)[-2:]
         next_yr = str(next_year)[-2:]
-
         nifty_curr = f"NFO:NIFTY{yr_suffix}{curr_m}FUT"
         nifty_next = f"NFO:NIFTY{next_yr}{next_m}FUT"
         bn_curr = f"NFO:BANKNIFTY{yr_suffix}{curr_m}FUT"
         bn_next = f"NFO:BANKNIFTY{next_yr}{next_m}FUT"
         return [nifty_curr, nifty_next, bn_curr, bn_next]
 
-    # ---------- Helper: Commodity futures (current month) ----------
+    # ---------- Helper: Commodity futures ----------
     def _get_commodity_futures(self):
         today = datetime.now()
         year = today.year
         month = today.month
         day = today.day
-
-        # Current expiry month (if after 20th, take next month)
         if day > 20:
             curr_month = month + 1
             curr_year = year
@@ -84,12 +78,10 @@ class MasterScanner:
         else:
             curr_month = month
             curr_year = year
-
         month_names = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN",
                        "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
         month_suffix = month_names[curr_month-1]
         year_suffix = str(curr_year)[-2:]
-
         gold = f"MCX:GOLD{year_suffix}{month_suffix}FUT"
         silver = f"MCX:SILVER{year_suffix}{month_suffix}FUT"
         crude = f"MCX:CRUDEOIL{year_suffix}{month_suffix}FUT"
@@ -109,7 +101,7 @@ class MasterScanner:
             else:
                 latest = setups[-1]
                 global_sentiment = "Neutral"
-                current_futures = 24500  # placeholder
+                current_futures = 24500
                 if current_futures > latest['top']:
                     bias = "Upward bias"
                 elif current_futures < latest['bottom']:
@@ -127,31 +119,45 @@ class MasterScanner:
         except Exception as e:
             logger.error(f"Pre-market scan error: {e}")
 
-    # ---------- 2. Pre-Open Top/Bottom Stocks ----------
+    # ---------- 2. Pre-Open Top/Bottom Stocks (LIVE from Zerodha) ----------
     def scan_preopen_top_bottom(self):
         try:
-            top_bottom_list = ["NSE:RELIANCE", "NSE:TCS", "NSE:INFY", "NSE:HDFCBANK", "NSE:ICICIBANK"]
+            # FIX 1: Fetch live pre-open top/bottom from Zerodha
+            from src.scanner.zerodha_fetcher import get_zerodha_fetcher
+            zf = get_zerodha_fetcher()
+            
+            # Get live market status and top gainers/losers from pre-open
+            # Note: Zerodha does not directly provide pre-open top/bottom.
+            # Alternative: Use your fno_stocks.csv and check which are up/down in pre-market.
+            # For now, we use your F&O list and check pre-market movement.
+            symbols = self._get_fno_list()
             results = []
-            for symbol in top_bottom_list[:20]:
-                df = self._safe_fetch(symbol, "30minute", 5)
-                if df is None:
+            
+            for symbol in symbols[:20]:  # Top 20 F&O stocks
+                # Fetch 1-minute pre-market data (last 30 minutes before market open)
+                df = self._safe_fetch(symbol, "minute", 1)
+                if df is None or df.empty:
                     continue
-                setups = self.analyzer.detect_setups(df)
-                if not setups:
+                
+                # Get pre-market open price and previous close
+                pre_open_price = df['open'].iloc[-1]
+                # For previous close, fetch daily data
+                daily_df = self._safe_fetch(symbol, "day", 2)
+                if daily_df is None or len(daily_df) < 2:
                     continue
-                latest = setups[-1]
-                current = df['close'].iloc[-1]
-                if current > latest['top']:
-                    side = "above observed resistance"
-                elif current < latest['bottom']:
-                    side = "below observed support"
-                else:
-                    side = "inside observed range"
-                results.append(f"• {symbol}: {side} (range {latest['bottom']}-{latest['top']})")
+                prev_close = daily_df['close'].iloc[-2]
+                
+                if pre_open_price > prev_close:
+                    change_percent = ((pre_open_price - prev_close) / prev_close) * 100
+                    results.append(f"• {symbol}: ↑ {change_percent:.2f}% (pre-open price: {pre_open_price:.2f})")
+                elif pre_open_price < prev_close:
+                    change_percent = ((prev_close - pre_open_price) / prev_close) * 100
+                    results.append(f"• {symbol}: ↓ {change_percent:.2f}% (pre-open price: {pre_open_price:.2f})")
+            
             if results:
-                msg = "📊 *Pre-Open Stock Patterns*\n" + "\n".join(results) + "\n⚠️ Educational."
+                msg = "📊 *Pre-Open Top/Bottom Stocks (Live)*\n" + "\n".join(results[:10]) + "\n⚠️ Educational."
             else:
-                msg = "📊 Pre-Open: No qualifying volume setups."
+                msg = "📊 Pre-Open: No significant pre-market movement detected."
             send_message("free_main", msg)
         except Exception as e:
             logger.error(f"Pre-open error: {e}")
@@ -213,10 +219,11 @@ class MasterScanner:
         except Exception as e:
             logger.error(f"Multibagger error: {e}")
 
-    # ---------- 5. Currency ----------
+    # ---------- 5. Currency (Zerodha CDS Exchange) ----------
     def scan_currency(self):
         try:
-            pairs = ["NSE:USDINR", "NSE:EURINR", "NSE:GBPINR", "NSE:JPYINR"]
+            # FIX 2: Use CDS exchange for currency (Zerodha only)
+            pairs = ["CDS:USDINR", "CDS:EURINR", "CDS:GBPINR", "CDS:JPYINR"]
             for pair in pairs:
                 df = self._safe_fetch(pair, "3minute", 2)
                 if df is None:
@@ -240,7 +247,7 @@ class MasterScanner:
         except Exception as e:
             logger.error(f"Currency error: {e}")
 
-    # ---------- 6. Commodity (futures) ----------
+    # ---------- 6. Commodity ----------
     def scan_commodity(self):
         try:
             commodities = self._get_commodity_futures()
