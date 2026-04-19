@@ -15,26 +15,32 @@ class ZerodhaFetcher:
         self.api_key = os.getenv("KITE_API_KEY")
         self.access_token = os.getenv("KITE_ACCESS_TOKEN")
         self.kite = None
+        self._token_valid = False
 
         if not self.api_key or not self.access_token:
-            logger.error("❌ Missing KITE API credentials")
+            logger.error("❌ Missing KITE_API_KEY or KITE_ACCESS_TOKEN in secrets")
             return
 
         try:
             self.kite = KiteConnect(api_key=self.api_key)
             self.kite.set_access_token(self.access_token)
-            logger.info("✅ Zerodha Connection Successful")
+            # Test token validity by fetching user profile
+            profile = self.kite.profile()
+            if profile:
+                self._token_valid = True
+                logger.info(f"✅ Zerodha Connection Successful (User: {profile.get('user_name', 'Unknown')})")
+            else:
+                logger.error("❌ Zerodha token validation failed")
         except Exception as e:
             logger.error(f"❌ Zerodha Connection Failed: {e}")
+            logger.error("   → Your KITE_ACCESS_TOKEN may be expired or invalid.")
+            logger.error("   → Generate a new token at https://kite.trade/dashboard")
 
         self.cache_dir = "data"
         os.makedirs(self.cache_dir, exist_ok=True)
-        self.instrument_cache = {}  # exchange -> DataFrame
+        self.instrument_cache = {}
         self._load_all_instruments()
 
-    # -------------------------------
-    # 📦 LOAD INSTRUMENTS FOR ALL EXCHANGES
-    # -------------------------------
     def _load_all_instruments(self, force_refresh=False):
         exchanges = ["NSE", "CDS", "MCX", "NFO"]
         for exchange in exchanges:
@@ -58,11 +64,7 @@ class ZerodhaFetcher:
                 logger.error(f"Error loading {exchange} instruments: {e}")
                 self.instrument_cache[exchange] = pd.DataFrame()
 
-    # -------------------------------
-    # 🔍 TOKEN FETCH with dynamic contract search for commodities
-    # -------------------------------
     def get_instrument_token(self, symbol: str) -> Optional[str]:
-        # Parse exchange and tradingsymbol
         if ":" in symbol:
             exchange, tradingsymbol = symbol.split(":", 1)
             exchange = exchange.upper()
@@ -70,66 +72,48 @@ class ZerodhaFetcher:
             exchange = "NSE"
             tradingsymbol = symbol
 
-        # Special mapping for indices
         if tradingsymbol.upper() == "NIFTY":
             tradingsymbol = "NIFTY 50"
 
-        # Get cache for this exchange
         df = self.instrument_cache.get(exchange)
         if df is None or df.empty:
             self._load_all_instruments(force_refresh=True)
             df = self.instrument_cache.get(exchange)
 
         if df is None or df.empty:
-            logger.warning(f"⚠ No instrument data for {exchange}")
             return None
 
-        # First try exact match
         match = df[df["tradingsymbol"] == tradingsymbol]
         if not match.empty:
             return str(match.iloc[0]["instrument_token"])
 
-        # For MCX commodities, try to find the nearest expiry futures contract
         if exchange == "MCX":
-            # Extract underlying from symbol (e.g., "GOLD26APRFUT" -> "GOLD")
             import re
             underlying_match = re.match(r"([A-Z]+)\d+", tradingsymbol)
             if underlying_match:
                 underlying = underlying_match.group(1)
-                # Find all futures contracts for this underlying
                 futures = df[df["tradingsymbol"].str.contains(f"^{underlying}\\d+.*FUT$", regex=True)]
                 if not futures.empty:
-                    # Sort by expiry date (assuming expiry is in the symbol or we have expiry column)
-                    # For simplicity, pick the first one (nearest expiry if sorted by instrument_token or name)
-                    # Better: sort by tradingsymbol (which contains year+month) lexicographically
                     futures = futures.sort_values("tradingsymbol")
-                    selected = futures.iloc[0]["tradingsymbol"]
                     token = str(futures.iloc[0]["instrument_token"])
+                    selected = futures.iloc[0]["tradingsymbol"]
                     logger.info(f"✅ Using nearest {underlying} futures: {selected}")
                     return token
 
-        # If still not found, log sample symbols for debugging
-        sample = df['tradingsymbol'].head(20).tolist()
-        logger.warning(f"⚠ Token not found for {symbol} (exchange={exchange}, tradingsymbol={tradingsymbol})")
-        logger.warning(f"   Sample symbols on {exchange}: {sample}")
         return None
 
-    # -------------------------------
-    # 📊 MAIN DATA FUNCTION (no yFinance fallback)
-    # -------------------------------
     def get_stock_data(self, symbol: str, interval: str = "day", days: int = 30) -> Optional[pd.DataFrame]:
-        if not self.kite:
-            logger.error("Kite instance not available")
+        if not self.kite or not self._token_valid:
+            logger.error(f"Cannot fetch {symbol}: Zerodha token invalid or missing")
             return None
 
-        # Fix interval name
         if interval == "daily":
             interval = "day"
 
         try:
             token = self.get_instrument_token(symbol)
             if not token:
-                logger.warning(f"⚠ No token for {symbol} – skipping (Zerodha only, no fallback)")
+                logger.warning(f"⚠ No token for {symbol}")
                 return None
 
             to_date = datetime.now()
@@ -143,7 +127,6 @@ class ZerodhaFetcher:
             )
 
             if not candles:
-                logger.warning(f"No historical data for {symbol}")
                 return None
 
             df = pd.DataFrame(candles)
@@ -160,12 +143,15 @@ class ZerodhaFetcher:
             return df[['open', 'high', 'low', 'close', 'volume']]
 
         except Exception as e:
-            logger.error(f"Error fetching {symbol}: {e}")
+            error_msg = str(e)
+            if "Incorrect `api_key` or `access_token`" in error_msg:
+                logger.error(f"❌ Zerodha token error for {symbol}: {error_msg}")
+                logger.error("   → Please regenerate your KITE_ACCESS_TOKEN at https://kite.trade/dashboard")
+                logger.error("   → Then update the KITE_ACCESS_TOKEN secret in GitHub")
+            else:
+                logger.error(f"Error fetching {symbol}: {e}")
             return None
 
-    # -------------------------------
-    # ✅ COMPATIBILITY WRAPPER
-    # -------------------------------
     def get_historical_data(self, symbol: str, interval: str = "day", days: int = 30):
         return self.get_stock_data(symbol, interval, days)
 
