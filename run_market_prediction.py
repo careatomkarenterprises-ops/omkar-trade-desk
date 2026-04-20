@@ -16,31 +16,33 @@ CHANNELS = [
 # TELEGRAM (DEBUG ENABLED)
 # ============================
 def send_telegram(message):
-    print("📡 Sending Telegram Message...")
-    print("Channels:", CHANNELS)
+    if not BOT_TOKEN:
+        print("❌ Missing TELEGRAM_BOT_TOKEN")
+        return
 
     for channel in CHANNELS:
         if not channel:
-            print("❌ Skipping empty channel")
+            print("⚠️ Skipping empty channel")
             continue
 
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        payload = {
-            "chat_id": channel,
-            "text": message,
-            "parse_mode": "Markdown"
-        }
-
         try:
+            url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+            payload = {
+                "chat_id": channel,
+                "text": message,
+                "parse_mode": "Markdown"
+            }
+
             response = requests.post(url, data=payload, timeout=10)
 
-            print(f"➡️ Channel: {channel}")
-            print(f"Status Code: {response.status_code}")
-            print(f"Response: {response.text}")
+            if response.status_code == 200:
+                print(f"✅ Sent to {channel}")
+            else:
+                print(f"❌ Failed for {channel}: {response.text}")
 
         except Exception as e:
-            print(f"❌ Telegram Error: {e}")
-
+            print(f"❌ Error sending to {channel}: {e}")
+            
 
 # ============================
 # GLOBAL SENTIMENT
