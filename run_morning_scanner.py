@@ -1,5 +1,4 @@
 import requests
-import json
 from datetime import datetime
 import os
 import time
@@ -20,13 +19,13 @@ def send_telegram(message):
     requests.post(url, data=payload)
 
 # ============================
-# NSE PRE-OPEN DATA (SAFE FETCH)
+# NSE PRE-OPEN FETCH
 # ============================
 def fetch_preopen_data():
     url = "https://www.nseindia.com/api/market-data-pre-open?key=NIFTY"
 
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "User-Agent": "Mozilla/5.0",
         "Accept": "application/json, text/plain, */*",
         "Accept-Language": "en-US,en;q=0.9",
         "Referer": "https://www.nseindia.com/",
@@ -35,31 +34,27 @@ def fetch_preopen_data():
 
     session = requests.Session()
 
-    # Step 1: Load homepage (IMPORTANT for cookies)
+    # Load NSE homepage (important for cookies)
     session.get("https://www.nseindia.com", headers=headers)
     time.sleep(1)
 
-    # Step 2: Retry logic
-    for attempt in range(3):
+    for i in range(3):
         try:
-            response = session.get(url, headers=headers, timeout=10)
+            res = session.get(url, headers=headers, timeout=10)
 
-            if response.status_code != 200:
-                print(f"⚠ Attempt {attempt+1}: Status {response.status_code}")
+            if res.status_code != 200:
                 time.sleep(2)
                 continue
 
-            data = response.json()
-            return data.get("data", [])
+            return res.json().get("data", [])
 
-        except Exception as e:
-            print(f"⚠ Attempt {attempt+1} failed: {e}")
+        except:
             time.sleep(2)
 
-    raise Exception("Failed to fetch NSE data after retries")
+    return []
 
 # ============================
-# PROCESS DATA
+# PROCESS DATA (FILTERED)
 # ============================
 def process_data(data):
     stocks = []
@@ -72,56 +67,64 @@ def process_data(data):
             price = meta.get("iep", 0)
             change = meta.get("pChange", 0)
 
-            # ✅ FILTER ONLY EQUITY (REMOVE BONDS / SG / NCD)
+            # ✅ Filters (IMPORTANT)
             if (
-                price > 0 and
-                symbol.isalpha() and   # removes 704WB35-SG type
-                len(symbol) <= 15
+                price > 100 and              # avoid penny stocks
+                abs(change) > 1.5 and        # only strong movers
+                symbol.isalpha()             # remove bonds like 704WB35-SG
             ):
                 stocks.append((symbol, change, price))
 
         except:
             continue
 
-    # Sort by % change
     stocks = sorted(stocks, key=lambda x: x[1], reverse=True)
 
-    return stocks[:5], stocks[-5:]
+    gainers = [s for s in stocks if s[1] > 0][:5]
+    losers = [s for s in stocks if s[1] < 0][-5:]
+
+    return gainers, losers
 
 # ============================
-# FORMAT MESSAGE
+# FORMAT MESSAGE (PREMIUM STYLE)
 # ============================
 def create_message(gainers, losers):
-    msg = "📊 *PRE-MARKET SCANNER (NSE)*\n\n"
+    msg = "📊 *PRE-MARKET TRADE SETUPS (NSE)*\n\n"
 
-    msg += "🚀 *Top Gainers*\n"
-    for s in gainers:
-        msg += f"• {s[0]} | +{s[1]:.2f}% | ₹{s[2]}\n"
+    if gainers:
+        msg += "🚀 *Bullish Watchlist*\n"
+        for s in gainers:
+            msg += f"• {s[0]} (+{s[1]:.2f}%) | ₹{s[2]}\n"
 
-    msg += "\n🔻 *Top Losers*\n"
-    for s in losers:
-        msg += f"• {s[0]} | {s[1]:.2f}% | ₹{s[2]}\n"
+    if losers:
+        msg += "\n🔻 *Bearish Watchlist*\n"
+        for s in losers:
+            msg += f"• {s[0]} ({s[1]:.2f}%) | ₹{s[2]}\n"
 
+    msg += "\n\n⚠️ *Wait for breakout after 9:20 AM*\n"
     msg += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
 
     return msg
 
 # ============================
-# RUN
+# MAIN RUN
 # ============================
 if __name__ == "__main__":
     try:
         data = fetch_preopen_data()
 
         if not data:
-            raise Exception("Empty data received from NSE")
+            raise Exception("No data received from NSE")
 
         gainers, losers = process_data(data)
-        message = create_message(gainers, losers)
 
-        send_telegram(message)
-
-        print("✅ Pre-market data sent successfully")
+        if not gainers and not losers:
+            send_telegram("⚠️ No strong pre-market setups found today.")
+            print("No setups")
+        else:
+            message = create_message(gainers, losers)
+            send_telegram(message)
+            print("✅ Sent successfully")
 
     except Exception as e:
         print(f"❌ Error: {e}")
