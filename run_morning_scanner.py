@@ -18,6 +18,7 @@ def send_telegram(message):
     }
     requests.post(url, data=payload)
 
+
 # ============================
 # NSE PRE-OPEN FETCH
 # ============================
@@ -34,30 +35,65 @@ def fetch_preopen_data():
 
     session = requests.Session()
 
-    # Load NSE homepage (important for cookies)
+    # Important: Load homepage first (cookie setup)
     session.get("https://www.nseindia.com", headers=headers)
     time.sleep(1)
 
-    for i in range(3):
+    for _ in range(3):
         try:
             res = session.get(url, headers=headers, timeout=10)
 
-            if res.status_code != 200:
-                time.sleep(2)
-                continue
+            if res.status_code == 200:
+                return res.json().get("data", [])
 
-            return res.json().get("data", [])
+            time.sleep(2)
 
         except:
             time.sleep(2)
 
     return []
 
+
+# ============================
+# TRADE LOGIC (ENTRY/SL/TARGET)
+# ============================
+def generate_trade(symbol, change, price):
+    try:
+        if change > 0:
+            # Bullish
+            entry = price * 1.002
+            sl = price * 0.995
+            target = price * 1.015
+            side = "BUY"
+            confidence = min(90, abs(change) * 10)
+
+        else:
+            # Bearish
+            entry = price * 0.998
+            sl = price * 1.005
+            target = price * 0.985
+            side = "SELL"
+            confidence = min(90, abs(change) * 10)
+
+        return {
+            "symbol": symbol,
+            "side": side,
+            "entry": round(entry, 2),
+            "sl": round(sl, 2),
+            "target": round(target, 2),
+            "change": round(change, 2),
+            "confidence": int(confidence)
+        }
+
+    except:
+        return None
+
+
 # ============================
 # PROCESS DATA (FILTERED)
 # ============================
 def process_data(data):
-    stocks = []
+    trades = []
 
     for item in data:
         try:
@@ -67,44 +103,49 @@ def process_data(data):
             price = meta.get("iep", 0)
             change = meta.get("pChange", 0)
 
-            # ✅ Filters (IMPORTANT)
+            # ✅ FILTERS (VERY IMPORTANT)
             if (
-                price > 100 and              # avoid penny stocks
-                abs(change) > 1.5 and        # only strong movers
-                symbol.isalpha()             # remove bonds like 704WB35-SG
+                price > 100 and
+                abs(change) > 1.5 and
+                symbol.isalpha()
             ):
-                stocks.append((symbol, change, price))
+                trade = generate_trade(symbol, change, price)
+                if trade:
+                    trades.append(trade)
 
         except:
             continue
 
-    stocks = sorted(stocks, key=lambda x: x[1], reverse=True)
+    # Sort strongest first
+    trades = sorted(trades, key=lambda x: abs(x["change"]), reverse=True)
 
-    gainers = [s for s in stocks if s[1] > 0][:5]
-    losers = [s for s in stocks if s[1] < 0][-5:]
+    return trades[:8]
 
-    return gainers, losers
 
 # ============================
-# FORMAT MESSAGE (PREMIUM STYLE)
+# FORMAT MESSAGE
 # ============================
-def create_message(gainers, losers):
-    msg = "📊 *PRE-MARKET TRADE SETUPS (NSE)*\n\n"
+def create_message(trades):
+    msg = "📊 *PRE-MARKET TRADE SIGNALS (NSE)*\n\n"
 
-    if gainers:
-        msg += "🚀 *Bullish Watchlist*\n"
-        for s in gainers:
-            msg += f"• {s[0]} (+{s[1]:.2f}%) | ₹{s[2]}\n"
+    if not trades:
+        return "⚠️ No strong setups found today."
 
-    if losers:
-        msg += "\n🔻 *Bearish Watchlist*\n"
-        for s in losers:
-            msg += f"• {s[0]} ({s[1]:.2f}%) | ₹{s[2]}\n"
+    for t in trades:
+        msg += (
+            f"🔹 *{t['symbol']}* ({t['side']})\n"
+            f"Entry: ₹{t['entry']}\n"
+            f"SL: ₹{t['sl']}\n"
+            f"Target: ₹{t['target']}\n"
+            f"Move: {t['change']}%\n"
+            f"Confidence: {t['confidence']}%\n\n"
+        )
 
-    msg += "\n\n⚠️ *Wait for breakout after 9:20 AM*\n"
+    msg += "⚠️ *Wait for confirmation after 9:20 AM*\n"
     msg += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
 
     return msg
+
 
 # ============================
 # MAIN RUN
@@ -114,17 +155,15 @@ if __name__ == "__main__":
         data = fetch_preopen_data()
 
         if not data:
-            raise Exception("No data received from NSE")
+            raise Exception("No data from NSE")
 
-        gainers, losers = process_data(data)
+        trades = process_data(data)
 
-        if not gainers and not losers:
-            send_telegram("⚠️ No strong pre-market setups found today.")
-            print("No setups")
-        else:
-            message = create_message(gainers, losers)
-            send_telegram(message)
-            print("✅ Sent successfully")
+        message = create_message(trades)
+
+        send_telegram(message)
+
+        print("✅ Signals sent successfully")
 
     except Exception as e:
         print(f"❌ Error: {e}")
