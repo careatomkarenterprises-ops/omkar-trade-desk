@@ -1,85 +1,47 @@
 import requests
 import os
-import time
 from datetime import datetime
 import yfinance as yf
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-CHANNEL = os.getenv("CHANNEL_FREE_MAIN")
+
+# ALL CHANNELS
+CHANNELS = [
+    os.getenv("CHANNEL_FREE_MAIN"),
+    os.getenv("CHANNEL_FREE_SIGNALS"),
+    os.getenv("CHANNEL_PREMIUM"),
+    os.getenv("CHANNEL_PREMIUM_ELITE"),
+]
 
 # ============================
 # TELEGRAM
 # ============================
 def send_telegram(message):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHANNEL,
-        "text": message,
-        "parse_mode": "Markdown"
-    }
-    requests.post(url, data=payload)
 
-# ============================
-# NSE PRE-OPEN DATA
-# ============================
-def fetch_preopen_data():
-    url = "https://www.nseindia.com/api/market-data-pre-open?key=NIFTY"
-
-    headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json",
-        "Referer": "https://www.nseindia.com/",
-    }
-
-    session = requests.Session()
-    session.get("https://www.nseindia.com", headers=headers)
-    time.sleep(1)
-
-    try:
-        res = session.get(url, headers=headers, timeout=10)
-        return res.json().get("data", [])
-    except:
-        return []
-
-# ============================
-# PROCESS PRE-OPEN
-# ============================
-def process_preopen(data):
-    stocks = []
-
-    for item in data:
-        try:
-            meta = item["metadata"]
-
-            symbol = meta.get("symbol", "")
-            price = meta.get("iep", 0)
-            change = meta.get("pChange", 0)
-
-            if (
-                price > 100 and
-                abs(change) > 1.2 and
-                symbol.isalpha()
-            ):
-                stocks.append((symbol, change, price))
-
-        except:
+    for channel in CHANNELS:
+        if not channel:
             continue
 
-    stocks = sorted(stocks, key=lambda x: x[1], reverse=True)
+        payload = {
+            "chat_id": channel,
+            "text": message,
+            "parse_mode": "Markdown"
+        }
 
-    gainers = [s for s in stocks if s[1] > 0][:5]
-    losers = [s for s in stocks if s[1] < 0][:5]
-
-    return gainers, losers
+        try:
+            requests.post(url, data=payload, timeout=10)
+        except:
+            continue
 
 # ============================
 # GLOBAL SENTIMENT
 # ============================
 def get_global_sentiment():
     try:
-        nifty = yf.Ticker("^NSEI").history(period="1d")
         dow = yf.Ticker("^DJI").history(period="1d")
         nasdaq = yf.Ticker("^IXIC").history(period="1d")
+        sp500 = yf.Ticker("^GSPC").history(period="1d")
 
         score = 0
 
@@ -87,7 +49,7 @@ def get_global_sentiment():
             score += 1
         if not nasdaq.empty and nasdaq["Close"].iloc[-1] > nasdaq["Open"].iloc[-1]:
             score += 1
-        if not nifty.empty and nifty["Close"].iloc[-1] > nifty["Open"].iloc[-1]:
+        if not sp500.empty and sp500["Close"].iloc[-1] > sp500["Open"].iloc[-1]:
             score += 1
 
         if score >= 2:
@@ -101,62 +63,80 @@ def get_global_sentiment():
         return "NEUTRAL"
 
 # ============================
-# NIFTY FUTURES (SIMPLIFIED)
+# NIFTY ANALYSIS
 # ============================
 def get_nifty_bias():
     try:
         nifty = yf.Ticker("^NSEI").history(period="2d")
 
         if len(nifty) < 2:
-            return "SIDEWAYS"
+            return "SIDEWAYS", 0
 
         prev_close = nifty["Close"].iloc[-2]
-        today_price = nifty["Close"].iloc[-1]
+        last_price = nifty["Close"].iloc[-1]
 
-        change = ((today_price - prev_close) / prev_close) * 100
+        change = ((last_price - prev_close) / prev_close) * 100
 
         if change > 0.3:
-            return "BULLISH"
+            return "BULLISH", change
         elif change < -0.3:
-            return "BEARISH"
+            return "BEARISH", change
         else:
-            return "SIDEWAYS"
+            return "SIDEWAYS", change
 
     except:
-        return "UNKNOWN"
+        return "UNKNOWN", 0
 
 # ============================
-# CREATE MESSAGE
+# BANKNIFTY ANALYSIS
 # ============================
-def create_message(gainers, losers, sentiment, bias):
-    msg = "📊 *PRE-MARKET INTELLIGENCE REPORT*\n\n"
+def get_banknifty_bias():
+    try:
+        banknifty = yf.Ticker("^NSEBANK").history(period="2d")
 
-    # Global
-    msg += f"🌍 Global Sentiment: *{sentiment}*\n\n"
+        if len(banknifty) < 2:
+            return "SIDEWAYS", 0
 
-    # Nifty
-    msg += f"📈 NIFTY Bias: *{bias}*\n\n"
+        prev_close = banknifty["Close"].iloc[-2]
+        last_price = banknifty["Close"].iloc[-1]
 
-    # Gainers
-    if gainers:
-        msg += "🚀 *Top Positive Movers*\n"
-        for s in gainers:
-            msg += f"• {s[0]} (+{s[1]:.2f}%) | ₹{s[2]}\n"
+        change = ((last_price - prev_close) / prev_close) * 100
 
-    # Losers
-    if losers:
-        msg += "\n🔻 *Top Negative Movers*\n"
-        for s in losers:
-            msg += f"• {s[0]} ({s[1]:.2f}%) | ₹{s[2]}\n"
+        if change > 0.4:
+            return "BULLISH", change
+        elif change < -0.4:
+            return "BEARISH", change
+        else:
+            return "SIDEWAYS", change
 
-    # Insight
-    msg += "\n\n📦 Observation:\n"
-    msg += "Pre-open movers indicate early market participation.\n"
-    msg += "Watch price behavior after market open.\n"
+    except:
+        return "UNKNOWN", 0
+
+# ============================
+# BUILD MESSAGE (PURE PREDICTION)
+# ============================
+def create_message(global_sentiment, nifty_bias, nifty_change, bank_bias, bank_change):
+
+    msg = "🌅 *PRE-MARKET MARKET OUTLOOK*\n\n"
+
+    msg += f"🌍 *Global Sentiment:* {global_sentiment}\n\n"
+
+    msg += f"📈 *NIFTY Bias:* {nifty_bias} ({nifty_change:.2f}%)\n"
+    msg += f"🏦 *BANKNIFTY Bias:* {bank_bias} ({bank_change:.2f}%)\n\n"
+
+    msg += "📊 *Interpretation:*\n"
+
+    if global_sentiment == "BULLISH" and nifty_bias == "BULLISH":
+        msg += "Market structure indicates strength. Buyers likely active.\n"
+    elif global_sentiment == "BEARISH" and nifty_bias == "BEARISH":
+        msg += "Weak global cues. Selling pressure possible.\n"
+    else:
+        msg += "Mixed signals. Expect volatile or sideways open.\n"
+
+    msg += "\n⚠️ *Note:*\n"
+    msg += "This is data-based market analysis for educational purposes only.\n"
 
     msg += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
-
-    msg += "\n\n⚠️ Informational data only. Not a trading recommendation."
 
     return msg
 
@@ -165,20 +145,22 @@ def create_message(gainers, losers, sentiment, bias):
 # ============================
 if __name__ == "__main__":
     try:
-        data = fetch_preopen_data()
+        global_sentiment = get_global_sentiment()
 
-        if not data:
-            raise Exception("No NSE data")
+        nifty_bias, nifty_change = get_nifty_bias()
+        bank_bias, bank_change = get_banknifty_bias()
 
-        gainers, losers = process_preopen(data)
-        sentiment = get_global_sentiment()
-        bias = get_nifty_bias()
-
-        message = create_message(gainers, losers, sentiment, bias)
+        message = create_message(
+            global_sentiment,
+            nifty_bias,
+            nifty_change,
+            bank_bias,
+            bank_change
+        )
 
         send_telegram(message)
 
-        print("✅ Pre-market intelligence sent")
+        print("✅ Market outlook sent successfully")
 
     except Exception as e:
         print(f"❌ Error: {e}")
