@@ -1,5 +1,6 @@
 import requests
 import os
+import time
 from datetime import datetime
 import yfinance as yf
 
@@ -42,25 +43,29 @@ def send_telegram(message):
 
         except Exception as e:
             print(f"❌ Error sending to {channel}: {e}")
-            
+
 
 # ============================
-# GLOBAL SENTIMENT
+# GLOBAL SENTIMENT (SAFE MODE)
 # ============================
 def get_global_sentiment():
     try:
-        dow = yf.Ticker("^DJI").history(period="1d")
-        nasdaq = yf.Ticker("^IXIC").history(period="1d")
-        sp500 = yf.Ticker("^GSPC").history(period="1d")
-
+        tickers = ["^DJI", "^IXIC", "^GSPC"]
         score = 0
+        success = 0
 
-        if not dow.empty and dow["Close"].iloc[-1] > dow["Open"].iloc[-1]:
-            score += 1
-        if not nasdaq.empty and nasdaq["Close"].iloc[-1] > nasdaq["Open"].iloc[-1]:
-            score += 1
-        if not sp500.empty and sp500["Close"].iloc[-1] > sp500["Open"].iloc[-1]:
-            score += 1
+        for t in tickers:
+            try:
+                df = yf.Ticker(t).history(period="1d")
+                if df is not None and not df.empty:
+                    success += 1
+                    if df["Close"].iloc[-1] > df["Open"].iloc[-1]:
+                        score += 1
+            except:
+                continue
+
+        if success == 0:
+            return "NEUTRAL", 0
 
         if score == 3:
             return "STRONG BULLISH", score
@@ -77,39 +82,41 @@ def get_global_sentiment():
 
 
 # ============================
-# INDEX DATA
+# INDEX DATA (WITH RETRY)
 # ============================
 def get_index_data(symbol):
-    try:
-        df = yf.Ticker(symbol).history(period="2d")
+    for attempt in range(3):
+        try:
+            df = yf.Ticker(symbol).history(period="2d")
 
-        if len(df) < 2:
-            print(f"❌ Not enough data for {symbol}")
-            return None
+            if df is not None and not df.empty and len(df) >= 2:
+                prev = df.iloc[-2]
+                current = df.iloc[-1]
 
-        prev = df.iloc[-2]
-        current = df.iloc[-1]
+                prev_close = prev["Close"]
+                high = prev["High"]
+                low = prev["Low"]
 
-        prev_close = prev["Close"]
-        high = prev["High"]
-        low = prev["Low"]
+                change = ((current["Close"] - prev_close) / prev_close) * 100
 
-        change = ((current["Close"] - prev_close) / prev_close) * 100
+                return {
+                    "prev_close": prev_close,
+                    "high": high,
+                    "low": low,
+                    "change": change
+                }
 
-        return {
-            "prev_close": prev_close,
-            "high": high,
-            "low": low,
-            "change": change
-        }
+        except Exception as e:
+            print(f"⚠️ Retry {attempt+1} failed for {symbol}: {e}")
 
-    except Exception as e:
-        print(f"❌ Index Error ({symbol}):", e)
-        return None
+        time.sleep(2)
+
+    print(f"❌ Not enough data for {symbol}")
+    return None
 
 
 # ============================
-# BIAS LOGIC
+# BIAS
 # ============================
 def get_bias(change):
     if change > 0.4:
@@ -125,10 +132,8 @@ def get_bias(change):
 # ============================
 def get_opening_range(prev_close, high, low):
     range_size = high - low
-
     low_range = prev_close - (range_size * 0.25)
     high_range = prev_close + (range_size * 0.25)
-
     return round(low_range), round(high_range), range_size
 
 
@@ -216,7 +221,7 @@ def create_message(sentiment, sentiment_score, nifty, banknifty):
 
 
 # ============================
-# MAIN
+# MAIN (FAIL-SAFE)
 # ============================
 if __name__ == "__main__":
     try:
@@ -227,8 +232,12 @@ if __name__ == "__main__":
         nifty = get_index_data("^NSEI")
         banknifty = get_index_data("^NSEBANK")
 
+        # ✅ FAIL SAFE MESSAGE
         if not nifty or not banknifty:
-            raise Exception("Index data missing")
+            fallback_msg = "⚠️ Market data temporarily unavailable.\n\nPlease wait for next update."
+            send_telegram(fallback_msg)
+            print("❌ Data missing - fallback message sent")
+            exit()
 
         message = create_message(sentiment, score, nifty, banknifty)
 
