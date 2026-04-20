@@ -20,80 +20,47 @@ def send_telegram(message):
 
 
 # ============================
-# NSE PRE-OPEN FETCH
+# FETCH NSE PRE-OPEN
 # ============================
 def fetch_preopen_data():
     url = "https://www.nseindia.com/api/market-data-pre-open?key=NIFTY"
 
     headers = {
         "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://www.nseindia.com/",
-        "Connection": "keep-alive"
+        "Accept": "application/json",
+        "Referer": "https://www.nseindia.com/"
     }
 
     session = requests.Session()
-
-    # Important: Load homepage first (cookie setup)
     session.get("https://www.nseindia.com", headers=headers)
     time.sleep(1)
 
-    for _ in range(3):
-        try:
-            res = session.get(url, headers=headers, timeout=10)
-
-            if res.status_code == 200:
-                return res.json().get("data", [])
-
-            time.sleep(2)
-
-        except:
-            time.sleep(2)
+    try:
+        res = session.get(url, headers=headers, timeout=10)
+        if res.status_code == 200:
+            return res.json().get("data", [])
+    except:
+        pass
 
     return []
 
 
 # ============================
-# TRADE LOGIC (ENTRY/SL/TARGET)
+# TRADE GENERATOR
 # ============================
 def generate_trade(symbol, change, price):
-    try:
-        if change > 0:
-            # Bullish
-            entry = price * 1.002
-            sl = price * 0.995
-            target = price * 1.015
-            side = "BUY"
-            confidence = min(90, abs(change) * 10)
-
-        else:
-            # Bearish
-            entry = price * 0.998
-            sl = price * 1.005
-            target = price * 0.985
-            side = "SELL"
-            confidence = min(90, abs(change) * 10)
-
-        return {
-            "symbol": symbol,
-            "side": side,
-            "entry": round(entry, 2),
-            "sl": round(sl, 2),
-            "target": round(target, 2),
-            "change": round(change, 2),
-            "confidence": int(confidence)
-        }
-
-    except:
-        return None
+    if change > 0:
+        return f"{symbol} (BUY) | ₹{price} | +{change:.2f}%"
+    else:
+        return f"{symbol} (SELL) | ₹{price} | {change:.2f}%"
 
 
 # ============================
-# PROCESS DATA (FILTERED)
+# PROCESS
 # ============================
 def process_data(data):
-    trades = []
+    strong = []
+    weak = []
 
     for item in data:
         try:
@@ -103,52 +70,60 @@ def process_data(data):
             price = meta.get("iep", 0)
             change = meta.get("pChange", 0)
 
-            # ✅ FILTERS (VERY IMPORTANT)
-            if (
-                price > 100 and
-                abs(change) > 1.5 and
-                symbol.isalpha()
-            ):
-                trade = generate_trade(symbol, change, price)
-                if trade:
-                    trades.append(trade)
+            if not symbol.isalpha() or price <= 0:
+                continue
+
+            # Strong movers
+            if price > 100 and abs(change) > 1.5:
+                strong.append((symbol, change, price))
+
+            # Weak movers (fallback)
+            elif abs(change) > 0.5:
+                weak.append((symbol, change, price))
 
         except:
             continue
 
-    # Sort strongest first
-    trades = sorted(trades, key=lambda x: abs(x["change"]), reverse=True)
+    strong = sorted(strong, key=lambda x: abs(x[1]), reverse=True)[:5]
+    weak = sorted(weak, key=lambda x: abs(x[1]), reverse=True)[:5]
 
-    return trades[:8]
+    return strong, weak, len(data)
 
 
 # ============================
-# FORMAT MESSAGE
+# MESSAGE
 # ============================
-def create_message(trades):
-    msg = "📊 *PRE-MARKET TRADE SIGNALS (NSE)*\n\n"
+def create_message(strong, weak, total):
+    msg = "📊 *PRE-MARKET SCANNER (NSE DATA)*\n\n"
 
-    if not trades:
-        return "⚠️ No strong setups found today."
+    msg += f"📡 Stocks Scanned: {total}\n"
+    msg += f"📍 Source: NSE Pre-Open Market\n\n"
 
-    for t in trades:
-        msg += (
-            f"🔹 *{t['symbol']}* ({t['side']})\n"
-            f"Entry: ₹{t['entry']}\n"
-            f"SL: ₹{t['sl']}\n"
-            f"Target: ₹{t['target']}\n"
-            f"Move: {t['change']}%\n"
-            f"Confidence: {t['confidence']}%\n\n"
-        )
+    if strong:
+        msg += "🚀 *Strong Movers (Trade Focus)*\n"
+        for s in strong:
+            msg += f"• {generate_trade(*s)}\n"
+    else:
+        msg += "⚠️ No strong movers today\n"
 
-    msg += "⚠️ *Wait for confirmation after 9:20 AM*\n"
+    if weak:
+        msg += "\n📉 *Weak Movers (Watchlist)*\n"
+        for s in weak:
+            msg += f"• {generate_trade(*s)}\n"
+
+    msg += "\n\n🧠 Market Insight:\n"
+    if not strong:
+        msg += "Low volatility — avoid aggressive trades\n"
+    else:
+        msg += "Momentum present — watch breakouts after 9:20\n"
+
     msg += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
 
     return msg
 
 
 # ============================
-# MAIN RUN
+# MAIN
 # ============================
 if __name__ == "__main__":
     try:
@@ -157,13 +132,13 @@ if __name__ == "__main__":
         if not data:
             raise Exception("No data from NSE")
 
-        trades = process_data(data)
+        strong, weak, total = process_data(data)
 
-        message = create_message(trades)
+        message = create_message(strong, weak, total)
 
         send_telegram(message)
 
-        print("✅ Signals sent successfully")
+        print("✅ Sent successfully")
 
     except Exception as e:
         print(f"❌ Error: {e}")
