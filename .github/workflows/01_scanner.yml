@@ -2,24 +2,49 @@ name: Omkar Trade Desk Scanner
 
 on:
   schedule:
-    - cron: '5 3 * * 1-5'        # 9:05 AM IST – NSE pre-open data
-    - cron: '*/30 4-10 * * 1-5'   # Every 30 min 9:30 AM – 3:30 PM IST
-    - cron: '30 10 * * 1-5'       # End of day report at 4:00 PM IST
+    # 9:05 AM IST (3:35 UTC)
+    - cron: '35 3 * * 1-5'
+    
+    # Every 30 min during market hours (9:30 AM – 3:30 PM IST)
+    - cron: '0,30 4-10 * * 1-5'
+    
+    # 4:00 PM IST (10:30 UTC)
+    - cron: '30 10 * * 1-5'
+
   workflow_dispatch:
 
 jobs:
   scan:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - name: Setup Python
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-      - name: Run Master Scanner
+
+      - name: 📦 Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 🕒 Debug Time (UTC + IST)
+        run: |
+          echo "UTC Time:"
+          date -u
+          echo "IST Time:"
+          TZ="Asia/Kolkata" date
+
+      - name: 📂 Verify Files
+        run: |
+          echo "Project Structure:"
+          ls -R
+
+      - name: 🚀 Run Master Scanner
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           KITE_API_KEY: ${{ secrets.KITE_API_KEY }}
@@ -27,10 +52,22 @@ jobs:
           ZERODHA_USER_ID: ${{ secrets.ZERODHA_USER_ID }}
           ZERODHA_PASSWORD: ${{ secrets.ZERODHA_PASSWORD }}
           ZERODHA_TOTP_SECRET: ${{ secrets.ZERODHA_TOTP_SECRET }}
-          # Your four channel secrets
+
           CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
           CHANNEL_FREE_SIGNALS: ${{ secrets.CHANNEL_FREE_SIGNALS }}
           CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
           CHANNEL_PREMIUM_ELITE: ${{ secrets.CHANNEL_PREMIUM_ELITE }}
+
           PYTHONUNBUFFERED: "1"
-        run: python src/scanner/master_scanner.py
+
+        run: |
+          echo "Starting Scanner..."
+          python -u src/scanner/master_scanner.py
+
+      - name: ✅ Job Completed
+        if: success()
+        run: echo "Scanner completed successfully"
+
+      - name: ❌ Job Failed
+        if: failure()
+        run: echo "Scanner failed! Check logs above."
