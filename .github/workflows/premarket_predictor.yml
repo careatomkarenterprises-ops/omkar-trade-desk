@@ -1,0 +1,43 @@
+name: Pre-Market Intelligence Engine
+
+on:
+  schedule:
+    # Runs Monday to Friday at 8:55 AM IST
+    - cron: '25 3 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  run-premarket:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: 📦 Install Dependencies
+        run: pip install -r requirements.txt
+
+      - name: ⚙️ Run Pre-Market Predictor
+        run: python src/scanner/premarket_predictor.py
+
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
+
+          # Zerodha (for futures + volume logic)
+          KITE_API_KEY: ${{ secrets.KITE_API_KEY }}
+          KITE_ACCESS_TOKEN: ${{ secrets.KITE_ACCESS_TOKEN }}
+
+          # Optional (if used in your script)
+          ZERODHA_USER_ID: ${{ secrets.ZERODHA_USER_ID }}
+          ZERODHA_PASSWORD: ${{ secrets.ZERODHA_PASSWORD }}
+          ZERODHA_TOTP_SECRET: ${{ secrets.ZERODHA_TOTP_SECRET }}
+
+      - name: ✅ Done
+        run: echo "Pre-market intelligence executed successfully"
