@@ -120,9 +120,11 @@ class NewsAggregator:
                        f"🔍 **Source:** {item['source']}\n"
                        f"⚠️ Educational purpose only.")
 
-            send_message("free_signals", message)
-            send_message("premium", message)
-            send_message("premium_elite", message)
+            # Send to your 4 channels (as per blueprint)
+            send_message("free_main", message)      # @OmkarTradeDesk
+            send_message("free_signals", message)   # @OmkarEducation
+            send_message("premium", message)        # @Omkar_Pro
+            send_message("premium_elite", message)  # @OmkarElite
             logger.info(f"Posted news: {item['title'][:50]}...")
 
 if __name__ == "__main__":
