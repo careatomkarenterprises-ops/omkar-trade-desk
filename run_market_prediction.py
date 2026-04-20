@@ -13,27 +13,27 @@ CHANNELS = [
 ]
 
 # ============================
-# TELEGRAM
+# TELEGRAM (MULTI CHANNEL SAFE)
 # ============================
 def send_telegram(message):
     for channel in CHANNELS:
         if not channel:
             continue
 
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        payload = {
-            "chat_id": channel,
-            "text": message,
-            "parse_mode": "Markdown"
-        }
-
         try:
+            url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+            payload = {
+                "chat_id": channel,
+                "text": message,
+                "parse_mode": "Markdown"
+            }
             requests.post(url, data=payload, timeout=10)
         except:
             continue
 
+
 # ============================
-# GLOBAL SENTIMENT
+# GLOBAL SENTIMENT (STRONGER)
 # ============================
 def get_global_sentiment():
     try:
@@ -50,18 +50,21 @@ def get_global_sentiment():
         if not sp500.empty and sp500["Close"].iloc[-1] > sp500["Open"].iloc[-1]:
             score += 1
 
-        if score >= 2:
-            return "BULLISH"
+        if score == 3:
+            return "STRONG BULLISH", score
+        elif score == 2:
+            return "BULLISH", score
         elif score == 1:
-            return "MIXED"
+            return "MIXED", score
         else:
-            return "BEARISH"
+            return "BEARISH", score
 
     except:
-        return "NEUTRAL"
+        return "NEUTRAL", 0
+
 
 # ============================
-# INDEX DATA (NIFTY / BANKNIFTY)
+# INDEX DATA
 # ============================
 def get_index_data(symbol):
     try:
@@ -89,19 +92,21 @@ def get_index_data(symbol):
     except:
         return None
 
+
 # ============================
-# BIAS
+# BIAS LOGIC
 # ============================
 def get_bias(change):
-    if change > 0.3:
+    if change > 0.4:
         return "BULLISH"
-    elif change < -0.3:
+    elif change < -0.4:
         return "BEARISH"
     else:
         return "SIDEWAYS"
 
+
 # ============================
-# OPENING RANGE
+# OPENING RANGE MODEL
 # ============================
 def get_opening_range(prev_close, high, low):
     range_size = high - low
@@ -111,34 +116,51 @@ def get_opening_range(prev_close, high, low):
 
     return round(low_range), round(high_range), range_size
 
+
 # ============================
-# VOLATILITY
+# VOLATILITY MODEL
 # ============================
 def get_volatility(range_size):
-    if range_size > 300:
+    if range_size > 350:
         return "HIGH"
-    elif range_size > 150:
+    elif range_size > 180:
         return "NORMAL"
     else:
         return "LOW"
+
+
+# ============================
+# CONFIDENCE ENGINE (NEW)
+# ============================
+def get_confidence(sentiment_score, nifty_bias):
+    if sentiment_score >= 2 and nifty_bias == "BULLISH":
+        return "HIGH"
+    elif sentiment_score == 0 and nifty_bias == "BEARISH":
+        return "HIGH"
+    elif sentiment_score == 1:
+        return "MEDIUM"
+    else:
+        return "LOW"
+
 
 # ============================
 # MARKET BEHAVIOR
 # ============================
 def get_behavior(sentiment, bias):
-    if sentiment == "BULLISH" and bias == "BULLISH":
+    if "BULLISH" in sentiment and bias == "BULLISH":
         return "Trend Up Day"
-    elif sentiment == "BEARISH" and bias == "BEARISH":
+    elif "BEARISH" in sentiment and bias == "BEARISH":
         return "Trend Down Day"
-    elif sentiment == "MIXED" and bias == "SIDEWAYS":
+    elif bias == "SIDEWAYS":
         return "Range-bound"
     else:
         return "Volatile / Uncertain"
 
+
 # ============================
-# MESSAGE
+# MESSAGE ENGINE (CLEAN + STRONG)
 # ============================
-def create_message(sentiment, nifty, banknifty):
+def create_message(sentiment, sentiment_score, nifty, banknifty):
     nifty_bias = get_bias(nifty["change"])
     bank_bias = get_bias(banknifty["change"])
 
@@ -150,37 +172,50 @@ def create_message(sentiment, nifty, banknifty):
     )
 
     volatility = get_volatility(n_range)
+    confidence = get_confidence(sentiment_score, nifty_bias)
     behavior = get_behavior(sentiment, nifty_bias)
 
-    msg = "🌅 *PRE-MARKET INDEX INTELLIGENCE*\n\n"
+    msg = "🌅 *PRE-MARKET INDEX INTELLIGENCE (LEVEL 3)*\n\n"
 
-    msg += f"🌍 Global Sentiment: *{sentiment}*\n\n"
+    # GLOBAL
+    msg += f"🌍 Global Sentiment: *{sentiment}*\n"
 
-    msg += "📊 Index Outlook:\n"
+    # INDEX
+    msg += "\n📊 Index Bias:\n"
     msg += f"• NIFTY: *{nifty_bias}*\n"
-    msg += f"• BANK NIFTY: *{bank_bias}*\n\n"
+    msg += f"• BANK NIFTY: *{bank_bias}*\n"
 
-    msg += "📍 Expected Opening Zone:\n"
+    # RANGE
+    msg += "\n📍 Expected Opening Zone:\n"
     msg += f"• NIFTY: {n_low} – {n_high}\n"
-    msg += f"• BANK NIFTY: {b_low} – {b_high}\n\n"
+    msg += f"• BANK NIFTY: {b_low} – {b_high}\n"
 
-    msg += f"⚡ Volatility Outlook: *{volatility}*\n\n"
+    # VOLATILITY
+    msg += f"\n⚡ Volatility: *{volatility}*\n"
 
-    msg += "📦 Market Behaviour:\n"
+    # CONFIDENCE
+    msg += f"\n🎯 Confidence Level: *{confidence}*\n"
+
+    # BEHAVIOR
+    msg += "\n📦 Market Behaviour:\n"
     msg += f"• {behavior}\n"
-    msg += "• Wait for confirmation after 9:20 AM\n"
+    msg += "• Wait for price confirmation after 9:20 AM\n"
 
+    # TIME
     msg += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
-    msg += "\n\n⚠️ Informational only. Not a trading recommendation."
+
+    # DISCLAIMER
+    msg += "\n\n⚠️ Data-driven market view for educational purposes only."
 
     return msg
+
 
 # ============================
 # MAIN
 # ============================
 if __name__ == "__main__":
     try:
-        sentiment = get_global_sentiment()
+        sentiment, score = get_global_sentiment()
 
         nifty = get_index_data("^NSEI")
         banknifty = get_index_data("^NSEBANK")
@@ -188,11 +223,11 @@ if __name__ == "__main__":
         if not nifty or not banknifty:
             raise Exception("Index data not available")
 
-        message = create_message(sentiment, nifty, banknifty)
+        message = create_message(sentiment, score, nifty, banknifty)
 
         send_telegram(message)
 
-        print("✅ Market intelligence sent")
+        print("✅ Level 3 Market Intelligence Sent")
 
     except Exception as e:
         print(f"❌ Error: {e}")
