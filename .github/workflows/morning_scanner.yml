@@ -2,7 +2,7 @@ name: Morning Scanner (Pre-Market)
 
 on:
   schedule:
-    - cron: '35 3 * * 1-5'   # 9:05 AM IST
+    - cron: '35 3 * * 1-5'
   workflow_dispatch:
 
 jobs:
@@ -28,4 +28,5 @@ jobs:
           KITE_API_KEY: ${{ secrets.KITE_API_KEY }}
           KITE_ACCESS_TOKEN: ${{ secrets.KITE_ACCESS_TOKEN }}
           CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
+          PYTHONUNBUFFERED: "1"
         run: python run_morning_scanner.py
