@@ -30,4 +30,17 @@ jobs:
           CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
           CHANNEL_PREMIUM_ELITE: ${{ secrets.CHANNEL_PREMIUM_ELITE }}
           PYTHONUNBUFFERED: "1"
-        run: python run_intraday_scanner.py
+        run: |
+          python -c "
+import sys
+import os
+sys.path.insert(0, os.getcwd())
+from src.scanner.master_scanner import MasterScanner
+s = MasterScanner()
+print('Running Intraday Scanner...')
+s.scan_intraday_fno()
+s.scan_currency()
+s.scan_commodity()
+s.post_delayed_patterns()
+print('Done')
+"
