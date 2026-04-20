@@ -35,4 +35,4 @@ jobs:
           CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
           CHANNEL_PREMIUM_ELITE: ${{ secrets.CHANNEL_PREMIUM_ELITE }}
           PYTHONUNBUFFERED: "1"
-        run: python run: python main.py
+        run: python main.py
