@@ -6,6 +6,3 @@ if __name__ == "__main__":
     scanner.scan_currency()
     scanner.scan_commodity()
     scanner.post_delayed_patterns()
-    
-if __name__ == "__main__":
-    MasterEngine().run()
