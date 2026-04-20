@@ -1,95 +1,31 @@
-import os
-from kiteconnect import KiteConnect
-from datetime import datetime
-import requests
+name: Morning Scanner (Pre-Market)
 
-# ================= CONFIG =================
-API_KEY = os.getenv("KITE_API_KEY")
-ACCESS_TOKEN = os.getenv("KITE_ACCESS_TOKEN")
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-CHANNEL = os.getenv("CHANNEL_FREE_MAIN")
+on:
+  schedule:
+    - cron: '35 3 * * 1-5'   # 9:05 AM IST
+  workflow_dispatch:
 
-# ================= TELEGRAM =================
-def send_telegram(message):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHANNEL,
-        "text": message,
-        "parse_mode": "HTML"
-    }
-    requests.post(url, data=payload)
+jobs:
+  morning:
+    runs-on: ubuntu-latest
 
-# ================= MAIN =================
-def run():
-    print("🚀 Starting Pre-Market Scanner...")
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-    kite = KiteConnect(api_key=API_KEY)
-    kite.set_access_token(ACCESS_TOKEN)
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
 
-    instruments = kite.instruments("NSE")
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
 
-    # Filter EQ stocks only
-    stocks = [i for i in instruments if i["segment"] == "NSE" and i["instrument_type"] == "EQ"]
-
-    print(f"Total Stocks: {len(stocks)}")
-
-    symbols = [f"NSE:{i['tradingsymbol']}" for i in stocks[:500]]  # limit to 500 to avoid API overload
-
-    ltp_data = kite.ltp(symbols)
-
-    gainers = []
-    losers = []
-
-    for sym, data in ltp_data.items():
-        try:
-            ohlc = data["ohlc"]
-            prev_close = ohlc["close"]
-            ltp = data["last_price"]
-
-            if prev_close == 0:
-                continue
-
-            change = ((ltp - prev_close) / prev_close) * 100
-
-            stock_name = sym.replace("NSE:", "")
-
-            if change > 2:
-                gainers.append((stock_name, change))
-
-            elif change < -2:
-                losers.append((stock_name, change))
-
-        except:
-            continue
-
-    # Sort
-    gainers = sorted(gainers, key=lambda x: x[1], reverse=True)[:10]
-    losers = sorted(losers, key=lambda x: x[1])[:10]
-
-    # ================= MESSAGE =================
-    message = f"📊 <b>PRE-MARKET SCANNER</b>\n"
-    message += f"🕒 {datetime.now().strftime('%d %b %Y %I:%M %p')}\n\n"
-
-    message += "🚀 <b>TOP GAINERS (Watch Bullish)</b>\n"
-    if gainers:
-        for s, c in gainers:
-            message += f"• {s} +{c:.2f}%\n"
-    else:
-        message += "No strong gainers\n"
-
-    message += "\n🔻 <b>TOP LOSERS (Watch Bearish)</b>\n"
-    if losers:
-        for s, c in losers:
-            message += f"• {s} {c:.2f}%\n"
-    else:
-        message += "No strong losers\n"
-
-    message += "\n⚠️ <b>Strategy:</b>\nWait for breakout above pre-market high/low before entry."
-
-    send_telegram(message)
-
-    print("✅ Pre-market scan completed & sent to Telegram")
-
-# ================= RUN =================
-if __name__ == "__main__":
-    run()
+      - name: Run Morning Scanner
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          KITE_API_KEY: ${{ secrets.KITE_API_KEY }}
+          KITE_ACCESS_TOKEN: ${{ secrets.KITE_ACCESS_TOKEN }}
+          CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
+        run: python run_morning_scanner.py
