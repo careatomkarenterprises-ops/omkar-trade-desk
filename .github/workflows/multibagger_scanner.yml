@@ -2,7 +2,7 @@ name: Multibagger Scanner (End of Day)
 
 on:
   schedule:
-    - cron: '30 10 * * 1-5'   # 4:00 PM IST
+    - cron: '30 10 * * 1-5'
   workflow_dispatch:
 
 jobs:
@@ -30,10 +30,4 @@ jobs:
           CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
           CHANNEL_PREMIUM_ELITE: ${{ secrets.CHANNEL_PREMIUM_ELITE }}
           PYTHONUNBUFFERED: "1"
-        run: python -c "
-from src.scanner.master_scanner import MasterScanner
-s = MasterScanner()
-print('📈 Running Multibagger Scanner...')
-s.scan_multibagger()
-print('✅ Multibagger scan completed')
-"
+        run: python run_multibagger_scanner.py
