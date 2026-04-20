@@ -14,10 +14,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
       - name: Install dependencies
         run: pip install -r requirements.txt
-      - name: Run Intraday Scanner
+      - name: Run scanner
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           KITE_API_KEY: ${{ secrets.KITE_API_KEY }}
@@ -29,18 +28,4 @@ jobs:
           CHANNEL_FREE_SIGNALS: ${{ secrets.CHANNEL_FREE_SIGNALS }}
           CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
           CHANNEL_PREMIUM_ELITE: ${{ secrets.CHANNEL_PREMIUM_ELITE }}
-          PYTHONUNBUFFERED: "1"
-        run: |
-          python -c "
-import sys
-import os
-sys.path.insert(0, os.getcwd())
-from src.scanner.master_scanner import MasterScanner
-s = MasterScanner()
-print('Running Intraday Scanner...')
-s.scan_intraday_fno()
-s.scan_currency()
-s.scan_commodity()
-s.post_delayed_patterns()
-print('Done')
-"
+        run: python intraday_ready.py
