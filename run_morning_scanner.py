@@ -20,7 +20,7 @@ def send_telegram(message):
 
 
 # ============================
-# FETCH NSE PRE-OPEN
+# FETCH NSE PRE-OPEN DATA
 # ============================
 def fetch_preopen_data():
     url = "https://www.nseindia.com/api/market-data-pre-open?key=NIFTY"
@@ -32,6 +32,8 @@ def fetch_preopen_data():
     }
 
     session = requests.Session()
+
+    # Load homepage to get cookies
     session.get("https://www.nseindia.com", headers=headers)
     time.sleep(1)
 
@@ -46,21 +48,11 @@ def fetch_preopen_data():
 
 
 # ============================
-# TRADE GENERATOR
-# ============================
-def generate_trade(symbol, change, price):
-    if change > 0:
-        return f"{symbol} (BUY) | ₹{price} | +{change:.2f}%"
-    else:
-        return f"{symbol} (SELL) | ₹{price} | {change:.2f}%"
-
-
-# ============================
-# PROCESS
+# PROCESS DATA (CLEAN + SAFE)
 # ============================
 def process_data(data):
     strong = []
-    weak = []
+    watchlist = []
 
     for item in data:
         try:
@@ -70,6 +62,7 @@ def process_data(data):
             price = meta.get("iep", 0)
             change = meta.get("pChange", 0)
 
+            # Basic filters
             if not symbol.isalpha() or price <= 0:
                 continue
 
@@ -77,45 +70,75 @@ def process_data(data):
             if price > 100 and abs(change) > 1.5:
                 strong.append((symbol, change, price))
 
-            # Weak movers (fallback)
-            elif abs(change) > 0.5:
-                weak.append((symbol, change, price))
+            # Medium movers
+            elif abs(change) > 0.7:
+                watchlist.append((symbol, change, price))
 
         except:
             continue
 
     strong = sorted(strong, key=lambda x: abs(x[1]), reverse=True)[:5]
-    weak = sorted(weak, key=lambda x: abs(x[1]), reverse=True)[:5]
+    watchlist = sorted(watchlist, key=lambda x: abs(x[1]), reverse=True)[:5]
 
-    return strong, weak, len(data)
+    return strong, watchlist, len(data)
 
 
 # ============================
-# MESSAGE
+# MARKET INSIGHT LOGIC
 # ============================
-def create_message(strong, weak, total):
-    msg = "📊 *PRE-MARKET SCANNER (NSE DATA)*\n\n"
+def get_market_bias(strong):
+    if not strong:
+        return "SIDEWAYS / LOW MOMENTUM"
+    
+    bullish = len([s for s in strong if s[1] > 0])
+    bearish = len([s for s in strong if s[1] < 0])
+
+    if bullish > bearish:
+        return "BULLISH BIAS"
+    elif bearish > bullish:
+        return "BEARISH BIAS"
+    else:
+        return "MIXED / SIDEWAYS"
+
+
+# ============================
+# FORMAT MESSAGE (COMPLIANT)
+# ============================
+def create_message(strong, watchlist, total):
+    msg = "📊 *PRE-MARKET MARKET INSIGHT (NSE)*\n\n"
 
     msg += f"📡 Stocks Scanned: {total}\n"
-    msg += f"📍 Source: NSE Pre-Open Market\n\n"
+    msg += f"📍 Data Source: NSE Pre-Open Market\n"
 
+    bias = get_market_bias(strong)
+    msg += f"📊 Market Bias: *{bias}*\n\n"
+
+    # Strong movers
     if strong:
-        msg += "🚀 *Strong Movers (Trade Focus)*\n"
+        msg += "🚀 *High Momentum Stocks*\n"
         for s in strong:
-            msg += f"• {generate_trade(*s)}\n"
+            direction = "Positive" if s[1] > 0 else "Negative"
+            msg += f"• {s[0]} | ₹{s[2]} | {direction} move ({s[1]:.2f}%)\n"
     else:
-        msg += "⚠️ No strong movers today\n"
+        msg += "⚠️ No high momentum stocks in pre-market\n"
 
-    if weak:
-        msg += "\n📉 *Weak Movers (Watchlist)*\n"
-        for s in weak:
-            msg += f"• {generate_trade(*s)}\n"
+    # Watchlist
+    if watchlist:
+        msg += "\n📉 *Early Watchlist (Moderate Activity)*\n"
+        for s in watchlist:
+            direction = "Positive" if s[1] > 0 else "Negative"
+            msg += f"• {s[0]} | ₹{s[2]} | {direction} ({s[1]:.2f}%)\n"
 
-    msg += "\n\n🧠 Market Insight:\n"
+    # Insight
+    msg += "\n\n🧠 *Market Insight*\n"
     if not strong:
-        msg += "Low volatility — avoid aggressive trades\n"
+        msg += "Low volatility detected. Avoid aggressive trades.\n"
     else:
-        msg += "Momentum present — watch breakouts after 9:20\n"
+        msg += "Momentum observed in select stocks. Watch for confirmation after market open.\n"
+
+    # Compliance-safe guidance
+    msg += "\n⚠️ *For educational & research purposes only.*\n"
+    msg += "Not a buy/sell recommendation.\n"
 
     msg += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
 
@@ -130,15 +153,15 @@ if __name__ == "__main__":
         data = fetch_preopen_data()
 
         if not data:
-            raise Exception("No data from NSE")
+            raise Exception("No data received from NSE")
 
-        strong, weak, total = process_data(data)
+        strong, watchlist, total = process_data(data)
 
-        message = create_message(strong, weak, total)
+        message = create_message(strong, watchlist, total)
 
         send_telegram(message)
 
-        print("✅ Sent successfully")
+        print("✅ Pre-market insight sent successfully")
 
     except Exception as e:
         print(f"❌ Error: {e}")
