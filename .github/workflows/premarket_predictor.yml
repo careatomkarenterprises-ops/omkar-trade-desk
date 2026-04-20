@@ -1,166 +1,33 @@
-import requests
-import os
-from datetime import datetime
-import yfinance as yf
+name: Pre-Market Predictor
 
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+on:
+  schedule:
+    - cron: '25 3 * * 1-5'   # 8:55 AM IST (before market opens)
+  workflow_dispatch:          # manual run button also available
 
-# ALL CHANNELS
-CHANNELS = [
-    os.getenv("CHANNEL_FREE_MAIN"),
-    os.getenv("CHANNEL_FREE_SIGNALS"),
-    os.getenv("CHANNEL_PREMIUM"),
-    os.getenv("CHANNEL_PREMIUM_ELITE"),
-]
+jobs:
+  run-predictor:
+    runs-on: ubuntu-latest
 
-# ============================
-# TELEGRAM
-# ============================
-def send_telegram(message):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    for channel in CHANNELS:
-        if not channel:
-            continue
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
 
-        payload = {
-            "chat_id": channel,
-            "text": message,
-            "parse_mode": "Markdown"
-        }
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
-        try:
-            requests.post(url, data=payload, timeout=10)
-        except:
-            continue
+      - name: Run Market Predictor
+        run: python run_market_prediction.py
 
-# ============================
-# GLOBAL SENTIMENT
-# ============================
-def get_global_sentiment():
-    try:
-        dow = yf.Ticker("^DJI").history(period="1d")
-        nasdaq = yf.Ticker("^IXIC").history(period="1d")
-        sp500 = yf.Ticker("^GSPC").history(period="1d")
-
-        score = 0
-
-        if not dow.empty and dow["Close"].iloc[-1] > dow["Open"].iloc[-1]:
-            score += 1
-        if not nasdaq.empty and nasdaq["Close"].iloc[-1] > nasdaq["Open"].iloc[-1]:
-            score += 1
-        if not sp500.empty and sp500["Close"].iloc[-1] > sp500["Open"].iloc[-1]:
-            score += 1
-
-        if score >= 2:
-            return "BULLISH"
-        elif score == 1:
-            return "MIXED"
-        else:
-            return "BEARISH"
-
-    except:
-        return "NEUTRAL"
-
-# ============================
-# NIFTY ANALYSIS
-# ============================
-def get_nifty_bias():
-    try:
-        nifty = yf.Ticker("^NSEI").history(period="2d")
-
-        if len(nifty) < 2:
-            return "SIDEWAYS", 0
-
-        prev_close = nifty["Close"].iloc[-2]
-        last_price = nifty["Close"].iloc[-1]
-
-        change = ((last_price - prev_close) / prev_close) * 100
-
-        if change > 0.3:
-            return "BULLISH", change
-        elif change < -0.3:
-            return "BEARISH", change
-        else:
-            return "SIDEWAYS", change
-
-    except:
-        return "UNKNOWN", 0
-
-# ============================
-# BANKNIFTY ANALYSIS
-# ============================
-def get_banknifty_bias():
-    try:
-        banknifty = yf.Ticker("^NSEBANK").history(period="2d")
-
-        if len(banknifty) < 2:
-            return "SIDEWAYS", 0
-
-        prev_close = banknifty["Close"].iloc[-2]
-        last_price = banknifty["Close"].iloc[-1]
-
-        change = ((last_price - prev_close) / prev_close) * 100
-
-        if change > 0.4:
-            return "BULLISH", change
-        elif change < -0.4:
-            return "BEARISH", change
-        else:
-            return "SIDEWAYS", change
-
-    except:
-        return "UNKNOWN", 0
-
-# ============================
-# BUILD MESSAGE (PURE PREDICTION)
-# ============================
-def create_message(global_sentiment, nifty_bias, nifty_change, bank_bias, bank_change):
-
-    msg = "🌅 *PRE-MARKET MARKET OUTLOOK*\n\n"
-
-    msg += f"🌍 *Global Sentiment:* {global_sentiment}\n\n"
-
-    msg += f"📈 *NIFTY Bias:* {nifty_bias} ({nifty_change:.2f}%)\n"
-    msg += f"🏦 *BANKNIFTY Bias:* {bank_bias} ({bank_change:.2f}%)\n\n"
-
-    msg += "📊 *Interpretation:*\n"
-
-    if global_sentiment == "BULLISH" and nifty_bias == "BULLISH":
-        msg += "Market structure indicates strength. Buyers likely active.\n"
-    elif global_sentiment == "BEARISH" and nifty_bias == "BEARISH":
-        msg += "Weak global cues. Selling pressure possible.\n"
-    else:
-        msg += "Mixed signals. Expect volatile or sideways open.\n"
-
-    msg += "\n⚠️ *Note:*\n"
-    msg += "This is data-based market analysis for educational purposes only.\n"
-
-    msg += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
-
-    return msg
-
-# ============================
-# MAIN
-# ============================
-if __name__ == "__main__":
-    try:
-        global_sentiment = get_global_sentiment()
-
-        nifty_bias, nifty_change = get_nifty_bias()
-        bank_bias, bank_change = get_banknifty_bias()
-
-        message = create_message(
-            global_sentiment,
-            nifty_bias,
-            nifty_change,
-            bank_bias,
-            bank_change
-        )
-
-        send_telegram(message)
-
-        print("✅ Market outlook sent successfully")
-
-    except Exception as e:
-        print(f"❌ Error: {e}")
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
+          CHANNEL_FREE_SIGNALS: ${{ secrets.CHANNEL_FREE_SIGNALS }}
+          CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
+          CHANNEL_PREMIUM_ELITE: ${{ secrets.CHANNEL_PREMIUM_ELITE }}
