@@ -61,73 +61,116 @@ def get_global_sentiment():
         return "NEUTRAL"
 
 # ============================
-# NIFTY BIAS
+# INDEX DATA (NIFTY / BANKNIFTY)
 # ============================
-def get_nifty_bias():
+def get_index_data(symbol):
     try:
-        nifty = yf.Ticker("^NSEI").history(period="2d")
+        df = yf.Ticker(symbol).history(period="2d")
 
-        if len(nifty) < 2:
-            return "SIDEWAYS"
+        if len(df) < 2:
+            return None
 
-        prev_close = nifty["Close"].iloc[-2]
-        current = nifty["Close"].iloc[-1]
+        prev = df.iloc[-2]
+        current = df.iloc[-1]
 
-        change = ((current - prev_close) / prev_close) * 100
+        prev_close = prev["Close"]
+        high = prev["High"]
+        low = prev["Low"]
 
-        if change > 0.3:
-            return "BULLISH"
-        elif change < -0.3:
-            return "BEARISH"
-        else:
-            return "SIDEWAYS"
+        change = ((current["Close"] - prev_close) / prev_close) * 100
+
+        return {
+            "prev_close": prev_close,
+            "high": high,
+            "low": low,
+            "change": change
+        }
 
     except:
-        return "UNKNOWN"
+        return None
 
 # ============================
-# BANKNIFTY BIAS
+# BIAS
 # ============================
-def get_banknifty_bias():
-    try:
-        banknifty = yf.Ticker("^NSEBANK").history(period="2d")
+def get_bias(change):
+    if change > 0.3:
+        return "BULLISH"
+    elif change < -0.3:
+        return "BEARISH"
+    else:
+        return "SIDEWAYS"
 
-        if len(banknifty) < 2:
-            return "SIDEWAYS"
+# ============================
+# OPENING RANGE
+# ============================
+def get_opening_range(prev_close, high, low):
+    range_size = high - low
 
-        prev_close = banknifty["Close"].iloc[-2]
-        current = banknifty["Close"].iloc[-1]
+    low_range = prev_close - (range_size * 0.25)
+    high_range = prev_close + (range_size * 0.25)
 
-        change = ((current - prev_close) / prev_close) * 100
+    return round(low_range), round(high_range), range_size
 
-        if change > 0.3:
-            return "BULLISH"
-        elif change < -0.3:
-            return "BEARISH"
-        else:
-            return "SIDEWAYS"
+# ============================
+# VOLATILITY
+# ============================
+def get_volatility(range_size):
+    if range_size > 300:
+        return "HIGH"
+    elif range_size > 150:
+        return "NORMAL"
+    else:
+        return "LOW"
 
-    except:
-        return "UNKNOWN"
+# ============================
+# MARKET BEHAVIOR
+# ============================
+def get_behavior(sentiment, bias):
+    if sentiment == "BULLISH" and bias == "BULLISH":
+        return "Trend Up Day"
+    elif sentiment == "BEARISH" and bias == "BEARISH":
+        return "Trend Down Day"
+    elif sentiment == "MIXED" and bias == "SIDEWAYS":
+        return "Range-bound"
+    else:
+        return "Volatile / Uncertain"
 
 # ============================
 # MESSAGE
 # ============================
-def create_message(sentiment, nifty_bias, banknifty_bias):
+def create_message(sentiment, nifty, banknifty):
+    nifty_bias = get_bias(nifty["change"])
+    bank_bias = get_bias(banknifty["change"])
+
+    n_low, n_high, n_range = get_opening_range(
+        nifty["prev_close"], nifty["high"], nifty["low"]
+    )
+    b_low, b_high, b_range = get_opening_range(
+        banknifty["prev_close"], banknifty["high"], banknifty["low"]
+    )
+
+    volatility = get_volatility(n_range)
+    behavior = get_behavior(sentiment, nifty_bias)
+
     msg = "🌅 *PRE-MARKET INDEX INTELLIGENCE*\n\n"
 
     msg += f"🌍 Global Sentiment: *{sentiment}*\n\n"
 
     msg += "📊 Index Outlook:\n"
     msg += f"• NIFTY: *{nifty_bias}*\n"
-    msg += f"• BANK NIFTY: *{banknifty_bias}*\n\n"
+    msg += f"• BANK NIFTY: *{bank_bias}*\n\n"
 
-    msg += "📦 Insight:\n"
-    msg += "• Based on global cues & index behavior\n"
-    msg += "• Use with price action confirmation after open\n"
+    msg += "📍 Expected Opening Zone:\n"
+    msg += f"• NIFTY: {n_low} – {n_high}\n"
+    msg += f"• BANK NIFTY: {b_low} – {b_high}\n\n"
+
+    msg += f"⚡ Volatility Outlook: *{volatility}*\n\n"
+
+    msg += "📦 Market Behaviour:\n"
+    msg += f"• {behavior}\n"
+    msg += "• Wait for confirmation after 9:20 AM\n"
 
     msg += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
-
     msg += "\n\n⚠️ Informational only. Not a trading recommendation."
 
     return msg
@@ -138,14 +181,18 @@ def create_message(sentiment, nifty_bias, banknifty_bias):
 if __name__ == "__main__":
     try:
         sentiment = get_global_sentiment()
-        nifty_bias = get_nifty_bias()
-        banknifty_bias = get_banknifty_bias()
 
-        message = create_message(sentiment, nifty_bias, banknifty_bias)
+        nifty = get_index_data("^NSEI")
+        banknifty = get_index_data("^NSEBANK")
+
+        if not nifty or not banknifty:
+            raise Exception("Index data not available")
+
+        message = create_message(sentiment, nifty, banknifty)
 
         send_telegram(message)
 
-        print("✅ Market prediction sent")
+        print("✅ Market intelligence sent")
 
     except Exception as e:
         print(f"❌ Error: {e}")
