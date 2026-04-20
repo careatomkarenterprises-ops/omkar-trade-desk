@@ -1,43 +1,184 @@
-name: Pre-Market Intelligence Engine
+import requests
+import os
+import time
+from datetime import datetime
+import yfinance as yf
 
-on:
-  schedule:
-    # Runs Monday to Friday at 8:55 AM IST
-    - cron: '25 3 * * 1-5'
-  workflow_dispatch:
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+CHANNEL = os.getenv("CHANNEL_FREE_MAIN")
 
-jobs:
-  run-premarket:
-    runs-on: ubuntu-latest
+# ============================
+# TELEGRAM
+# ============================
+def send_telegram(message):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": CHANNEL,
+        "text": message,
+        "parse_mode": "Markdown"
+    }
+    requests.post(url, data=payload)
 
-    steps:
-      - name: 📥 Checkout Repository
-        uses: actions/checkout@v4
+# ============================
+# NSE PRE-OPEN DATA
+# ============================
+def fetch_preopen_data():
+    url = "https://www.nseindia.com/api/market-data-pre-open?key=NIFTY"
 
-      - name: 🐍 Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: "pip"
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json",
+        "Referer": "https://www.nseindia.com/",
+    }
 
-      - name: 📦 Install Dependencies
-        run: pip install -r requirements.txt
+    session = requests.Session()
+    session.get("https://www.nseindia.com", headers=headers)
+    time.sleep(1)
 
-      - name: ⚙️ Run Pre-Market Predictor
-        run: python src/scanner/premarket_predictor.py
+    try:
+        res = session.get(url, headers=headers, timeout=10)
+        return res.json().get("data", [])
+    except:
+        return []
 
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
+# ============================
+# PROCESS PRE-OPEN
+# ============================
+def process_preopen(data):
+    stocks = []
 
-          # Zerodha (for futures + volume logic)
-          KITE_API_KEY: ${{ secrets.KITE_API_KEY }}
-          KITE_ACCESS_TOKEN: ${{ secrets.KITE_ACCESS_TOKEN }}
+    for item in data:
+        try:
+            meta = item["metadata"]
 
-          # Optional (if used in your script)
-          ZERODHA_USER_ID: ${{ secrets.ZERODHA_USER_ID }}
-          ZERODHA_PASSWORD: ${{ secrets.ZERODHA_PASSWORD }}
-          ZERODHA_TOTP_SECRET: ${{ secrets.ZERODHA_TOTP_SECRET }}
+            symbol = meta.get("symbol", "")
+            price = meta.get("iep", 0)
+            change = meta.get("pChange", 0)
 
-      - name: ✅ Done
-        run: echo "Pre-market intelligence executed successfully"
+            if (
+                price > 100 and
+                abs(change) > 1.2 and
+                symbol.isalpha()
+            ):
+                stocks.append((symbol, change, price))
+
+        except:
+            continue
+
+    stocks = sorted(stocks, key=lambda x: x[1], reverse=True)
+
+    gainers = [s for s in stocks if s[1] > 0][:5]
+    losers = [s for s in stocks if s[1] < 0][:5]
+
+    return gainers, losers
+
+# ============================
+# GLOBAL SENTIMENT
+# ============================
+def get_global_sentiment():
+    try:
+        nifty = yf.Ticker("^NSEI").history(period="1d")
+        dow = yf.Ticker("^DJI").history(period="1d")
+        nasdaq = yf.Ticker("^IXIC").history(period="1d")
+
+        score = 0
+
+        if not dow.empty and dow["Close"].iloc[-1] > dow["Open"].iloc[-1]:
+            score += 1
+        if not nasdaq.empty and nasdaq["Close"].iloc[-1] > nasdaq["Open"].iloc[-1]:
+            score += 1
+        if not nifty.empty and nifty["Close"].iloc[-1] > nifty["Open"].iloc[-1]:
+            score += 1
+
+        if score >= 2:
+            return "BULLISH"
+        elif score == 1:
+            return "MIXED"
+        else:
+            return "BEARISH"
+
+    except:
+        return "NEUTRAL"
+
+# ============================
+# NIFTY FUTURES (SIMPLIFIED)
+# ============================
+def get_nifty_bias():
+    try:
+        nifty = yf.Ticker("^NSEI").history(period="2d")
+
+        if len(nifty) < 2:
+            return "SIDEWAYS"
+
+        prev_close = nifty["Close"].iloc[-2]
+        today_price = nifty["Close"].iloc[-1]
+
+        change = ((today_price - prev_close) / prev_close) * 100
+
+        if change > 0.3:
+            return "BULLISH"
+        elif change < -0.3:
+            return "BEARISH"
+        else:
+            return "SIDEWAYS"
+
+    except:
+        return "UNKNOWN"
+
+# ============================
+# CREATE MESSAGE
+# ============================
+def create_message(gainers, losers, sentiment, bias):
+    msg = "📊 *PRE-MARKET INTELLIGENCE REPORT*\n\n"
+
+    # Global
+    msg += f"🌍 Global Sentiment: *{sentiment}*\n\n"
+
+    # Nifty
+    msg += f"📈 NIFTY Bias: *{bias}*\n\n"
+
+    # Gainers
+    if gainers:
+        msg += "🚀 *Top Positive Movers*\n"
+        for s in gainers:
+            msg += f"• {s[0]} (+{s[1]:.2f}%) | ₹{s[2]}\n"
+
+    # Losers
+    if losers:
+        msg += "\n🔻 *Top Negative Movers*\n"
+        for s in losers:
+            msg += f"• {s[0]} ({s[1]:.2f}%) | ₹{s[2]}\n"
+
+    # Insight
+    msg += "\n\n📦 Observation:\n"
+    msg += "Pre-open movers indicate early market participation.\n"
+    msg += "Watch price behavior after market open.\n"
+
+    msg += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
+
+    msg += "\n\n⚠️ Informational data only. Not a trading recommendation."
+
+    return msg
+
+# ============================
+# MAIN
+# ============================
+if __name__ == "__main__":
+    try:
+        data = fetch_preopen_data()
+
+        if not data:
+            raise Exception("No NSE data")
+
+        gainers, losers = process_preopen(data)
+        sentiment = get_global_sentiment()
+        bias = get_nifty_bias()
+
+        message = create_message(gainers, losers, sentiment, bias)
+
+        send_telegram(message)
+
+        print("✅ Pre-market intelligence sent")
+
+    except Exception as e:
+        print(f"❌ Error: {e}")
