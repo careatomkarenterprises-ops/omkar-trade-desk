@@ -2,37 +2,39 @@ name: Omkar Trade Desk Scanner
 
 on:
   schedule:
-    # 9:05 AM IST (3:35 UTC)
+    # 9:05 AM IST – Pre-market (3:35 UTC)
     - cron: '35 3 * * 1-5'
-    
     # Every 30 min during market hours (9:30 AM – 3:30 PM IST)
     - cron: '*/30 4-10 * * 1-5'
-    
-    # 4:00 PM IST (10:30 UTC)
+    # 4:00 PM IST – End of day (10:30 UTC)
     - cron: '30 10 * * 1-5'
-
   workflow_dispatch:
 
 jobs:
   scan:
     runs-on: ubuntu-latest
-
     steps:
-      - name: 📥 Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: 🐍 Setup Python
+      - uses: actions/checkout@v4
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
-
-      - name: 📦 Install Dependencies
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      
+      - name: Debug – Check FNO CSV
         run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: 🚀 Run Master Scanner
+          if [ -f fno_stocks.csv ]; then
+            echo "✅ fno_stocks.csv exists"
+            echo "First 5 symbols:"
+            head -5 fno_stocks.csv
+          else
+            echo "❌ fno_stocks.csv NOT FOUND – using fallback list"
+          fi
+      
+      - name: Run Master Scanner (Market Hours)
+        if: github.event.schedule == '*/30 4-10 * * 1-5' || github.event_name == 'workflow_dispatch'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           KITE_API_KEY: ${{ secrets.KITE_API_KEY }}
@@ -46,3 +48,20 @@ jobs:
           CHANNEL_PREMIUM_ELITE: ${{ secrets.CHANNEL_PREMIUM_ELITE }}
           PYTHONUNBUFFERED: "1"
         run: python -u src/scanner/master_scanner.py
+      
+      - name: Run Pre-market Only (9:05 AM IST)
+        if: github.event.schedule == '35 3 * * 1-5'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          KITE_API_KEY: ${{ secrets.KITE_API_KEY }}
+          KITE_ACCESS_TOKEN: ${{ secrets.KITE_ACCESS_TOKEN }}
+          CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
+        run: python -c "from src.scanner.master_scanner import MasterScanner; MasterScanner().scan_premarket_gap(); MasterScanner().scan_nse_preopen_top_bottom()"
+      
+      - name: Run End of Day Report
+        if: github.event.schedule == '30 10 * * 1-5'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          RAZORPAY_LINK: ${{ secrets.RAZORPAY_LINK }}
+          CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
+        run: python src/marketing/promotion_engine.py
