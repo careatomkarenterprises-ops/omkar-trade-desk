@@ -1,8 +1,8 @@
-name: Morning Scanner (Pre-Market & Bulk Orders)
+name: Morning Scanner (Pre-Market)
 
 on:
   schedule:
-    - cron: '35 3 * * 1-5'   # 9:05 AM IST
+    - cron: '35 3 * * 1-5'
   workflow_dispatch:
 
 jobs:
@@ -30,12 +30,4 @@ jobs:
           CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
           CHANNEL_PREMIUM_ELITE: ${{ secrets.CHANNEL_PREMIUM_ELITE }}
           PYTHONUNBUFFERED: "1"
-        run: python -c "
-from src.scanner.master_scanner import MasterScanner
-s = MasterScanner()
-print('🔆 Running Morning Scanner (Pre-Market & Bulk Orders)...')
-s.scan_premarket_gap()
-s.scan_nse_preopen_top_bottom()
-s.scan_preopen_top_bottom_fno()
-print('✅ Morning scan completed')
-"
+        run: python run_morning_scanner.py
