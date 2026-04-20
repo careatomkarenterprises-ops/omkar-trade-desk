@@ -8,15 +8,21 @@ on:
 jobs:
   intraday:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install dependencies
+          cache: 'pip'
+
+      - name: Install Dependencies
         run: pip install -r requirements.txt
-      - name: Run scanner
+
+      - name: Run Intraday Scanner
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           KITE_API_KEY: ${{ secrets.KITE_API_KEY }}
@@ -28,4 +34,5 @@ jobs:
           CHANNEL_FREE_SIGNALS: ${{ secrets.CHANNEL_FREE_SIGNALS }}
           CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
           CHANNEL_PREMIUM_ELITE: ${{ secrets.CHANNEL_PREMIUM_ELITE }}
-        run: python intraday_ready.py
+          PYTHONUNBUFFERED: "1"
+        run: python run_intraday_ready.py
