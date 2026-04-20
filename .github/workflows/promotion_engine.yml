@@ -1,0 +1,25 @@
+name: Daily Performance Report
+
+on:
+  schedule:
+    - cron: '35 10 * * 1-5'   # 4:05 PM IST (after multibagger)
+  workflow_dispatch:
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run Promotion Engine
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          RAZORPAY_LINK: ${{ secrets.RAZORPAY_LINK }}
+          CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
+        run: python src/marketing/promotion_engine.py
