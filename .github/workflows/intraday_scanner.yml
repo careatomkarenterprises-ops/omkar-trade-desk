@@ -2,7 +2,7 @@ name: Intraday Scanner (Every 30 Min)
 
 on:
   schedule:
-    - cron: '*/30 4-10 * * 1-5'   # Every 30 min from 9:30 AM to 3:30 PM IST
+    - cron: '*/30 4-10 * * 1-5'
   workflow_dispatch:
 
 jobs:
@@ -30,13 +30,4 @@ jobs:
           CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
           CHANNEL_PREMIUM_ELITE: ${{ secrets.CHANNEL_PREMIUM_ELITE }}
           PYTHONUNBUFFERED: "1"
-        run: python -c "
-from src.scanner.master_scanner import MasterScanner
-s = MasterScanner()
-print('🔄 Running Intraday Scanner...')
-s.scan_intraday_fno()
-s.scan_currency()
-s.scan_commodity()
-s.post_delayed_patterns()
-print('✅ Intraday scan completed')
-"
+        run: python run_intraday_scanner.py
