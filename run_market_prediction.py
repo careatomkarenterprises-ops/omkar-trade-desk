@@ -1,224 +1,99 @@
-import requests
-import os
-from datetime import datetime, timedelta
-from kiteconnect import KiteConnect
+import logging
+from datetime import datetime
 
-# ============================
-# ENV VARIABLES
-# ============================
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-KITE_API_KEY = os.getenv("KITE_API_KEY")
-KITE_ACCESS_TOKEN = os.getenv("KITE_ACCESS_TOKEN")
+from src.scanner.global_market_engine import GlobalMarketEngine
+from src.scanner.premarket_engine import PreMarketEngine
+from src.telegram.telegram_report_engine import TelegramReportEngine
 
-CHANNELS = [
-    os.getenv("CHANNEL_FREE_MAIN"),
-    os.getenv("CHANNEL_FREE_SIGNALS"),
-    os.getenv("CHANNEL_PREMIUM"),
-    os.getenv("CHANNEL_PREMIUM_ELITE"),
-]
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# ============================
-# INIT KITE
-# ============================
-kite = KiteConnect(api_key=KITE_API_KEY)
-kite.set_access_token(KITE_ACCESS_TOKEN)
 
-# Instrument Tokens
-NIFTY_TOKEN = 256265
-BANKNIFTY_TOKEN = 260105
+class SafePreMarketPredictor:
 
-# ============================
-# TELEGRAM
-# ============================
-def send_telegram(message):
-    if not BOT_TOKEN:
-        print("❌ Missing TELEGRAM_BOT_TOKEN")
-        return
+    def __init__(self):
+        self.global_engine = GlobalMarketEngine()
+        self.premarket_engine = PreMarketEngine()
+        self.telegram = TelegramReportEngine()
 
-    for channel in CHANNELS:
-        if not channel:
-            continue
-
+    # ============================
+    # SIMPLE MARKET CONTEXT LAYER
+    # ============================
+    def derive_market_context(self, global_data):
         try:
-            url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-            payload = {
-                "chat_id": channel,
-                "text": message,
-                "parse_mode": "Markdown"
+            bias = global_data.get("overall_bias", "NEUTRAL")
+            volatility = global_data.get("volatility", "NORMAL")
+
+            if bias == "BULLISH" and volatility == "HIGH":
+                state = "TRENDING BULLISH + VOLATILE"
+            elif bias == "BEARISH" and volatility == "HIGH":
+                state = "TRENDING BEARISH + VOLATILE"
+            elif bias == "BULLISH":
+                state = "POSITIVE OPEN EXPECTED"
+            elif bias == "BEARISH":
+                state = "NEGATIVE OPEN EXPECTED"
+            else:
+                state = "SIDEWAYS / RANGE BOUND"
+
+            return {
+                "bias": bias,
+                "volatility": volatility,
+                "state": state
             }
 
-            res = requests.post(url, data=payload, timeout=10)
+        except Exception as e:
+            logger.error(f"Context error: {e}")
+            return {
+                "bias": "NEUTRAL",
+                "volatility": "NORMAL",
+                "state": "UNCERTAIN"
+            }
 
-            if res.status_code == 200:
-                print(f"✅ Sent to {channel}")
-            else:
-                print(f"❌ Failed {channel}: {res.text}")
+    # ============================
+    # RUN ENGINE
+    # ============================
+    def run(self):
+
+        try:
+            logger.info("🚀 SAFE PRE-MARKET ENGINE STARTED")
+
+            # STEP 1: GLOBAL MARKET CONTEXT (yfinance handled inside engine)
+            global_data = self.global_engine.run()
+
+            # STEP 2: DERIVE SIMPLE CONTEXT LAYER (NO RISK LOGIC)
+            context = self.derive_market_context(global_data)
+
+            # STEP 3: PRE-MARKET SETUPS (your existing smart money / scanner logic)
+            setups = self.premarket_engine.run(global_data)
+
+            # STEP 4: SAFETY CHECK
+            if setups is None:
+                setups = []
+
+            # STEP 5: ENRICH DATA (SAFE ADDITION ONLY)
+            enriched_data = {
+                "context": context,
+                "setups": setups,
+                "timestamp": datetime.now().strftime("%H:%M:%S")
+            }
+
+            # STEP 6: SEND TO TELEGRAM
+            self.telegram.send_premarket_report(setups, global_data)
+
+            logger.info("✅ PRE-MARKET REPORT SENT SUCCESSFULLY")
 
         except Exception as e:
-            print(f"❌ Telegram Error: {e}")
+            logger.error(f"❌ PreMarket Predictor Error: {e}")
+
+            # SAFE FALLBACK (NEVER BREAK PIPELINE)
+            self.telegram.send_message(
+                "⚠️ Pre-Market Engine temporarily unavailable.\n"
+                "System will retry in next scheduled run."
+            )
+
 
 # ============================
-# INDEX DATA (ZERODHA)
-# ============================
-def get_index_data(token):
-    try:
-        to_date = datetime.now().date()
-        from_date = to_date - timedelta(days=5)
-
-        data = kite.historical_data(
-            token,
-            from_date=from_date,
-            to_date=to_date,
-            interval="day"
-        )
-
-        if len(data) < 2:
-            print("❌ Not enough data")
-            return None
-
-        prev = data[-2]
-        current = data[-1]
-
-        prev_close = prev["close"]
-        high = prev["high"]
-        low = prev["low"]
-
-        change = ((current["close"] - prev_close) / prev_close) * 100
-
-        return {
-            "prev_close": prev_close,
-            "high": high,
-            "low": low,
-            "change": change
-        }
-
-    except Exception as e:
-        print("❌ Kite Error:", e)
-        return None
-
-# ============================
-# SIMPLE GLOBAL SENTIMENT (STATIC SAFE)
-# ============================
-def get_global_sentiment():
-    # Since global APIs fail, use neutral base
-    return "NEUTRAL", 1
-
-# ============================
-# LOGIC
-# ============================
-def get_bias(change):
-    if change > 0.4:
-        return "BULLISH"
-    elif change < -0.4:
-        return "BEARISH"
-    return "SIDEWAYS"
-
-def get_opening_range(prev_close, high, low):
-    range_size = high - low
-    low_range = prev_close - (range_size * 0.25)
-    high_range = prev_close + (range_size * 0.25)
-    return round(low_range), round(high_range), range_size
-
-def get_volatility(range_size):
-    if range_size > 350:
-        return "HIGH"
-    elif range_size > 180:
-        return "NORMAL"
-    return "LOW"
-
-def get_confidence(score, bias):
-    if score >= 2 and bias == "BULLISH":
-        return "HIGH"
-    elif score == 0 and bias == "BEARISH":
-        return "HIGH"
-    elif score == 1:
-        return "MEDIUM"
-    return "LOW"
-
-def get_behavior(sentiment, bias):
-    if "BULLISH" in sentiment and bias == "BULLISH":
-        return "Trend Up Day"
-    elif "BEARISH" in sentiment and bias == "BEARISH":
-        return "Trend Down Day"
-    elif bias == "SIDEWAYS":
-        return "Range-bound"
-    return "Volatile / Uncertain"
-
-# ============================
-# MESSAGE
-# ============================
-def create_message(sentiment, score, nifty, banknifty):
-    nifty_bias = get_bias(nifty["change"])
-    bank_bias = get_bias(banknifty["change"])
-
-    n_low, n_high, n_range = get_opening_range(
-        nifty["prev_close"], nifty["high"], nifty["low"]
-    )
-    b_low, b_high, b_range = get_opening_range(
-        banknifty["prev_close"], banknifty["high"], banknifty["low"]
-    )
-
-    volatility = get_volatility(n_range)
-    confidence = get_confidence(score, nifty_bias)
-    behavior = get_behavior(sentiment, nifty_bias)
-
-    msg = "🌅 *PRE-MARKET INDEX INTELLIGENCE*\n\n"
-
-    msg += f"🌍 Global Sentiment: *{sentiment}*\n\n"
-
-    msg += "📊 Index Bias:\n"
-    msg += f"• NIFTY: *{nifty_bias}*\n"
-    msg += f"• BANK NIFTY: *{bank_bias}*\n\n"
-
-    msg += "📍 Expected Opening Zone:\n"
-    msg += f"• NIFTY: {n_low} – {n_high}\n"
-    msg += f"• BANK NIFTY: {b_low} – {b_high}\n\n"
-
-    msg += f"⚡ Volatility: *{volatility}*\n\n"
-    msg += f"🎯 Confidence: *{confidence}*\n\n"
-
-    msg += "📦 Market Behaviour:\n"
-    msg += f"• {behavior}\n"
-    msg += "• Wait for confirmation after 9:20 AM\n"
-
-    msg += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
-    msg += "\n\n⚠️ Informational only. Not financial advice."
-
-    return msg
-
-# ============================
-# FALLBACK
-# ============================
-def fallback_message():
-    return (
-        "⚠️ *Pre-Market Update*\n\n"
-        "Data temporarily unavailable.\n"
-        "Market view will be shared after open.\n\n"
-        "⏰ " + datetime.now().strftime('%H:%M:%S')
-    )
-
-# ============================
-# MAIN
+# ENTRY POINT
 # ============================
 if __name__ == "__main__":
-    try:
-        print("🚀 Running Zerodha Market Predictor...")
-
-        sentiment, score = get_global_sentiment()
-
-        nifty = get_index_data(NIFTY_TOKEN)
-        banknifty = get_index_data(BANKNIFTY_TOKEN)
-
-        if not nifty or not banknifty:
-            print("❌ Data missing → sending fallback")
-            send_telegram(fallback_message())
-        else:
-            message = create_message(sentiment, score, nifty, banknifty)
-            print(message)
-            send_telegram(message)
-
-        print("✅ Done")
-
-    except Exception as e:
-        print(f"❌ Fatal Error: {e}")
-        send_telegram(fallback_message())
+    SafePreMarketPredictor().run()
