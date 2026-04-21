@@ -10,39 +10,34 @@ BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHANNEL = os.getenv("CHANNEL_FREE_MAIN")
 
 # ============================
-# TELEGRAM (SAFE LOCAL ENGINE)
+# TELEGRAM
 # ============================
-def send_telegram(message):
+def send_telegram(msg):
     if not BOT_TOKEN or not CHANNEL:
-        print("❌ Missing Telegram config")
+        print("Missing Telegram config")
         return
 
     try:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        payload = {
+        requests.post(url, data={
             "chat_id": CHANNEL,
-            "text": message,
+            "text": msg,
             "parse_mode": "Markdown"
-        }
-
-        r = requests.post(url, data=payload, timeout=10)
-        print("✅ Sent" if r.status_code == 200 else r.text)
-
+        })
     except Exception as e:
         print("Telegram error:", e)
 
 # ============================
-# MARKET DATA (YFINANCE ONLY)
+# MARKET DATA
 # ============================
-def get_index(symbol):
+def get_data(symbol):
     try:
-        data = yf.download(symbol, period="5d", interval="1d")
-
-        if data is None or len(data) < 2:
+        df = yf.download(symbol, period="5d", interval="1d")
+        if df is None or len(df) < 2:
             return None
 
-        prev = data.iloc[-2]
-        curr = data.iloc[-1]
+        prev = df.iloc[-2]
+        curr = df.iloc[-1]
 
         change = ((curr["Close"] - prev["Close"]) / prev["Close"]) * 100
 
@@ -50,59 +45,94 @@ def get_index(symbol):
             "prev_close": prev["Close"],
             "high": prev["High"],
             "low": prev["Low"],
+            "close": curr["Close"],
             "change": change
         }
 
     except Exception as e:
-        print("YFinance error:", e)
+        print("YF error:", e)
         return None
 
 # ============================
-# LOGIC ENGINE (V2 SAFE)
+# GLOBAL SENTIMENT
 # ============================
-def get_bias(change):
+def global_sentiment():
+    us = yf.download("^GSPC", period="5d", interval="1d")
+    if us is None or len(us) < 2:
+        return "NEUTRAL", 50
+
+    change = ((us["Close"].iloc[-1] - us["Close"].iloc[-2]) / us["Close"].iloc[-2]) * 100
+
     if change > 0.5:
-        return "BULLISH"
+        return "RISK-ON", 70
     elif change < -0.5:
+        return "RISK-OFF", 30
+    return "NEUTRAL", 50
+
+# ============================
+# ENGINE LOGIC
+# ============================
+def bias(change):
+    if change > 0.6:
+        return "BULLISH"
+    elif change < -0.6:
         return "BEARISH"
     return "SIDEWAYS"
 
-def get_range(prev_close, high, low):
-    rng = high - low
-    return round(prev_close - rng * 0.25), round(prev_close + rng * 0.25), rng
+def trend_score(change):
+    return min(100, int(abs(change) * 20))
 
-def volatility(rng):
-    if rng > 300:
+def volatility(r):
+    if r > 400:
         return "HIGH"
-    elif rng > 150:
+    elif r > 200:
         return "NORMAL"
     return "LOW"
 
+def range_calc(prev, high, low):
+    rng = high - low
+    return round(prev - rng * 0.3), round(prev + rng * 0.3), rng
+
 # ============================
-# MESSAGE BUILDER
+# MESSAGE
 # ============================
-def build_message(nifty, banknifty):
-    n_bias = get_bias(nifty["change"])
-    b_bias = get_bias(banknifty["change"])
+def build(nifty, bank, gsent, gscore):
 
-    n_low, n_high, n_rng = get_range(nifty["prev_close"], nifty["high"], nifty["low"])
-    b_low, b_high, b_rng = get_range(banknifty["prev_close"], banknifty["high"], banknifty["low"])
+    n_bias = bias(nifty["change"])
+    b_bias = bias(bank["change"])
 
-    msg = "📊 *INSTITUTIONAL PRE-MARKET ENGINE v2*\n\n"
+    n_score = trend_score(nifty["change"])
+    b_score = trend_score(bank["change"])
 
-    msg += f"📍 NIFTY: {n_bias}\n"
-    msg += f"📍 BANKNIFTY: {b_bias}\n\n"
+    n_low, n_high, n_rng = range_calc(nifty["prev_close"], nifty["high"], nifty["low"])
+    b_low, b_high, b_rng = range_calc(bank["prev_close"], bank["high"], bank["low"])
 
-    msg += "📌 Expected Range:\n"
+    msg = "📊 *INSTITUTIONAL PRE-MARKET ENGINE v2.1*\n\n"
+
+    msg += f"🌍 Global: {gsent} ({gscore})\n\n"
+
+    msg += "📌 INDEX STRUCTURE\n"
+    msg += f"NIFTY: {n_bias} | Score: {n_score}/100\n"
+    msg += f"BANKNIFTY: {b_bias} | Score: {b_score}/100\n\n"
+
+    msg += "📍 EXPECTED RANGE\n"
     msg += f"NIFTY: {n_low} - {n_high}\n"
     msg += f"BANKNIFTY: {b_low} - {b_high}\n\n"
 
-    msg += f"⚡ NIFTY Volatility: {volatility(n_rng)}\n"
-    msg += f"⚡ BANKNIFTY Volatility: {volatility(b_rng)}\n\n"
+    msg += "⚡ VOLATILITY\n"
+    msg += f"NIFTY: {volatility(n_rng)}\n"
+    msg += f"BANKNIFTY: {volatility(b_rng)}\n\n"
 
-    msg += "🧠 Note: Derived from price structure + momentum model\n"
-    msg += "⚠️ Educational use only\n"
+    # SMART FLOW INTERPRETATION
+    if n_score > 70 and b_score > 70:
+        msg += "🔥 STRONG TREND DAY EXPECTED\n"
+    elif n_score < 40 and b_score < 40:
+        msg += "⚠️ CHOPPY / RANGE MARKET\n"
+    else:
+        msg += "📉 MIXED / SELECTIVE MOVES EXPECTED\n"
+
     msg += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
+    msg += "\n⚠️ Educational analysis only"
 
     return msg
 
@@ -110,16 +140,17 @@ def build_message(nifty, banknifty):
 # MAIN
 # ============================
 if __name__ == "__main__":
-    print("🚀 Running Pre-Market Engine v2")
+    print("🚀 Running Institutional Engine v2.1")
 
-    nifty = get_index("^NSEI")
-    banknifty = get_index("^NSEBANK")
+    nifty = get_data("^NSEI")
+    bank = get_data("^NSEBANK")
+    gsent, gscore = global_sentiment()
 
-    if not nifty or not banknifty:
-        send_telegram("⚠️ Data unavailable for pre-market engine")
+    if not nifty or not bank:
+        send_telegram("⚠️ Market data unavailable")
     else:
-        message = build_message(nifty, banknifty)
-        print(message)
-        send_telegram(message)
+        msg = build(nifty, bank, gsent, gscore)
+        print(msg)
+        send_telegram(msg)
 
     print("✅ Done")
