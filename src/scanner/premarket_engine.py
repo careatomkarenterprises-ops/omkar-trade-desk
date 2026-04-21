@@ -13,8 +13,9 @@ def predict_gap_with_volume_setup(self):
         return {"gap": "neutral", "reason": "No volume setup found"}
 
     latest = setups[-1]
-    current_price = self.get_current_futures_price()  # from Zerodha
-    global_sentiment = self.get_global_sentiment()    # SGX Nifty, Dow Futures
+    current_price = from src.scanner.data_fetcher import get_ltp
+current_price = get_ltp("NIFTY 50")
+global_sentiment = self.get_global_sentiment()    # SGX Nifty, Dow Futures
 
     if current_price > latest['top']:
         gap_dir = "up"
