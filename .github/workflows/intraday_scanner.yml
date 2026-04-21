@@ -1,8 +1,9 @@
-name: Intraday Scanner (Every 30 Min)
+name: Intraday Scanner (Stable Working)
 
 on:
   schedule:
-    - cron: '*/30 4-10 * * 1-5'
+    # Runs every 30 mins between 9:30 AM – 3:30 PM IST (UTC 4–10)
+    - cron: '0,30 4-10 * * 1-5'
   workflow_dispatch:
 
 jobs:
@@ -10,19 +11,38 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
+      # Step 1: Checkout code
+      - name: 📥 Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      # Step 2: Setup Python (stable version)
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          python-version: '3.9'
 
-      - name: Install Dependencies
-        run: pip install -r requirements.txt
+      # Step 3: Install dependencies (safe install)
+      - name: 📦 Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install kiteconnect pandas numpy requests pyotp schedule python-dotenv openpyxl
 
-      - name: Run Intraday Scanner
+      # Step 4: Debug - show current time
+      - name: 🕒 Debug Time (UTC + IST)
+        run: |
+          echo "UTC Time:"
+          date -u
+          echo "IST Time:"
+          TZ="Asia/Kolkata" date
+
+      # Step 5: Debug - verify files
+      - name: 📂 Verify Files
+        run: |
+          echo "Project Structure:"
+          ls -R
+
+      # Step 6: Run your scanner
+      - name: 🚀 Run Intraday Scanner
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           KITE_API_KEY: ${{ secrets.KITE_API_KEY }}
@@ -35,4 +55,17 @@ jobs:
           CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
           CHANNEL_PREMIUM_ELITE: ${{ secrets.CHANNEL_PREMIUM_ELITE }}
           PYTHONUNBUFFERED: "1"
-        run: python main.py
+
+        run: |
+          echo "Starting Intraday Scanner..."
+          python -u main.py
+
+      # Step 7: Success log
+      - name: ✅ Success Message
+        if: success()
+        run: echo "Scanner ran successfully"
+
+      # Step 8: Failure log
+      - name: ❌ Failure Message
+        if: failure()
+        run: echo "Scanner failed - check logs above"
