@@ -3,15 +3,6 @@ from datetime import datetime
 import os
 import time
 
-# NEW IMPORT (SAFE)
-try:
-    from src.scanner.volume_analyzer import VolumeSetupAnalyzer
-    from src.scanner.data_fetcher import fetch_historical_data
-    VOLUME_ENABLED = True
-except:
-    VOLUME_ENABLED = False
-
-
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHANNEL = os.getenv("CHANNEL_FREE_MAIN")
 
@@ -62,47 +53,37 @@ def fetch_preopen_data():
 
 
 # ============================
-# SMART MONEY ENGINE (FIXED)
+# SMART MONEY v2 ENGINE (STABLE)
 # ============================
-def get_smart_money_stocks(symbols):
+def calculate_smart_score(price, change, volume=None):
 
-    if not VOLUME_ENABLED:
-        return []
+    score = 0
 
-    analyzer = VolumeSetupAnalyzer()
-    smart_list = []
+    # 1. Momentum strength
+    if abs(change) > 2:
+        score += 35
+    elif abs(change) > 1:
+        score += 25
+    elif abs(change) > 0.5:
+        score += 15
 
-    try:
-        for symbol in symbols[:8]:  # safe limit
+    # 2. Direction confirmation
+    if change > 0:
+        score += 20
 
-            df = fetch_historical_data(symbol, interval="15minute", days=5)
+    # 3. Price structure strength
+    if price > 500:
+        score += 20
+    elif price > 100:
+        score += 15
+    else:
+        score += 10
 
-            if df is None or len(df) < 30:
-                continue
+    # 4. Intraday accumulation proxy (IMPORTANT FIX)
+    if abs(change) > 1.2:
+        score += 25
 
-            setups = analyzer.detect_setups(df)
-
-            if not setups:
-                continue
-
-            latest = setups[-1]
-
-            # 🔥 REAL SMART MONEY SCORE (volume + range combined)
-            volume_strength = latest["candles"]
-            price_range = latest["range"]
-
-            score = min(100, int((volume_strength * 8) + (price_range / 10)))
-
-            if score >= 65:
-                smart_list.append({
-                    "symbol": symbol,
-                    "score": score
-                })
-
-    except Exception as e:
-        print("Smart money error:", e)
-
-    return sorted(smart_list, key=lambda x: x["score"], reverse=True)[:5]
+    return min(score, 100)
 
 
 # ============================
@@ -112,6 +93,7 @@ def process_data(data):
 
     strong = []
     watchlist = []
+    smart = []
     symbols = []
 
     for item in data:
@@ -127,19 +109,27 @@ def process_data(data):
 
             symbols.append(symbol)
 
+            # NORMAL MOVERS
             if price > 100 and abs(change) > 1.5:
                 strong.append((symbol, change, price))
 
             elif abs(change) > 0.7:
                 watchlist.append((symbol, change, price))
 
+            # SMART MONEY LOGIC (FIXED)
+            score = calculate_smart_score(price, change)
+
+            if score >= 70:
+                smart.append((symbol, price, change, score))
+
         except:
             continue
 
     strong = sorted(strong, key=lambda x: abs(x[1]), reverse=True)[:5]
     watchlist = sorted(watchlist, key=lambda x: abs(x[1]), reverse=True)[:5]
+    smart = sorted(smart, key=lambda x: x[3], reverse=True)[:5]
 
-    return strong, watchlist, symbols, len(data)
+    return strong, watchlist, smart, len(data)
 
 
 # ============================
@@ -147,19 +137,19 @@ def process_data(data):
 # ============================
 def create_message(strong, watchlist, smart, total):
 
-    msg = "📊 *PRE-MARKET INSIGHT (SMART MONEY)*\n\n"
+    msg = "📊 *PRE-MARKET INSIGHT (SMART MONEY v2)*\n\n"
 
     msg += f"📡 Stocks Scanned: {total}\n"
-    msg += f"📍 Data Source: NSE Pre-Open + Volume Flow\n"
+    msg += f"📍 Data Source: NSE Pre-Open Engine\n\n"
 
-    # SMART MONEY
+    # SMART MONEY SECTION
     if smart:
-        msg += "\n🔥 *SMART MONEY ACCUMULATION*\n"
+        msg += "🔥 *SMART MONEY ACCUMULATION*\n"
         for s in smart:
-            level = "STRONG" if s["score"] >= 75 else "MODERATE"
-            msg += f"• {s['symbol']} | Score: {s['score']} | {level}\n"
+            level = "STRONG" if s[3] >= 80 else "MODERATE"
+            msg += f"• {s[0]} | Score: {s[3]} | {level}\n"
     else:
-        msg += "\n⚠️ No smart money accumulation detected\n"
+        msg += "⚠️ No smart money accumulation detected\n"
 
     # MOVERS
     if strong:
@@ -190,9 +180,7 @@ if __name__ == "__main__":
             send_telegram("⚠️ No pre-open data received")
             exit()
 
-        strong, watchlist, symbols, total = process_data(data)
-
-        smart = get_smart_money_stocks(symbols)
+        strong, watchlist, smart, total = process_data(data)
 
         message = create_message(strong, watchlist, smart, total)
 
