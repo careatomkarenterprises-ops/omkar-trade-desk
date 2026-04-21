@@ -1,69 +1,109 @@
 import pandas as pd
+import yfinance as yf
 import logging
-from src.scanner import zerodha_fetcher as zf
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
+# ---------------- SYMBOL MAPPING ----------------
+SYMBOL_MAP = {
+    "NIFTY 50": "^NSEI",
+    "NIFTY": "^NSEI",
+    "BANKNIFTY": "^NSEBANK",
+    "BANK NIFTY": "^NSEBANK",
+    "FINNIFTY": "^NSEFIN",
+    "SENSEX": "^BSESN",
+    "USDINR": "USDINR=X",
+    "CRUDE": "CL=F",
+    "GOLD": "GC=F",
+    "SILVER": "SI=F"
+}
 
-def fetch_historical_data(symbol, interval="3minute", days=5):
+def convert_symbol(symbol: str) -> str:
+    symbol = symbol.upper().strip()
+
+    # If already mapped
+    if symbol in SYMBOL_MAP:
+        return SYMBOL_MAP[symbol]
+
+    # Default: NSE stock
+    if not symbol.endswith(".NS"):
+        return f"{symbol}.NS"
+
+    return symbol
+
+
+# ---------------- MAIN FETCH FUNCTION ----------------
+def fetch_historical_data(symbol, interval="5m", days=5):
     try:
-        if not hasattr(zf, 'ZerodhaFetcher'):
-            logger.error("ZerodhaFetcher class not found")
+        yf_symbol = convert_symbol(symbol)
+
+        logger.info(f"Fetching {symbol} → {yf_symbol}")
+
+        # Interval mapping (Zerodha → yfinance)
+        interval_map = {
+            "1minute": "1m",
+            "3minute": "5m",   # closest available
+            "5minute": "5m",
+            "15minute": "15m",
+            "30minute": "30m",
+            "day": "1d"
+        }
+
+        yf_interval = interval_map.get(interval, "5m")
+
+        end = datetime.now()
+        start = end - timedelta(days=days)
+
+        df = yf.download(
+            yf_symbol,
+            start=start,
+            end=end,
+            interval=yf_interval,
+            progress=False
+        )
+
+        if df is None or df.empty:
+            logger.warning(f"No data for {symbol}")
             return None
 
-        fetcher = zf.ZerodhaFetcher()
-
-        possible_methods = [
-            'get_historical_data',
-            'historical_data',
-            'get_history',
-            'fetch_historical_data',
-            'get_ohlcv',
-            'fetch_data'
-        ]
-
-        fetch_method = None
-        for method_name in possible_methods:
-            if hasattr(fetcher, method_name):
-                fetch_method = getattr(fetcher, method_name)
-                logger.info(f"Using method: {method_name}")
-                break
-
-        if fetch_method is None:
-            methods = [
-                name for name in dir(fetcher)
-                if callable(getattr(fetcher, name)) and not name.startswith('_')
-            ]
-            logger.error(f"No fetch method found. Available: {methods}")
-            return None
-
-        result = fetch_method(symbol, interval, days)
-
-        if result is None:
-            return None
-
-        if isinstance(result, pd.DataFrame):
-            df = result
-        elif isinstance(result, dict) and 'data' in result:
-            df = pd.DataFrame(result['data'])
-        elif isinstance(result, list):
-            df = pd.DataFrame(result)
-        else:
-            logger.error(f"Unexpected type: {type(result)}")
-            return None
-
-        if df.empty:
-            return None
-
-        df.columns = [col.lower() for col in df.columns]
+        # Standardize column names
+        df = df.rename(columns={
+            "Open": "open",
+            "High": "high",
+            "Low": "low",
+            "Close": "close",
+            "Volume": "volume"
+        })
 
         required_cols = ['open', 'high', 'low', 'close', 'volume']
-        if all(col in df.columns for col in required_cols):
-            return df[required_cols]
 
-        logger.error(f"Missing required columns in {symbol}: {df.columns}")
-        return None
+        if not all(col in df.columns for col in required_cols):
+            logger.error(f"Missing columns for {symbol}: {df.columns}")
+            return None
+
+        df = df[required_cols]
+
+        return df
 
     except Exception as e:
         logger.error(f"Fetch error {symbol}: {e}")
+        return None
+
+
+# ---------------- OPTIONAL: LIVE PRICE ----------------
+def get_ltp(symbol):
+    try:
+        yf_symbol = convert_symbol(symbol)
+
+        ticker = yf.Ticker(yf_symbol)
+        data = ticker.history(period="1d", interval="1m")
+
+        if data.empty:
+            return None
+
+        return float(data["Close"].iloc[-1])
+
+    except Exception as e:
+        logger.error(f"LTP error {symbol}: {e}")
         return None
