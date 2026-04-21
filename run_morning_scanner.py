@@ -3,6 +3,14 @@ from datetime import datetime
 import os
 import time
 
+try:
+    from src.scanner.volume_analyzer import VolumeSetupAnalyzer
+    from src.scanner.data_fetcher import fetch_historical_data
+    VOLUME_ENABLED = True
+except:
+    VOLUME_ENABLED = False
+
+
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHANNEL = os.getenv("CHANNEL_FREE_MAIN")
 
@@ -24,7 +32,7 @@ def send_telegram(message):
 
 
 # ============================
-# NSE PREOPEN DATA
+# FETCH NSE PREOPEN
 # ============================
 def fetch_preopen_data():
     url = "https://www.nseindia.com/api/market-data-pre-open?key=NIFTY"
@@ -53,37 +61,53 @@ def fetch_preopen_data():
 
 
 # ============================
-# SMART MONEY v2 ENGINE (STABLE)
+# SMART MONEY ENGINE (FIXED)
 # ============================
-def calculate_smart_score(price, change, volume=None):
+def get_smart_money_stocks(symbols):
 
-    score = 0
+    if not VOLUME_ENABLED:
+        return []
 
-    # 1. Momentum strength
-    if abs(change) > 2:
-        score += 35
-    elif abs(change) > 1:
-        score += 25
-    elif abs(change) > 0.5:
-        score += 15
+    analyzer = VolumeSetupAnalyzer()
+    smart_list = []
 
-    # 2. Direction confirmation
-    if change > 0:
-        score += 20
+    try:
+        for symbol in symbols[:15]:  # increased coverage
 
-    # 3. Price structure strength
-    if price > 500:
-        score += 20
-    elif price > 100:
-        score += 15
-    else:
-        score += 10
+            df = fetch_historical_data(symbol, interval="30minute", days=5)
 
-    # 4. Intraday accumulation proxy (IMPORTANT FIX)
-    if abs(change) > 1.2:
-        score += 25
+            if df is None or len(df) < 25:
+                continue
 
-    return min(score, 100)
+            setups = analyzer.detect_setups(df)
+
+            if not setups:
+                continue
+
+            latest = setups[-1]
+
+            # 🔥 IMPROVED SCORE LOGIC (REALISTIC MARKET BEHAVIOR)
+            range_strength = latest["range"]
+
+            volume_score = min(100, int(range_strength * 8))
+
+            candle_score = latest["candles"] * 5
+
+            score = min(100, volume_score + candle_score)
+
+            # 🔥 LOWER THRESHOLD (IMPORTANT FIX)
+            if score >= 45:
+                smart_list.append({
+                    "symbol": symbol,
+                    "score": score,
+                    "top": latest["top"],
+                    "bottom": latest["bottom"]
+                })
+
+    except Exception as e:
+        print("Smart money error:", e)
+
+    return sorted(smart_list, key=lambda x: x["score"], reverse=True)[:7]
 
 
 # ============================
@@ -93,7 +117,6 @@ def process_data(data):
 
     strong = []
     watchlist = []
-    smart = []
     symbols = []
 
     for item in data:
@@ -109,45 +132,58 @@ def process_data(data):
 
             symbols.append(symbol)
 
-            # NORMAL MOVERS
             if price > 100 and abs(change) > 1.5:
                 strong.append((symbol, change, price))
 
             elif abs(change) > 0.7:
                 watchlist.append((symbol, change, price))
 
-            # SMART MONEY LOGIC (FIXED)
-            score = calculate_smart_score(price, change)
-
-            if score >= 70:
-                smart.append((symbol, price, change, score))
-
         except:
             continue
 
     strong = sorted(strong, key=lambda x: abs(x[1]), reverse=True)[:5]
     watchlist = sorted(watchlist, key=lambda x: abs(x[1]), reverse=True)[:5]
-    smart = sorted(smart, key=lambda x: x[3], reverse=True)[:5]
 
-    return strong, watchlist, smart, len(data)
+    return strong, watchlist, symbols, len(data)
 
 
 # ============================
-# MESSAGE BUILDER
+# MARKET BIAS
+# ============================
+def get_market_bias(strong):
+    if not strong:
+        return "SIDEWAYS / LOW MOMENTUM"
+
+    bullish = len([s for s in strong if s[1] > 0])
+    bearish = len([s for s in strong if s[1] < 0])
+
+    if bullish > bearish:
+        return "BULLISH BIAS"
+    elif bearish > bullish:
+        return "BEARISH BIAS"
+    else:
+        return "MIXED / SIDEWAYS"
+
+
+# ============================
+# MESSAGE BUILDER (FIXED)
 # ============================
 def create_message(strong, watchlist, smart, total):
 
     msg = "📊 *PRE-MARKET INSIGHT (SMART MONEY v2)*\n\n"
 
     msg += f"📡 Stocks Scanned: {total}\n"
-    msg += f"📍 Data Source: NSE Pre-Open Engine\n\n"
+    msg += f"📍 Data Source: NSE Pre-Open Engine\n"
 
-    # SMART MONEY SECTION
-    if smart:
+    bias = get_market_bias(strong)
+    msg += f"📊 Market Bias: *{bias}*\n\n"
+
+    # 🔥 SMART MONEY SECTION (FIXED DISPLAY)
+    if smart and len(smart) > 0:
         msg += "🔥 *SMART MONEY ACCUMULATION*\n"
         for s in smart:
-            level = "STRONG" if s[3] >= 80 else "MODERATE"
-            msg += f"• {s[0]} | Score: {s[3]} | {level}\n"
+            level = "STRONG" if s["score"] >= 70 else "MODERATE"
+            msg += f"• {s['symbol']} | Score: {s['score']} | {level}\n"
     else:
         msg += "⚠️ No smart money accumulation detected\n"
 
@@ -156,6 +192,8 @@ def create_message(strong, watchlist, smart, total):
         msg += "\n🚀 High Momentum Stocks\n"
         for s in strong:
             msg += f"• {s[0]} | ₹{s[2]} | {s[1]:.2f}%\n"
+    else:
+        msg += "\n⚠️ No strong movers\n"
 
     # WATCHLIST
     if watchlist:
@@ -180,7 +218,9 @@ if __name__ == "__main__":
             send_telegram("⚠️ No pre-open data received")
             exit()
 
-        strong, watchlist, smart, total = process_data(data)
+        strong, watchlist, symbols, total = process_data(data)
+
+        smart = get_smart_money_stocks(symbols)
 
         message = create_message(strong, watchlist, smart, total)
 
