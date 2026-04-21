@@ -3,8 +3,13 @@ from datetime import datetime
 import os
 import time
 
+from src.scanner.volume_analyzer import VolumeSetupAnalyzer
+from src.scanner.data_fetcher import fetch_historical_data
+
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHANNEL = os.getenv("CHANNEL_FREE_MAIN")
+
+analyzer = VolumeSetupAnalyzer()
 
 
 # ============================
@@ -13,18 +18,17 @@ CHANNEL = os.getenv("CHANNEL_FREE_MAIN")
 def send_telegram(message):
     try:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        payload = {
+        requests.post(url, data={
             "chat_id": CHANNEL,
             "text": message,
             "parse_mode": "Markdown"
-        }
-        requests.post(url, data=payload)
+        })
     except Exception as e:
         print(f"Telegram error: {e}")
 
 
 # ============================
-# FETCH NSE PREOPEN
+# NSE PREOPEN FETCH
 # ============================
 def fetch_preopen_data():
     url = "https://www.nseindia.com/api/market-data-pre-open?key=NIFTY"
@@ -53,51 +57,16 @@ def fetch_preopen_data():
 
 
 # ============================
-# SMART MONEY SCORE ENGINE 🔥
-# ============================
-def calculate_smart_score(price, change):
-
-    score = 0
-
-    # 1. Momentum score (30)
-    if abs(change) > 2:
-        score += 30
-    elif abs(change) > 1:
-        score += 20
-    elif abs(change) > 0.5:
-        score += 10
-
-    # 2. Direction bias (20)
-    if change > 0:
-        score += 20
-
-    # 3. Volatility strength (20)
-    if abs(change) > 1.5:
-        score += 20
-    elif abs(change) > 0.8:
-        score += 10
-
-    # 4. Price structure zone (30)
-    if price > 500:
-        score += 20
-    elif price > 100:
-        score += 15
-    else:
-        score += 10
-
-    return min(score, 100)
-
-
-# ============================
-# PROCESS DATA
+# PROCESS WITH SMART MONEY
 # ============================
 def process_data(data):
 
     strong = []
     watchlist = []
-    smart = []
+    smart_money = []
 
     for item in data:
+
         try:
             meta = item["metadata"]
 
@@ -108,27 +77,33 @@ def process_data(data):
             if not symbol or price <= 0:
                 continue
 
-            # existing logic (UNCHANGED)
+            # Normal logic (UNCHANGED)
             if price > 100 and abs(change) > 1.5:
                 strong.append((symbol, change, price))
 
             elif abs(change) > 0.7:
                 watchlist.append((symbol, change, price))
 
-            # SMART MONEY SCORE
-            score = calculate_smart_score(price, change)
+            # ============================
+            # SMART MONEY (REAL DATA)
+            # ============================
+            df = fetch_historical_data(symbol, "30minute", 5)
 
-            if score >= 70:
-                smart.append((symbol, price, change, score))
+            if df is not None and not df.empty:
+
+                score, label = analyzer.smart_money_score(df)
+
+                if score >= 55:
+                    smart_money.append((symbol, price, change, score, label))
 
         except:
             continue
 
     strong = sorted(strong, key=lambda x: abs(x[1]), reverse=True)[:5]
     watchlist = sorted(watchlist, key=lambda x: abs(x[1]), reverse=True)[:5]
-    smart = sorted(smart, key=lambda x: x[3], reverse=True)[:5]
+    smart_money = sorted(smart_money, key=lambda x: x[3], reverse=True)[:5]
 
-    return strong, watchlist, smart, len(data)
+    return strong, watchlist, smart_money, len(data)
 
 
 # ============================
@@ -136,22 +111,21 @@ def process_data(data):
 # ============================
 def create_message(strong, watchlist, smart, total):
 
-    msg = "📊 *PRE-MARKET INSIGHT (SMART MONEY SCORE)*\n\n"
+    msg = "📊 *PRE-MARKET INSIGHT (SMART MONEY)*\n\n"
 
     msg += f"📡 Stocks Scanned: {total}\n"
-    msg += f"📍 Data Source: NSE Pre-Open\n\n"
+    msg += f"📍 Data: NSE Pre-Open + 30m Volume Flow\n\n"
 
-    # SMART MONEY SECTION
+    # SMART MONEY
     if smart:
-        msg += "🔥 *SMART MONEY ALERTS*\n"
+        msg += "🔥 *SMART MONEY ACCUMULATION*\n"
         for s in smart:
-            direction = "Bullish" if s[2] > 0 else "Bearish"
-            msg += f"• {s[0]} – SCORE: {s[3]}/100\n"
-            msg += f"  ₹{s[1]} | {direction}\n\n"
+            msg += f"• {s[0]} | Score: {s[3]:.0f}\n"
+            msg += f"  ₹{s[1]} | {s[4]}\n\n"
     else:
-        msg += "⚠️ No strong smart money setups\n\n"
+        msg += "⚠️ No smart money accumulation detected\n\n"
 
-    # NORMAL MOVERS
+    # MOVERS
     if strong:
         msg += "🚀 High Momentum Stocks\n"
         for s in strong:
@@ -165,7 +139,7 @@ def create_message(strong, watchlist, smart, total):
         for s in watchlist:
             msg += f"• {s[0]} | ₹{s[2]} | {s[1]:.2f}%\n"
 
-    msg += "\n⚠️ Educational purpose only"
+    msg += "\n⚠️ Educational Only"
     msg += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
 
     return msg
@@ -175,6 +149,7 @@ def create_message(strong, watchlist, smart, total):
 # MAIN
 # ============================
 if __name__ == "__main__":
+
     try:
         data = fetch_preopen_data()
 
