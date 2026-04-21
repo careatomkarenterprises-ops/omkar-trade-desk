@@ -2,13 +2,9 @@ import requests
 from datetime import datetime
 import os
 import time
-import yfinance as yf
-from src.scanner.volume_analyzer import VolumeSetupAnalyzer
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHANNEL = os.getenv("CHANNEL_FREE_MAIN")
-
-analyzer = VolumeSetupAnalyzer()
 
 
 # ============================
@@ -28,7 +24,7 @@ def send_telegram(message):
 
 
 # ============================
-# NSE PREOPEN DATA
+# FETCH NSE PREOPEN
 # ============================
 def fetch_preopen_data():
     url = "https://www.nseindia.com/api/market-data-pre-open?key=NIFTY"
@@ -57,50 +53,49 @@ def fetch_preopen_data():
 
 
 # ============================
-# 30 MIN SMART MONEY CHECK
+# SMART MONEY SCORE ENGINE 🔥
 # ============================
-def get_smart_money_signal(symbol):
-    try:
-        yf_symbol = symbol + ".NS"
+def calculate_smart_score(price, change):
 
-        df = yf.download(yf_symbol, interval="30m", period="5d", progress=False)
+    score = 0
 
-        if df is None or df.empty:
-            return None
+    # 1. Momentum score (30)
+    if abs(change) > 2:
+        score += 30
+    elif abs(change) > 1:
+        score += 20
+    elif abs(change) > 0.5:
+        score += 10
 
-        df = df.rename(columns={
-            "Open": "open",
-            "High": "high",
-            "Low": "low",
-            "Close": "close",
-            "Volume": "volume"
-        }).dropna()
+    # 2. Direction bias (20)
+    if change > 0:
+        score += 20
 
-        setups = analyzer.detect_setups(df)
+    # 3. Volatility strength (20)
+    if abs(change) > 1.5:
+        score += 20
+    elif abs(change) > 0.8:
+        score += 10
 
-        if not setups:
-            return None
+    # 4. Price structure zone (30)
+    if price > 500:
+        score += 20
+    elif price > 100:
+        score += 15
+    else:
+        score += 10
 
-        latest = setups[-1]
-
-        return {
-            "top": latest["top"],
-            "bottom": latest["bottom"],
-            "range": latest["range"],
-            "fab_50": latest["fab_50"]
-        }
-
-    except:
-        return None
+    return min(score, 100)
 
 
 # ============================
 # PROCESS DATA
 # ============================
 def process_data(data):
+
     strong = []
     watchlist = []
-    smart_money = []
+    smart = []
 
     for item in data:
         try:
@@ -113,84 +108,62 @@ def process_data(data):
             if not symbol or price <= 0:
                 continue
 
-            # normal movers
+            # existing logic (UNCHANGED)
             if price > 100 and abs(change) > 1.5:
                 strong.append((symbol, change, price))
 
             elif abs(change) > 0.7:
                 watchlist.append((symbol, change, price))
 
-            # SMART MONEY LAYER
-            sm = get_smart_money_signal(symbol)
-            if sm:
-                smart_money.append((symbol, sm))
+            # SMART MONEY SCORE
+            score = calculate_smart_score(price, change)
+
+            if score >= 70:
+                smart.append((symbol, price, change, score))
 
         except:
             continue
 
     strong = sorted(strong, key=lambda x: abs(x[1]), reverse=True)[:5]
     watchlist = sorted(watchlist, key=lambda x: abs(x[1]), reverse=True)[:5]
-    smart_money = smart_money[:5]
+    smart = sorted(smart, key=lambda x: x[3], reverse=True)[:5]
 
-    return strong, watchlist, smart_money, len(data)
-
-
-# ============================
-# MARKET BIAS
-# ============================
-def get_market_bias(strong):
-    if not strong:
-        return "SIDEWAYS / LOW MOMENTUM"
-
-    bullish = len([s for s in strong if s[1] > 0])
-    bearish = len([s for s in strong if s[1] < 0])
-
-    if bullish > bearish:
-        return "BULLISH BIAS"
-    elif bearish > bullish:
-        return "BEARISH BIAS"
-    else:
-        return "MIXED / SIDEWAYS"
+    return strong, watchlist, smart, len(data)
 
 
 # ============================
-# MESSAGE BUILDER (UPGRADED)
+# MESSAGE BUILDER
 # ============================
-def create_message(strong, watchlist, smart_money, total):
+def create_message(strong, watchlist, smart, total):
 
-    msg = "📊 *PRE-MARKET INSIGHT (SMART MONEY)*\n\n"
+    msg = "📊 *PRE-MARKET INSIGHT (SMART MONEY SCORE)*\n\n"
 
     msg += f"📡 Stocks Scanned: {total}\n"
-    msg += f"📍 Data Source: NSE Pre-Open + 30m Volume Flow\n"
+    msg += f"📍 Data Source: NSE Pre-Open\n\n"
 
-    bias = get_market_bias(strong)
-    msg += f"📊 Market Bias: *{bias}*\n\n"
-
-    # SMART MONEY SECTION 🔥
-    if smart_money:
-        msg += "🔥 *SMART MONEY SETUPS (INSTITUTIONAL FLOW)*\n"
-        for s, sm in smart_money:
-            msg += f"• {s}\n"
-            msg += f"  Range: {sm['bottom']} - {sm['top']}\n"
-            msg += f"  Zone: {sm['fab_50']}\n\n"
+    # SMART MONEY SECTION
+    if smart:
+        msg += "🔥 *SMART MONEY ALERTS*\n"
+        for s in smart:
+            direction = "Bullish" if s[2] > 0 else "Bearish"
+            msg += f"• {s[0]} – SCORE: {s[3]}/100\n"
+            msg += f"  ₹{s[1]} | {direction}\n\n"
     else:
-        msg += "⚠️ No smart money accumulation detected\n\n"
+        msg += "⚠️ No strong smart money setups\n\n"
 
-    # Strong movers
+    # NORMAL MOVERS
     if strong:
-        msg += "🚀 *High Momentum Stocks*\n"
+        msg += "🚀 High Momentum Stocks\n"
         for s in strong:
-            direction = "Positive" if s[1] > 0 else "Negative"
-            msg += f"• {s[0]} | ₹{s[2]} | {direction} ({s[1]:.2f}%)\n"
+            msg += f"• {s[0]} | ₹{s[2]} | {s[1]:.2f}%\n"
     else:
         msg += "⚠️ No strong movers\n"
 
-    # Watchlist
+    # WATCHLIST
     if watchlist:
-        msg += "\n📉 *Watchlist*\n"
+        msg += "\n📉 Watchlist\n"
         for s in watchlist:
-            direction = "Positive" if s[1] > 0 else "Negative"
-            msg += f"• {s[0]} | ₹{s[2]} | {direction} ({s[1]:.2f}%)\n"
+            msg += f"• {s[0]} | ₹{s[2]} | {s[1]:.2f}%\n"
 
     msg += "\n⚠️ Educational purpose only"
     msg += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
@@ -209,9 +182,9 @@ if __name__ == "__main__":
             send_telegram("⚠️ No pre-open data received")
             exit()
 
-        strong, watchlist, smart_money, total = process_data(data)
+        strong, watchlist, smart, total = process_data(data)
 
-        message = create_message(strong, watchlist, smart_money, total)
+        message = create_message(strong, watchlist, smart, total)
 
         send_telegram(message)
 
