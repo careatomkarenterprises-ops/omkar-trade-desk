@@ -6,17 +6,21 @@ import time
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHANNEL = os.getenv("CHANNEL_FREE_MAIN")
 
+
 # ============================
 # TELEGRAM
 # ============================
 def send_telegram(message):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHANNEL,
-        "text": message,
-        "parse_mode": "Markdown"
-    }
-    requests.post(url, data=payload)
+    try:
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        payload = {
+            "chat_id": CHANNEL,
+            "text": message,
+            "parse_mode": "Markdown"
+        }
+        requests.post(url, data=payload)
+    except Exception as e:
+        print(f"Telegram error: {e}")
 
 
 # ============================
@@ -33,22 +37,23 @@ def fetch_preopen_data():
 
     session = requests.Session()
 
-    # Load homepage to get cookies
-    session.get("https://www.nseindia.com", headers=headers)
-    time.sleep(1)
-
     try:
+        session.get("https://www.nseindia.com", headers=headers, timeout=5)
+        time.sleep(1)
+
         res = session.get(url, headers=headers, timeout=10)
+
         if res.status_code == 200:
             return res.json().get("data", [])
-    except:
-        pass
+
+    except Exception as e:
+        print(f"Fetch error: {e}")
 
     return []
 
 
 # ============================
-# PROCESS DATA (CLEAN + SAFE)
+# PROCESS DATA
 # ============================
 def process_data(data):
     strong = []
@@ -62,15 +67,12 @@ def process_data(data):
             price = meta.get("iep", 0)
             change = meta.get("pChange", 0)
 
-            # Basic filters
-            if not symbol.isalpha() or price <= 0:
+            if not symbol or price <= 0:
                 continue
 
-            # Strong movers
             if price > 100 and abs(change) > 1.5:
                 strong.append((symbol, change, price))
 
-            # Medium movers
             elif abs(change) > 0.7:
                 watchlist.append((symbol, change, price))
 
@@ -84,12 +86,12 @@ def process_data(data):
 
 
 # ============================
-# MARKET INSIGHT LOGIC
+# MARKET BIAS
 # ============================
 def get_market_bias(strong):
     if not strong:
         return "SIDEWAYS / LOW MOMENTUM"
-    
+
     bullish = len([s for s in strong if s[1] > 0])
     bearish = len([s for s in strong if s[1] < 0])
 
@@ -102,58 +104,54 @@ def get_market_bias(strong):
 
 
 # ============================
-# FORMAT MESSAGE (COMPLIANT)
+# MESSAGE
 # ============================
 def create_message(strong, watchlist, total):
-    msg = "📊 *PRE-MARKET MARKET INSIGHT (NSE)*\n\n"
+    msg = "📊 *PRE-MARKET INSIGHT (NSE)*\n\n"
 
     msg += f"📡 Stocks Scanned: {total}\n"
-    msg += f"📍 Data Source: NSE Pre-Open Market\n"
+    msg += f"📍 Data Source: NSE Pre-Open\n"
 
     bias = get_market_bias(strong)
     msg += f"📊 Market Bias: *{bias}*\n\n"
 
-    # Strong movers
     if strong:
         msg += "🚀 *High Momentum Stocks*\n"
         for s in strong:
             direction = "Positive" if s[1] > 0 else "Negative"
-            msg += f"• {s[0]} | ₹{s[2]} | {direction} move ({s[1]:.2f}%)\n"
+            msg += f"• {s[0]} | ₹{s[2]} | {direction} ({s[1]:.2f}%)\n"
     else:
-        msg += "⚠️ No high momentum stocks in pre-market\n"
+        msg += "⚠️ No strong movers\n"
 
-    # Watchlist
     if watchlist:
-        msg += "\n📉 *Early Watchlist (Moderate Activity)*\n"
+        msg += "\n📉 *Watchlist*\n"
         for s in watchlist:
             direction = "Positive" if s[1] > 0 else "Negative"
             msg += f"• {s[0]} | ₹{s[2]} | {direction} ({s[1]:.2f}%)\n"
 
-    # Insight
-    msg += "\n\n🧠 *Market Insight*\n"
-    if not strong:
-        msg += "Low volatility detected. Avoid aggressive trades.\n"
-    else:
-        msg += "Momentum observed in select stocks. Watch for confirmation after market open.\n"
-
-    # Compliance-safe guidance
-    msg += "\n⚠️ *For educational & research purposes only.*\n"
-    msg += "Not a buy/sell recommendation.\n"
-
+    msg += "\n⚠️ Educational purpose only"
     msg += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
 
     return msg
 
 
 # ============================
-# MAIN
+# MAIN (FIXED SAFE VERSION)
 # ============================
 if __name__ == "__main__":
     try:
         data = fetch_preopen_data()
 
+        # ✅ SAFE FIX (NO CRASH)
         if not data:
-            raise Exception("No data received from NSE")
+            send_telegram(
+                "⚠️ *Morning Scanner Alert*\n\n"
+                "No pre-open data received from NSE.\n"
+                "Market may be inactive or blocked.\n"
+                "System ran successfully but no data available."
+            )
+            print("No data - fallback message sent")
+            exit()
 
         strong, watchlist, total = process_data(data)
 
@@ -161,7 +159,8 @@ if __name__ == "__main__":
 
         send_telegram(message)
 
-        print("✅ Pre-market insight sent successfully")
+        print("✅ Morning Scanner Completed Successfully")
 
     except Exception as e:
-        print(f"❌ Error: {e}")
+        send_telegram(f"❌ Morning Scanner Error: {e}")
+        print(f"Error: {e}")
