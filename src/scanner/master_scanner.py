@@ -97,7 +97,8 @@ class MasterScanner:
             f"NFO:BANKNIFTY{next_yr}{next_m}FUT"
         ]
 
-    def _get_commodity_futures(self):
+        def _get_commodity_futures(self):
+    return ["GOLD", "SILVER", "CRUDE"]
         today = datetime.now()
         year, month, day = today.year, today.month, today.day
         if day > 20:
@@ -121,7 +122,7 @@ class MasterScanner:
 
     def scan_premarket_gap(self):
         try:
-            df = self._safe_fetch("NSE:NIFTY 50", "day", 20)
+            df = self._safe_fetch("NIFTY 50", "day", 20)
             if df is None:
                 msg = "🌅 Pre-Market: Unable to fetch NIFTY data."
                 self._send_to_all_premium(msg)
@@ -202,7 +203,7 @@ class MasterScanner:
             symbols = self._get_fno_list() + self._get_future_symbols()
             self.analyzer.min_candles = 6
             for symbol in symbols:
-                df = self._safe_fetch(symbol, "3minute", 2)
+                df = self._safe_fetch(symbol, "5minute", 2)
                 if df is None:
                     continue
                 setups = self.analyzer.detect_setups(df)
@@ -251,7 +252,7 @@ class MasterScanner:
 
     def scan_currency(self):
         try:
-            pairs = ["NSE:USDINR", "NSE:EURINR", "NSE:GBPINR", "NSE:JPYINR"]
+            pairs = ["USDINR", "EURINR", "GBPINR", "JPYINR"]
             for pair in pairs:
                 df = self._safe_fetch(pair, "3minute", 2)
                 if df is None:
