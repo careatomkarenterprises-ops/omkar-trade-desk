@@ -6,10 +6,8 @@ from datetime import datetime, timedelta
 logger = logging.getLogger(__name__)
 
 SYMBOL_MAP = {
-    "NIFTY 50": "^NSEI",
     "NIFTY": "^NSEI",
     "BANKNIFTY": "^NSEBANK",
-    "BANK NIFTY": "^NSEBANK",
     "FINNIFTY": "^NSEFIN",
     "SENSEX": "^BSESN",
     "USDINR": "USDINR=X",
@@ -21,13 +19,13 @@ SYMBOL_MAP = {
     "SILVER": "SI=F"
 }
 
-def convert_symbol(symbol):
+def convert_symbol(symbol: str):
     symbol = symbol.upper().strip()
 
     if symbol in SYMBOL_MAP:
         return SYMBOL_MAP[symbol]
 
-    # Prevent .NS.NS issue
+    # IMPORTANT FIX: prevent .NS.NS issue
     if symbol.endswith(".NS"):
         return symbol
 
@@ -58,7 +56,7 @@ def fetch_historical_data(symbol, interval="5minute", days=5):
             end=end,
             interval=yf_interval,
             progress=False,
-            threads=False
+            auto_adjust=True
         )
 
         if df is None or df.empty:
@@ -72,13 +70,9 @@ def fetch_historical_data(symbol, interval="5minute", days=5):
             "Volume": "volume"
         })
 
-        df = df[['open', 'high', 'low', 'close', 'volume']]
-
-        # 🔥 FIX: ensure no alignment issues
         df = df.dropna()
-        df.reset_index(drop=True, inplace=True)
 
-        return df
+        return df[['open', 'high', 'low', 'close', 'volume']]
 
     except Exception as e:
         logger.error(f"Fetch error {symbol}: {e}")
@@ -90,7 +84,7 @@ def get_ltp(symbol):
         yf_symbol = convert_symbol(symbol)
         data = yf.Ticker(yf_symbol).history(period="1d", interval="1m")
 
-        if data.empty:
+        if data is None or data.empty:
             return None
 
         return float(data["Close"].iloc[-1])
