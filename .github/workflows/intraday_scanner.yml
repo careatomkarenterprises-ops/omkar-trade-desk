@@ -1,71 +1,73 @@
 name: Intraday Scanner (Stable Working)
 
 on:
-  schedule:
-    # Runs every 30 mins between 9:30 AM – 3:30 PM IST (UTC 4–10)
-    - cron: '0,30 4-10 * * 1-5'
-  workflow_dispatch:
+schedule:
+# Runs every 30 mins between 9:30 AM – 3:30 PM IST (UTC 4–10)
+- cron: '0,30 4-10 * * 1-5'
+workflow_dispatch:
 
 jobs:
-  intraday:
-    runs-on: ubuntu-latest
+intraday:
+runs-on: ubuntu-latest
 
-    steps:
-      # Step 1: Checkout code
-      - name: 📥 Checkout Repository
-        uses: actions/checkout@v4
+```
+steps:
+  # Step 1: Checkout code
+  - name: 📥 Checkout Repository
+    uses: actions/checkout@v4
 
-      # Step 2: Setup Python (stable version)
-      - name: 🐍 Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
+  # Step 2: Setup Python
+  - name: 🐍 Setup Python
+    uses: actions/setup-python@v4
+    with:
+      python-version: '3.9'
 
-      # Step 3: Install dependencies (safe install)
-      - name: 📦 Install Dependencies
-        run: |
-          pip install --upgrade pip
-          pip install kiteconnect pandas numpy requests pyotp schedule python-dotenv openpyxl
+  # Step 3: Install dependencies (FIX: added yfinance)
+  - name: 📦 Install Dependencies
+    run: |
+      python -m pip install --upgrade pip
+      pip install --no-cache-dir kiteconnect pandas numpy requests pyotp schedule python-dotenv openpyxl yfinance
 
-      # Step 4: Debug - show current time
-      - name: 🕒 Debug Time (UTC + IST)
-        run: |
-          echo "UTC Time:"
-          date -u
-          echo "IST Time:"
-          TZ="Asia/Kolkata" date
+  # Step 4: Debug time
+  - name: 🕒 Debug Time (UTC + IST)
+    run: |
+      echo "UTC Time:"
+      date -u
+      echo "IST Time:"
+      TZ="Asia/Kolkata" date
 
-      # Step 5: Debug - verify files
-      - name: 📂 Verify Files
-        run: |
-          echo "Project Structure:"
-          ls -R
+  # Step 5: Verify files
+  - name: 📂 Verify Files
+    run: |
+      echo "Project Structure:"
+      ls -R
 
-      # Step 6: Run your scanner
-      - name: 🚀 Run Intraday Scanner
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          KITE_API_KEY: ${{ secrets.KITE_API_KEY }}
-          KITE_ACCESS_TOKEN: ${{ secrets.KITE_ACCESS_TOKEN }}
-          ZERODHA_USER_ID: ${{ secrets.ZERODHA_USER_ID }}
-          ZERODHA_PASSWORD: ${{ secrets.ZERODHA_PASSWORD }}
-          ZERODHA_TOTP_SECRET: ${{ secrets.ZERODHA_TOTP_SECRET }}
-          CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
-          CHANNEL_FREE_SIGNALS: ${{ secrets.CHANNEL_FREE_SIGNALS }}
-          CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
-          CHANNEL_PREMIUM_ELITE: ${{ secrets.CHANNEL_PREMIUM_ELITE }}
-          PYTHONUNBUFFERED: "1"
+  # Step 6: Run scanner
+  - name: 🚀 Run Intraday Scanner
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      KITE_API_KEY: ${{ secrets.KITE_API_KEY }}
+      KITE_ACCESS_TOKEN: ${{ secrets.KITE_ACCESS_TOKEN }}
+      ZERODHA_USER_ID: ${{ secrets.ZERODHA_USER_ID }}
+      ZERODHA_PASSWORD: ${{ secrets.ZERODHA_PASSWORD }}
+      ZERODHA_TOTP_SECRET: ${{ secrets.ZERODHA_TOTP_SECRET }}
+      CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
+      CHANNEL_FREE_SIGNALS: ${{ secrets.CHANNEL_FREE_SIGNALS }}
+      CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
+      CHANNEL_PREMIUM_ELITE: ${{ secrets.CHANNEL_PREMIUM_ELITE }}
+      PYTHONUNBUFFERED: "1"
 
-        run: |
-          echo "Starting Intraday Scanner..."
-          python -u main.py
+    run: |
+      echo "🚀 Starting Intraday Scanner..."
+      python -u main.py
 
-      # Step 7: Success log
-      - name: ✅ Success Message
-        if: success()
-        run: echo "Scanner ran successfully"
+  # Step 7: Success log
+  - name: ✅ Success Message
+    if: success()
+    run: echo "Scanner ran successfully"
 
-      # Step 8: Failure log
-      - name: ❌ Failure Message
-        if: failure()
-        run: echo "Scanner failed - check logs above"
+  # Step 8: Failure log
+  - name: ❌ Failure Message
+    if: failure()
+    run: echo "Scanner failed - check logs above"
+```
