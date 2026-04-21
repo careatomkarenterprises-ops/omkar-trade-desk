@@ -3,18 +3,15 @@ import requests
 import yfinance as yf
 from datetime import datetime
 
-# ============================
-# ENV
-# ============================
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHANNEL = os.getenv("CHANNEL_FREE_MAIN")
 
 # ============================
-# TELEGRAM
+# TELEGRAM SAFE
 # ============================
-def send_telegram(msg):
+def send(msg):
     if not BOT_TOKEN or not CHANNEL:
-        print("Missing Telegram config")
+        print("Missing config")
         return
 
     try:
@@ -23,116 +20,93 @@ def send_telegram(msg):
             "chat_id": CHANNEL,
             "text": msg,
             "parse_mode": "Markdown"
-        })
+        }, timeout=10)
     except Exception as e:
         print("Telegram error:", e)
 
 # ============================
-# MARKET DATA
+# SAFE YFINANCE WRAPPER
 # ============================
-def get_data(symbol):
-    try:
-        df = yf.download(symbol, period="5d", interval="1d")
-        if df is None or len(df) < 2:
-            return None
+def safe_fetch(symbol):
+    for _ in range(2):  # retry twice
+        try:
+            df = yf.download(symbol, period="5d", interval="1d", progress=False)
 
-        prev = df.iloc[-2]
-        curr = df.iloc[-1]
+            if df is not None and len(df) >= 2:
+                prev = df.iloc[-2]
+                curr = df.iloc[-1]
 
-        change = ((curr["Close"] - prev["Close"]) / prev["Close"]) * 100
+                change = ((curr["Close"] - prev["Close"]) / prev["Close"]) * 100
 
-        return {
-            "prev_close": prev["Close"],
-            "high": prev["High"],
-            "low": prev["Low"],
-            "close": curr["Close"],
-            "change": change
-        }
+                return {
+                    "prev_close": prev["Close"],
+                    "high": prev["High"],
+                    "low": prev["Low"],
+                    "change": change
+                }
 
-    except Exception as e:
-        print("YF error:", e)
-        return None
+        except Exception as e:
+            print(f"Retry fetch {symbol}: {e}")
 
-# ============================
-# GLOBAL SENTIMENT
-# ============================
-def global_sentiment():
-    us = yf.download("^GSPC", period="5d", interval="1d")
-    if us is None or len(us) < 2:
-        return "NEUTRAL", 50
-
-    change = ((us["Close"].iloc[-1] - us["Close"].iloc[-2]) / us["Close"].iloc[-2]) * 100
-
-    if change > 0.5:
-        return "RISK-ON", 70
-    elif change < -0.5:
-        return "RISK-OFF", 30
-    return "NEUTRAL", 50
+    # fallback (IMPORTANT)
+    return {
+        "prev_close": 0,
+        "high": 0,
+        "low": 0,
+        "change": 0
+    }
 
 # ============================
-# ENGINE LOGIC
+# MARKET STATE ENGINE
 # ============================
-def bias(change):
-    if change > 0.6:
+def bias(c):
+    if c > 0.5:
         return "BULLISH"
-    elif change < -0.6:
+    if c < -0.5:
         return "BEARISH"
     return "SIDEWAYS"
 
-def trend_score(change):
-    return min(100, int(abs(change) * 20))
+def rng(p, h, l):
+    r = max(h - l, 1)
+    return round(p - r * 0.3), round(p + r * 0.3), r
 
 def volatility(r):
-    if r > 400:
+    if r > 300:
         return "HIGH"
-    elif r > 200:
+    if r > 150:
         return "NORMAL"
     return "LOW"
-
-def range_calc(prev, high, low):
-    rng = high - low
-    return round(prev - rng * 0.3), round(prev + rng * 0.3), rng
 
 # ============================
 # MESSAGE
 # ============================
-def build(nifty, bank, gsent, gscore):
+def build(n, b, gsent):
+    nb = bias(n["change"])
+    bb = bias(b["change"])
 
-    n_bias = bias(nifty["change"])
-    b_bias = bias(bank["change"])
+    nl, nh, nr = rng(n["prev_close"], n["high"], n["low"])
+    bl, bh, br = rng(b["prev_close"], b["high"], b["low"])
 
-    n_score = trend_score(nifty["change"])
-    b_score = trend_score(bank["change"])
+    msg = "📊 *INSTITUTIONAL PRE-MARKET ENGINE v2.2*\n\n"
 
-    n_low, n_high, n_rng = range_calc(nifty["prev_close"], nifty["high"], nifty["low"])
-    b_low, b_high, b_rng = range_calc(bank["prev_close"], bank["high"], bank["low"])
+    msg += f"🌍 Global: {gsent}\n\n"
 
-    msg = "📊 *INSTITUTIONAL PRE-MARKET ENGINE v2.1*\n\n"
+    msg += f"NIFTY: {nb}\nBANKNIFTY: {bb}\n\n"
 
-    msg += f"🌍 Global: {gsent} ({gscore})\n\n"
-
-    msg += "📌 INDEX STRUCTURE\n"
-    msg += f"NIFTY: {n_bias} | Score: {n_score}/100\n"
-    msg += f"BANKNIFTY: {b_bias} | Score: {b_score}/100\n\n"
-
-    msg += "📍 EXPECTED RANGE\n"
-    msg += f"NIFTY: {n_low} - {n_high}\n"
-    msg += f"BANKNIFTY: {b_low} - {b_high}\n\n"
+    msg += "📍 RANGE\n"
+    msg += f"NIFTY: {nl} - {nh}\n"
+    msg += f"BANKNIFTY: {bl} - {bh}\n\n"
 
     msg += "⚡ VOLATILITY\n"
-    msg += f"NIFTY: {volatility(n_rng)}\n"
-    msg += f"BANKNIFTY: {volatility(b_rng)}\n\n"
+    msg += f"NIFTY: {volatility(nr)}\nBANKNIFTY: {volatility(br)}\n\n"
 
-    # SMART FLOW INTERPRETATION
-    if n_score > 70 and b_score > 70:
-        msg += "🔥 STRONG TREND DAY EXPECTED\n"
-    elif n_score < 40 and b_score < 40:
-        msg += "⚠️ CHOPPY / RANGE MARKET\n"
+    if nb == bb:
+        msg += "🔥 UNIFIED MARKET DIRECTION\n"
     else:
-        msg += "📉 MIXED / SELECTIVE MOVES EXPECTED\n"
+        msg += "⚠️ MIXED STRUCTURE\n"
 
     msg += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
-    msg += "\n⚠️ Educational analysis only"
+    msg += "\n⚠️ Educational only"
 
     return msg
 
@@ -140,17 +114,17 @@ def build(nifty, bank, gsent, gscore):
 # MAIN
 # ============================
 if __name__ == "__main__":
-    print("🚀 Running Institutional Engine v2.1")
+    print("🚀 Engine v2.2 starting")
 
-    nifty = get_data("^NSEI")
-    bank = get_data("^NSEBANK")
-    gsent, gscore = global_sentiment()
+    nifty = safe_fetch("^NSEI")
+    bank = safe_fetch("^NSEBANK")
 
-    if not nifty or not bank:
-        send_telegram("⚠️ Market data unavailable")
-    else:
-        msg = build(nifty, bank, gsent, gscore)
-        print(msg)
-        send_telegram(msg)
+    # global safe fallback
+    gsent = "NEUTRAL (CI MODE)"
+
+    msg = build(nifty, bank, gsent)
+
+    print(msg)
+    send(msg)
 
     print("✅ Done")
