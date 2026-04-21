@@ -7,32 +7,46 @@ class VolumeSetupAnalyzer:
         self.sma_period = sma_period
 
     def detect_setups(self, df):
-        if df is None or len(df) < self.min_candles + self.volume_period:
+    try:
+        if df is None or df.empty or len(df) < self.volume_period:
             return []
+
         df = df.copy()
+
         df['avg_volume'] = df['volume'].rolling(self.volume_period).mean()
+
+        # 🔥 FIX: align properly
+        df = df.dropna().reset_index(drop=True)
+
+        if df.empty:
+            return []
+
         df['high_volume'] = df['volume'] > df['avg_volume']
-        df['setup_group'] = (df['high_volume'] != df['high_volume'].shift()).cumsum()
-        setup_lengths = df[df['high_volume']].groupby('setup_group').size()
-        valid_groups = setup_lengths[setup_lengths >= self.min_candles].index
+
         setups = []
-        for group in valid_groups:
-            block = df[df['setup_group'] == group]
-            top = block['high'].max()
-            bottom = block['low'].min()
-            range_size = top - bottom
-            if range_size <= 0:
-                continue
-            fab_50 = top + range_size * 0.5
-            setups.append({
-                'top': round(top, 2),
-                'bottom': round(bottom, 2),
-                'range': round(range_size, 2),
-                'candles': len(block),
-                'fab_50': round(fab_50, 2)
-            })
+        count = 0
+
+        for i in range(len(df)):
+            if df['high_volume'].iloc[i]:
+                count += 1
+            else:
+                if count >= self.min_candles:
+                    window = df.iloc[i-count:i]
+                    setups.append({
+                        "candles": count,
+                        "top": float(window['high'].max()),
+                        "bottom": float(window['low'].min()),
+                        "range": float(window['high'].max() - window['low'].min()),
+                        "fab_50": float((window['high'].max() + window['low'].min()) / 2)
+                    })
+                count = 0
+
         return setups
 
+    except Exception as e:
+        print(f"Analyzer error: {e}")
+        return []
+        
     def check_sma_crossover(self, df):
         if len(df) < self.sma_period + 1:
             return False
