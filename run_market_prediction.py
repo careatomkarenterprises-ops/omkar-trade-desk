@@ -1,8 +1,8 @@
-import os
 import requests
-import yfinance as yf
+import os
 import time
 from datetime import datetime
+import yfinance as yf
 
 # ============================
 # ENV VARIABLES
@@ -21,7 +21,7 @@ CHANNELS = [
 # ============================
 def send_telegram(message):
     if not BOT_TOKEN:
-        print("❌ TELEGRAM TOKEN MISSING")
+        print("❌ Missing TELEGRAM_BOT_TOKEN")
         return
 
     for channel in CHANNELS:
@@ -36,180 +36,158 @@ def send_telegram(message):
                 "parse_mode": "Markdown"
             }
 
-            requests.post(url, data=payload, timeout=10)
+            res = requests.post(url, data=payload, timeout=10)
 
-        except:
-            pass
+            if res.status_code == 200:
+                print(f"✅ Sent to {channel}")
+            else:
+                print(f"❌ Failed {channel}: {res.text}")
 
-# ============================
-# NSE FETCH (PRIMARY DATA)
-# ============================
-def fetch_nse_index(symbol):
-    try:
-        session = requests.Session()
-
-        headers = {
-            "User-Agent": "Mozilla/5.0",
-            "Accept-Language": "en-US,en;q=0.9"
-        }
-
-        # Required handshake
-        session.get("https://www.nseindia.com", headers=headers, timeout=5)
-
-        url = f"https://www.nseindia.com/api/quote-equity?symbol={symbol}"
-        res = session.get(url, headers=headers, timeout=5)
-        data = res.json()
-
-        price = data["priceInfo"]["lastPrice"]
-        high = data["priceInfo"]["intraDayHighLow"]["max"]
-        low = data["priceInfo"]["intraDayHighLow"]["min"]
-
-        return {
-            "close": price,
-            "high": high,
-            "low": low,
-            "change": 0  # NSE API doesn't easily give previous % change
-        }
-
-    except:
-        return None
+        except Exception as e:
+            print(f"❌ Telegram Error: {e}")
 
 # ============================
-# YAHOO FETCH (GLOBAL OPTIONAL)
+# SAFE DATA FETCH (FIXED)
 # ============================
-def safe_fetch(symbol):
-    try:
-        data = yf.download(symbol, period="5d", interval="1d", progress=False)
+def safe_fetch(symbol, retries=3):
+    for attempt in range(retries):
+        try:
+            data = yf.download(
+                symbol,
+                period="5d",
+                interval="1d",
+                progress=False,
+                threads=False
+            )
 
-        if data is None or data.empty or len(data) < 2:
-            return None
+            if data is not None and not data.empty:
+                prev = data.iloc[-2]
+                current = data.iloc[-1]
 
-        prev = data.iloc[-2]
-        curr = data.iloc[-1]
+                return {
+                    "prev_close": float(prev["Close"]),
+                    "close": float(current["Close"]),
+                    "high": float(prev["High"]),
+                    "low": float(prev["Low"]),
+                    "change": ((current["Close"] - prev["Close"]) / prev["Close"]) * 100
+                }
 
-        change = ((curr["Close"] - prev["Close"]) / prev["Close"]) * 100
+        except Exception as e:
+            print(f"Retry {attempt+1} failed for {symbol}: {e}")
+            time.sleep(2)
 
-        return {
-            "close": curr["Close"],
-            "high": prev["High"],
-            "low": prev["Low"],
-            "change": change
-        }
+    print(f"❌ Final failure for {symbol}")
+    return None
 
-    except:
-        return None
+# ============================
+# DATA FETCH WITH FALLBACK
+# ============================
+def get_market_data():
+    nifty = safe_fetch("^NSEI")
+    banknifty = safe_fetch("^NSEBANK")
+
+    # Fallback ETFs (VERY IMPORTANT)
+    if not nifty:
+        print("🔁 Using NIFTY ETF fallback")
+        nifty = safe_fetch("NIFTYBEES.NS")
+
+    if not banknifty:
+        print("🔁 Using BANK ETF fallback")
+        banknifty = safe_fetch("BANKBEES.NS")
+
+    return nifty, banknifty
 
 # ============================
 # LOGIC
 # ============================
 def get_bias(change):
-    if change > 0.5:
+    if change > 0.4:
         return "BULLISH"
-    elif change < -0.5:
+    elif change < -0.4:
         return "BEARISH"
     return "SIDEWAYS"
 
-def get_range(close, high, low):
-    r = high - low
-    return round(close - r * 0.25), round(close + r * 0.25), r
+def get_opening_range(prev_close, high, low):
+    range_size = high - low
+    low_range = prev_close - (range_size * 0.25)
+    high_range = prev_close + (range_size * 0.25)
+    return round(low_range), round(high_range), range_size
 
-def get_volatility(r):
-    if r > 350:
+def get_volatility(range_size):
+    if range_size > 350:
         return "HIGH"
-    elif r > 180:
+    elif range_size > 180:
         return "NORMAL"
     return "LOW"
-
-def global_score(sp500, nasdaq):
-    score = 0
-    if sp500 and sp500["change"] > 0:
-        score += 1
-    if nasdaq and nasdaq["change"] > 0:
-        score += 1
-    return score
-
-def vix_sentiment(vix):
-    if not vix:
-        return "UNKNOWN"
-    if vix["close"] > 18:
-        return "HIGH RISK"
-    elif vix["close"] < 13:
-        return "LOW RISK"
-    return "NORMAL"
 
 # ============================
 # MESSAGE
 # ============================
-def build_message(nifty, banknifty, sp500, nasdaq, vix):
+def create_message(nifty, banknifty):
 
-    nifty_bias = "SIDEWAYS"  # NSE doesn’t give % change easily
-    bank_bias = "SIDEWAYS"
+    nifty_bias = get_bias(nifty["change"])
+    bank_bias = get_bias(banknifty["change"])
 
-    n_low, n_high, n_range = get_range(nifty["close"], nifty["high"], nifty["low"])
-    b_low, b_high, b_range = get_range(banknifty["close"], banknifty["high"], banknifty["low"])
+    n_low, n_high, n_range = get_opening_range(
+        nifty["prev_close"], nifty["high"], nifty["low"]
+    )
 
-    vol = get_volatility(n_range)
-    g_score = global_score(sp500, nasdaq)
-    vix_state = vix_sentiment(vix)
+    b_low, b_high, b_range = get_opening_range(
+        banknifty["prev_close"], banknifty["high"], banknifty["low"]
+    )
 
-    confidence = "LOW"
-    if g_score == 2:
-        confidence = "HIGH"
-    elif g_score == 1:
-        confidence = "MEDIUM"
+    volatility = get_volatility(n_range)
 
-    msg = "🌅 *PRE-MARKET ENGINE (STABLE v2.3)*\n\n"
-
-    msg += f"🌍 Global Score: *{g_score}/2*\n"
-    msg += f"📉 VIX: *{vix_state}*\n\n"
+    msg = "🌅 *PRE-MARKET INDEX INTELLIGENCE (v2.2)*\n\n"
 
     msg += "📊 Index Bias:\n"
     msg += f"• NIFTY: *{nifty_bias}*\n"
     msg += f"• BANK NIFTY: *{bank_bias}*\n\n"
 
-    msg += "📍 Expected Range:\n"
+    msg += "📍 Expected Opening Zone:\n"
     msg += f"• NIFTY: {n_low} – {n_high}\n"
-    msg += f"• BANKNIFTY: {b_low} – {b_high}\n\n"
+    msg += f"• BANK NIFTY: {b_low} – {b_high}\n\n"
 
-    msg += f"⚡ Volatility: *{vol}*\n"
-    msg += f"🎯 Confidence: *{confidence}*\n\n"
+    msg += f"⚡ Volatility: *{volatility}*\n\n"
 
     msg += "📦 Market Behaviour:\n"
+    msg += "• Wait for confirmation after 9:20 AM\n"
 
-    if g_score >= 1:
-        msg += "• Momentum influenced by global cues\n"
-    else:
-        msg += "• Range / Wait for breakout\n"
-
-    msg += "\n⏰ " + datetime.now().strftime('%H:%M:%S')
+    msg += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
     msg += "\n\n⚠️ Informational only. Not financial advice."
 
     return msg
+
+# ============================
+# FALLBACK MESSAGE
+# ============================
+def fallback_message():
+    return (
+        "⚠️ *Pre-Market Update*\n\n"
+        "Market data temporarily unavailable.\n"
+        "Update will be shared after open.\n\n"
+        "⏰ " + datetime.now().strftime('%H:%M:%S')
+    )
 
 # ============================
 # MAIN
 # ============================
 if __name__ == "__main__":
     try:
-        print("🚀 Running Stable Pre-Market Engine v2.3")
+        print("🚀 Running Pre-Market Engine v2.2")
 
-        # NSE (PRIMARY)
-        nifty = fetch_nse_index("NIFTY")
-        banknifty = fetch_nse_index("BANKNIFTY")
-
-        # Yahoo (OPTIONAL)
-        sp500 = safe_fetch("^GSPC")
-        nasdaq = safe_fetch("^IXIC")
-        vix = safe_fetch("^VIX")
+        nifty, banknifty = get_market_data()
 
         if not nifty or not banknifty:
-            send_telegram("⚠️ NSE data unavailable. Update after market open.")
+            print("❌ Critical data missing")
+            send_telegram(fallback_message())
         else:
-            msg = build_message(nifty, banknifty, sp500, nasdaq, vix)
-            send_telegram(msg)
+            message = create_message(nifty, banknifty)
+            print(message)
+            send_telegram(message)
 
         print("✅ Done")
 
     except Exception as e:
-        print("❌ Fatal Error:", e)
-        send_telegram("⚠️ System error. Update after market open.")
+        print(f"❌ Fatal Error: {e}")
+        send_telegram(fallback_message())
