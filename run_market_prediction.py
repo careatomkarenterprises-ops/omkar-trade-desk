@@ -1,130 +1,196 @@
-import os
 import requests
+import os
+from datetime import datetime, timedelta
 import yfinance as yf
-from datetime import datetime
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-CHANNEL = os.getenv("CHANNEL_FREE_MAIN")
+
+CHANNELS = [
+    os.getenv("CHANNEL_FREE_MAIN"),
+    os.getenv("CHANNEL_FREE_SIGNALS"),
+    os.getenv("CHANNEL_PREMIUM"),
+    os.getenv("CHANNEL_PREMIUM_ELITE"),
+]
 
 # ============================
-# TELEGRAM SAFE
+# TELEGRAM
 # ============================
-def send(msg):
-    if not BOT_TOKEN or not CHANNEL:
-        print("Missing config")
-        return
+def send_telegram(message):
+    for channel in CHANNELS:
+        if not channel:
+            continue
+
+        try:
+            url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+            requests.post(url, data={
+                "chat_id": channel,
+                "text": message,
+                "parse_mode": "Markdown"
+            }, timeout=10)
+        except Exception as e:
+            print("Telegram Error:", e)
+
+
+# ============================
+# NSE DATA (PRIMARY SOURCE)
+# ============================
+def get_nse_index(symbol):
+    try:
+        url = f"https://www.nseindia.com/api/equity-stockIndices?index={symbol}"
+
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "application/json",
+            "Referer": "https://www.nseindia.com/"
+        }
+
+        session = requests.Session()
+        session.get("https://www.nseindia.com", headers=headers, timeout=5)
+
+        res = session.get(url, headers=headers, timeout=10)
+
+        data = res.json()
+
+        index = data["data"][0]
+
+        return {
+            "price": index["lastPrice"],
+            "change": index["pChange"]
+        }
+
+    except Exception as e:
+        print("NSE Error:", e)
+        return None
+
+
+# ============================
+# YFINANCE BACKUP
+# ============================
+def get_yf_data(symbol):
+    try:
+        df = yf.download(symbol, period="5d", interval="1d")
+
+        if df.empty:
+            return None
+
+        prev_close = df["Close"].iloc[-2]
+        current = df["Close"].iloc[-1]
+
+        change = ((current - prev_close) / prev_close) * 100
+
+        return {
+            "price": current,
+            "change": change
+        }
+
+    except Exception as e:
+        print("YF Error:", e)
+        return None
+
+
+# ============================
+# GET INDEX (SMART FETCH)
+# ============================
+def get_index_data(nse_symbol, yf_symbol):
+
+    data = get_nse_index(nse_symbol)
+
+    if data:
+        return data
+
+    print("⚠️ Falling back to yfinance...")
+
+    return get_yf_data(yf_symbol)
+
+
+# ============================
+# GLOBAL SENTIMENT
+# ============================
+def get_global_sentiment():
 
     try:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        requests.post(url, data={
-            "chat_id": CHANNEL,
-            "text": msg,
-            "parse_mode": "Markdown"
-        }, timeout=10)
-    except Exception as e:
-        print("Telegram error:", e)
+        sp500 = get_yf_data("^GSPC")
+        nasdaq = get_yf_data("^IXIC")
+
+        score = 0
+
+        if sp500 and sp500["change"] > 0:
+            score += 1
+        else:
+            score -= 1
+
+        if nasdaq and nasdaq["change"] > 0:
+            score += 1
+        else:
+            score -= 1
+
+        if score > 0:
+            return "BULLISH", score
+        elif score < 0:
+            return "BEARISH", score
+        return "NEUTRAL", score
+
+    except:
+        return "NEUTRAL", 0
+
 
 # ============================
-# SAFE YFINANCE WRAPPER
+# LOGIC
 # ============================
-def safe_fetch(symbol):
-    for _ in range(2):  # retry twice
-        try:
-            df = yf.download(symbol, period="5d", interval="1d", progress=False)
-
-            if df is not None and len(df) >= 2:
-                prev = df.iloc[-2]
-                curr = df.iloc[-1]
-
-                change = ((curr["Close"] - prev["Close"]) / prev["Close"]) * 100
-
-                return {
-                    "prev_close": prev["Close"],
-                    "high": prev["High"],
-                    "low": prev["Low"],
-                    "change": change
-                }
-
-        except Exception as e:
-            print(f"Retry fetch {symbol}: {e}")
-
-    # fallback (IMPORTANT)
-    return {
-        "prev_close": 0,
-        "high": 0,
-        "low": 0,
-        "change": 0
-    }
-
-# ============================
-# MARKET STATE ENGINE
-# ============================
-def bias(c):
-    if c > 0.5:
+def get_bias(change):
+    if change > 0.4:
         return "BULLISH"
-    if c < -0.5:
+    elif change < -0.4:
         return "BEARISH"
     return "SIDEWAYS"
 
-def rng(p, h, l):
-    r = max(h - l, 1)
-    return round(p - r * 0.3), round(p + r * 0.3), r
 
-def volatility(r):
-    if r > 300:
-        return "HIGH"
-    if r > 150:
-        return "NORMAL"
-    return "LOW"
+def create_message(sentiment, score, nifty, banknifty):
 
-# ============================
-# MESSAGE
-# ============================
-def build(n, b, gsent):
-    nb = bias(n["change"])
-    bb = bias(b["change"])
+    nifty_bias = get_bias(nifty["change"])
+    bank_bias = get_bias(banknifty["change"])
 
-    nl, nh, nr = rng(n["prev_close"], n["high"], n["low"])
-    bl, bh, br = rng(b["prev_close"], b["high"], b["low"])
+    msg = "🚀 *INSTITUTIONAL PRE-MARKET ENGINE v2.1*\n\n"
 
-    msg = "📊 *INSTITUTIONAL PRE-MARKET ENGINE v2.2*\n\n"
+    msg += f"🌍 Global Sentiment: *{sentiment}*\n\n"
 
-    msg += f"🌍 Global: {gsent}\n\n"
+    msg += "📊 Index Bias:\n"
+    msg += f"• NIFTY: *{nifty_bias}* ({nifty['change']:.2f}%)\n"
+    msg += f"• BANKNIFTY: *{bank_bias}* ({banknifty['change']:.2f}%)\n\n"
 
-    msg += f"NIFTY: {nb}\nBANKNIFTY: {bb}\n\n"
+    msg += "📦 Market Behaviour:\n"
 
-    msg += "📍 RANGE\n"
-    msg += f"NIFTY: {nl} - {nh}\n"
-    msg += f"BANKNIFTY: {bl} - {bh}\n\n"
-
-    msg += "⚡ VOLATILITY\n"
-    msg += f"NIFTY: {volatility(nr)}\nBANKNIFTY: {volatility(br)}\n\n"
-
-    if nb == bb:
-        msg += "🔥 UNIFIED MARKET DIRECTION\n"
+    if nifty_bias == bank_bias:
+        msg += f"• Trend Day Expected ({nifty_bias})\n"
     else:
-        msg += "⚠️ MIXED STRUCTURE\n"
+        msg += "• Mixed / Stock Specific Day\n"
 
+    msg += "\n⚠️ Informational only. No investment advice."
     msg += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
-    msg += "\n⚠️ Educational only"
 
     return msg
+
 
 # ============================
 # MAIN
 # ============================
 if __name__ == "__main__":
-    print("🚀 Engine v2.2 starting")
+    try:
 
-    nifty = safe_fetch("^NSEI")
-    bank = safe_fetch("^NSEBANK")
+        print("🚀 Running Institutional Engine v2.1")
 
-    # global safe fallback
-    gsent = "NEUTRAL (CI MODE)"
+        sentiment, score = get_global_sentiment()
 
-    msg = build(nifty, bank, gsent)
+        nifty = get_index_data("NIFTY 50", "^NSEI")
+        banknifty = get_index_data("NIFTY BANK", "^NSEBANK")
 
-    print(msg)
-    send(msg)
+        if not nifty or not banknifty:
+            send_telegram("⚠️ Market data unavailable")
+        else:
+            msg = create_message(sentiment, score, nifty, banknifty)
+            send_telegram(msg)
 
-    print("✅ Done")
+        print("✅ Done")
+
+    except Exception as e:
+        print("❌ Fatal Error:", e)
