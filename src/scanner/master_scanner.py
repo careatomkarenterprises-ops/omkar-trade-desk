@@ -5,7 +5,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 import pandas as pd
 import json
 import logging
-import requests
 from datetime import datetime
 from src.scanner.volume_analyzer import VolumeSetupAnalyzer
 from src.scanner.data_fetcher import fetch_historical_data
@@ -25,21 +24,35 @@ class MasterScanner:
     # ---------------- SAFE FETCH ----------------
     def _safe_fetch(self, symbol, interval, days=5):
         try:
-            return fetch_historical_data(symbol, interval, days)
+            df = fetch_historical_data(symbol, interval, days)
+            if df is None or df.empty:
+                logger.warning(f"No data for {symbol}")
+                return None
+            return df
         except Exception as e:
             logger.error(f"Fetch error {symbol}: {e}")
             return None
 
     # ---------------- TELEGRAM ----------------
+    def _send_safe(self, channel, msg):
+        try:
+            send_message(channel, msg)
+            logger.info(f"Sent message to {channel}")
+        except Exception as e:
+            logger.error(f"Telegram send failed ({channel}): {e}")
+
     def _send_to_all_premium(self, msg):
-        send_message("premium", msg)
-        send_message("premium_elite", msg)
+        self._send_safe("premium", msg)
+        self._send_safe("premium_elite", msg)
 
     # ---------------- CACHE ----------------
     def _cache_delayed_pattern(self, symbol, setup, current_price):
         try:
-            with open(self.delayed_cache_file, 'r') as f:
-                cache = json.load(f)
+            if os.path.exists(self.delayed_cache_file):
+                with open(self.delayed_cache_file, 'r') as f:
+                    cache = json.load(f)
+            else:
+                cache = []
         except:
             cache = []
 
@@ -55,9 +68,8 @@ class MasterScanner:
         with open(self.delayed_cache_file, 'w') as f:
             json.dump(cache, f, indent=2)
 
-    # ---------------- SYMBOL LIST (NIFTY 50 - FREE DATA SAFE) ----------------
+    # ---------------- SYMBOL LIST ----------------
     def _get_fno_list(self):
-
         return [
             "RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS",
             "SBIN.NS", "LT.NS", "AXISBANK.NS", "KOTAKBANK.NS", "ITC.NS",
@@ -69,20 +81,20 @@ class MasterScanner:
             "ADANIPORTS.NS", "ADANIENT.NS"
         ]
 
-    # ---------------- INDEX ----------------
     def _get_index_symbols(self):
         return ["^NSEI", "^NSEBANK"]
 
-    # ---------------- COMMODITY (YFINANCE FORMAT) ----------------
     def _get_commodity_symbols(self):
-        return ["GC=F", "SI=F", "CL=F"]  # Gold, Silver, Crude
+        return ["GC=F", "SI=F", "CL=F"]
 
     # ---------------- PREMARKET ----------------
     def scan_premarket_gap(self):
+        logger.info("Running premarket scan...")
+
         df = self._safe_fetch("^NSEI", "day", 20)
 
         if df is None:
-            send_message("free_main", "❌ NIFTY data not available")
+            self._send_safe("free_main", "❌ NIFTY data not available")
             return
 
         setups = self.analyzer.detect_setups(df)
@@ -99,18 +111,22 @@ Zone: {s['fab_50']}
 Bias: Sideways
 ⚠️ Educational"""
 
-        send_message("free_main", msg)
+        self._send_safe("free_main", msg)
 
     # ---------------- INTRADAY ----------------
     def scan_intraday_fno(self):
+        logger.info("Running intraday FNO scan...")
 
         symbols = self._get_fno_list()
+        found_signal = False
 
         for symbol in symbols:
 
+            logger.info(f"Checking {symbol}")
+
             df = self._safe_fetch(symbol, "5minute", 5)
 
-            if df is None or df.empty:
+            if df is None:
                 continue
 
             setups = self.analyzer.detect_setups(df)
@@ -121,7 +137,10 @@ Bias: Sideways
             latest = setups[-1]
             current = df['close'].iloc[-1]
 
+            logger.info(f"{symbol} | Price: {current} | Top: {latest['top']}")
+
             if current > latest['top']:
+                found_signal = True
 
                 msg = f"""📊 *BREAKOUT ALERT*
 
@@ -135,8 +154,12 @@ Zone: {latest['fab_50']}
                 self._send_to_all_premium(msg)
                 self._cache_delayed_pattern(symbol, latest, current)
 
-    # ---------------- INDEX MONITOR ----------------
+        if not found_signal:
+            self._send_safe("free_main", "📊 No breakout signals found in this scan")
+
+    # ---------------- INDEX ----------------
     def scan_index(self):
+        logger.info("Running index scan...")
 
         for idx in self._get_index_symbols():
 
@@ -148,11 +171,11 @@ Zone: {latest['fab_50']}
             change = ((df['close'].iloc[-1] - df['open'].iloc[0]) / df['open'].iloc[0]) * 100
 
             msg = f"📊 Index {idx} Move: {change:.2f}%"
-
-            send_message("free_main", msg)
+            self._send_safe("free_main", msg)
 
     # ---------------- COMMODITY ----------------
     def scan_commodity(self):
+        logger.info("Running commodity scan...")
 
         for comm in self._get_commodity_symbols():
 
@@ -162,17 +185,20 @@ Zone: {latest['fab_50']}
                 continue
 
             msg = f"🛢️ {comm} Price: {df['close'].iloc[-1]}"
-
             self._send_to_all_premium(msg)
 
     # ---------------- DELAYED ----------------
     def post_delayed_patterns(self):
+        logger.info("Posting delayed patterns...")
 
         if not os.path.exists(self.delayed_cache_file):
             return
 
         with open(self.delayed_cache_file, 'r') as f:
             cache = json.load(f)
+
+        if not cache:
+            return
 
         for item in cache:
 
@@ -185,7 +211,7 @@ Zone: {item['setup']['fab_50']}
 
 ⚠️ Educational"""
 
-            send_message("free_signals", msg)
+            self._send_safe("free_signals", msg)
 
         with open(self.delayed_cache_file, 'w') as f:
             json.dump([], f)
@@ -196,10 +222,14 @@ if __name__ == "__main__":
 
     scanner = MasterScanner()
 
+    send_message("free_main", "🚀 Intraday Scanner Started")
+
     scanner.scan_premarket_gap()
     scanner.scan_index()
     scanner.scan_intraday_fno()
     scanner.scan_commodity()
     scanner.post_delayed_patterns()
+
+    send_message("free_main", "✅ Scanner cycle completed")
 
     logger.info("✅ Scanner Completed Successfully")
