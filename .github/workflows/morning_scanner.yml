@@ -1,52 +1,25 @@
-name: Morning Scanner (Pre-Market)
+name: Pre-Open Scanner
 
 on:
   schedule:
-    - cron: '35 3 * * 1-5'
+    - cron: '35 3 * * 1-5'   # 9:05 AM IST
   workflow_dispatch:
 
 jobs:
-  morning:
+  run:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout Repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: 🐍 Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
 
-      - name: 📦 Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install yfinance pandas numpy requests
+      - run: pip install requests
 
-      - name: 🕒 Debug Time
-        run: |
-          date -u
-          TZ="Asia/Kolkata" date
-
-      - name: 📂 Verify Files
-        run: ls -R
-
-      - name: 🚀 Run Morning Scanner
+      - run: python run_preopen_scanner.py
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          KITE_API_KEY: ${{ secrets.KITE_API_KEY }}
-          KITE_ACCESS_TOKEN: ${{ secrets.KITE_ACCESS_TOKEN }}
           CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
-          PYTHONUNBUFFERED: "1"
-        run: python run_morning_scanner.py
-
-      - name: ✅ Success
-        if: success()
-        run: echo "Morning Scanner completed successfully"
-
-      - name: ❌ Failure
-        if: failure()
-        run: echo "Morning Scanner failed - check logs"
-
+          CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
