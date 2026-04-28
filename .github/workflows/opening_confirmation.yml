@@ -1,27 +1,64 @@
-name: Opening Confirmation
+import requests
+import os
+from datetime import datetime
 
-on:
-  schedule:
-    - cron: '52 3 * * 1-5'   # 9:22 AM IST (realistic delay buffer)
-  workflow_dispatch:
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
-jobs:
-  run:
-    runs-on: ubuntu-latest
+FREE = [
+    os.getenv("CHANNEL_FREE_MAIN"),
+    os.getenv("CHANNEL_FREE_SIGNALS"),
+]
 
-    steps:
-      - uses: actions/checkout@v4
+PREMIUM = [
+    os.getenv("CHANNEL_PREMIUM"),
+    os.getenv("CHANNEL_PREMIUM_ELITE"),
+]
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+def send(channels, msg):
+    for ch in channels:
+        if not ch:
+            continue
+        try:
+            requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", data={
+                "chat_id": ch,
+                "text": msg,
+                "parse_mode": "Markdown"
+            })
+        except:
+            pass
 
-      - run: pip install requests
 
-      - run: python run_opening_confirmation.py
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
-          CHANNEL_FREE_SIGNALS: ${{ secrets.CHANNEL_FREE_SIGNALS }}
-          CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
-          CHANNEL_PREMIUM_ELITE: ${{ secrets.CHANNEL_PREMIUM_ELITE }}
+def free_msg():
+    return f"""⏰ *9:20 MARKET UPDATE*
+
+📊 Market forming structure
+👉 Wait for confirmation
+
+🔐 Premium = Exact trade trigger
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
+"""
+
+
+def premium_msg():
+    return f"""⏰ *OPENING CONFIRMATION*
+
+📊 First 15-min Range Ready
+
+🎯 Trade Rules:
+• Break High → LONG
+• Break Low → SHORT
+
+⚡ Avoid fake breakout
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
+
+⚠️ Informational only
+"""
+
+
+if __name__ == "__main__":
+    send(FREE, free_msg())
+    send(PREMIUM, premium_msg())
+
+    print("✅ 9:20 sent")
