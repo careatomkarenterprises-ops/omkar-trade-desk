@@ -8,21 +8,18 @@ RAZORPAY_LINK = os.getenv("RAZORPAY_LINK")
 
 
 def send_message(message):
-    try:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
-        payload = {
-            "chat_id": CHANNEL,
-            "text": message,
-            "parse_mode": "Markdown"
-        }
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
-        response = requests.post(url, data=payload, timeout=10)
+    payload = {
+        "chat_id": CHANNEL,
+        "text": message,
+        "parse_mode": "Markdown"
+    }
 
-        print(response.text)
+    response = requests.post(url, data=payload)
 
-    except Exception as e:
-        print("Telegram Error:", e)
+    print(response.text)
 
 
 def build_message():
@@ -30,10 +27,10 @@ def build_message():
     return f"""
 🚀 *OMKAR TRADE DESK PREMIUM*
 
-📊 AI-Based Market Insights
+📊 AI Market Insights
 📈 Intraday Setups
-🔥 Pre-Market Intelligence
-🎯 Momentum Scanner
+🔥 Momentum Scanner
+🎯 Pre-Market Intelligence
 
 ━━━━━━━━━━━━━━━
 
@@ -45,7 +42,7 @@ def build_message():
 
 ━━━━━━━━━━━━━━━
 
-🔗 Join Now:
+🔗 Join Premium:
 {RAZORPAY_LINK}
 
 ⏰ {datetime.now().strftime('%H:%M:%S')}
@@ -58,8 +55,8 @@ if __name__ == "__main__":
 
     print("🚀 Running Promotion Engine")
 
-    msg = build_message()
+    message = build_message()
 
-    send_message(msg)
+    send_message(message)
 
     print("✅ Promotion completed")
