@@ -1,12 +1,7 @@
 import requests
 import os
-import time
 from datetime import datetime
-import yfinance as yf
 
-# ============================
-# ENV VARIABLES
-# ============================
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 CHANNELS = [
@@ -41,153 +36,102 @@ def send_telegram(message):
             if res.status_code == 200:
                 print(f"✅ Sent to {channel}")
             else:
-                print(f"❌ Failed {channel}: {res.text}")
+                print(f"❌ Failed: {res.text}")
 
         except Exception as e:
-            print(f"❌ Telegram Error: {e}")
+            print(f"❌ Error: {e}")
+
 
 # ============================
-# SAFE DATA FETCH (FIXED)
+# NSE DATA (NO LOGIN REQUIRED)
 # ============================
-def safe_fetch(symbol, retries=3):
-    for attempt in range(retries):
-        try:
-            data = yf.download(
-                symbol,
-                period="5d",
-                interval="1d",
-                progress=False,
-                threads=False
-            )
+def get_nse_data():
+    try:
+        url = "https://www.nseindia.com/api/marketStatus"
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Accept-Language": "en-US,en;q=0.9"
+        }
 
-            if data is not None and not data.empty:
-                prev = data.iloc[-2]
-                current = data.iloc[-1]
+        session = requests.Session()
+        session.get("https://www.nseindia.com", headers=headers)
 
-                return {
-                    "prev_close": float(prev["Close"]),
-                    "close": float(current["Close"]),
-                    "high": float(prev["High"]),
-                    "low": float(prev["Low"]),
-                    "change": ((current["Close"] - prev["Close"]) / prev["Close"]) * 100
-                }
+        res = session.get(url, headers=headers)
+        data = res.json()
 
-        except Exception as e:
-            print(f"Retry {attempt+1} failed for {symbol}: {e}")
-            time.sleep(2)
+        return data
 
-    print(f"❌ Final failure for {symbol}")
-    return None
+    except Exception as e:
+        print("❌ NSE Error:", e)
+        return None
+
 
 # ============================
-# DATA FETCH WITH FALLBACK
+# SIMPLE LOGIC
 # ============================
-def get_market_data():
-    nifty = safe_fetch("^NSEI")
-    banknifty = safe_fetch("^NSEBANK")
+def analyze_market():
+    data = get_nse_data()
 
-    # Fallback ETFs (VERY IMPORTANT)
-    if not nifty:
-        print("🔁 Using NIFTY ETF fallback")
-        nifty = safe_fetch("NIFTYBEES.NS")
+    if not data:
+        return None
 
-    if not banknifty:
-        print("🔁 Using BANK ETF fallback")
-        banknifty = safe_fetch("BANKBEES.NS")
+    try:
+        market_status = data["marketState"][0]["marketStatus"]
 
-    return nifty, banknifty
+        if market_status == "Open":
+            sentiment = "LIVE MARKET"
+        else:
+            sentiment = "PRE-MARKET"
 
-# ============================
-# LOGIC
-# ============================
-def get_bias(change):
-    if change > 0.4:
-        return "BULLISH"
-    elif change < -0.4:
-        return "BEARISH"
-    return "SIDEWAYS"
+        return sentiment
 
-def get_opening_range(prev_close, high, low):
-    range_size = high - low
-    low_range = prev_close - (range_size * 0.25)
-    high_range = prev_close + (range_size * 0.25)
-    return round(low_range), round(high_range), range_size
+    except:
+        return "NEUTRAL"
 
-def get_volatility(range_size):
-    if range_size > 350:
-        return "HIGH"
-    elif range_size > 180:
-        return "NORMAL"
-    return "LOW"
 
 # ============================
 # MESSAGE
 # ============================
-def create_message(nifty, banknifty):
+def create_message():
+    sentiment = analyze_market()
 
-    nifty_bias = get_bias(nifty["change"])
-    bank_bias = get_bias(banknifty["change"])
+    if not sentiment:
+        return "⚠️ Market data unavailable. Stay cautious today."
 
-    n_low, n_high, n_range = get_opening_range(
-        nifty["prev_close"], nifty["high"], nifty["low"]
-    )
+    msg = "🌅 *PRE-MARKET MARKET INTELLIGENCE*\n\n"
 
-    b_low, b_high, b_range = get_opening_range(
-        banknifty["prev_close"], banknifty["high"], banknifty["low"]
-    )
+    msg += f"📊 Market Phase: *{sentiment}*\n\n"
 
-    volatility = get_volatility(n_range)
+    msg += "📌 Today's Approach:\n"
+    msg += "• Wait for first 15 mins confirmation\n"
+    msg += "• Avoid early breakout traps\n"
+    msg += "• Focus on high volume stocks\n\n"
 
-    msg = "🌅 *PRE-MARKET INDEX INTELLIGENCE (v2.2)*\n\n"
+    msg += "⚡ Strategy:\n"
+    msg += "• Trade only after structure confirmation\n"
+    msg += "• Avoid overtrading\n\n"
 
-    msg += "📊 Index Bias:\n"
-    msg += f"• NIFTY: *{nifty_bias}*\n"
-    msg += f"• BANK NIFTY: *{bank_bias}*\n\n"
-
-    msg += "📍 Expected Opening Zone:\n"
-    msg += f"• NIFTY: {n_low} – {n_high}\n"
-    msg += f"• BANK NIFTY: {b_low} – {b_high}\n\n"
-
-    msg += f"⚡ Volatility: *{volatility}*\n\n"
-
-    msg += "📦 Market Behaviour:\n"
-    msg += "• Wait for confirmation after 9:20 AM\n"
-
-    msg += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
-    msg += "\n\n⚠️ Informational only. Not financial advice."
+    msg += f"⏰ {datetime.now().strftime('%H:%M:%S')}\n"
+    msg += "\n⚠️ Informational only. No buy/sell recommendation."
 
     return msg
 
-# ============================
-# FALLBACK MESSAGE
-# ============================
-def fallback_message():
-    return (
-        "⚠️ *Pre-Market Update*\n\n"
-        "Market data temporarily unavailable.\n"
-        "Update will be shared after open.\n\n"
-        "⏰ " + datetime.now().strftime('%H:%M:%S')
-    )
 
 # ============================
 # MAIN
 # ============================
 if __name__ == "__main__":
     try:
-        print("🚀 Running Pre-Market Engine v2.2")
+        print("🚀 Running Stable Market Predictor...")
 
-        nifty, banknifty = get_market_data()
+        message = create_message()
 
-        if not nifty or not banknifty:
-            print("❌ Critical data missing")
-            send_telegram(fallback_message())
-        else:
-            message = create_message(nifty, banknifty)
-            print(message)
-            send_telegram(message)
+        print("📩 Message:")
+        print(message)
+
+        send_telegram(message)
 
         print("✅ Done")
 
     except Exception as e:
-        print(f"❌ Fatal Error: {e}")
-        send_telegram(fallback_message())
+        print("❌ Error:", e)
