@@ -2,7 +2,7 @@ name: Daily Conversion Push
 
 on:
   schedule:
-    - cron: '0 12 * * 1-5'   # 5:30 PM IST
+    - cron: '0 12 * * 1-5'
   workflow_dispatch:
 
 jobs:
@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
