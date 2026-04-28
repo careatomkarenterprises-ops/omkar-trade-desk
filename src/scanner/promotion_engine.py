@@ -1,18 +1,12 @@
 import requests
 import os
 import random
-from datetime import datetime
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-
 CHANNEL = os.getenv("CHANNEL_FREE_MAIN")
-
 RAZORPAY_LINK = os.getenv("RAZORPAY_LINK")
 
 
-# =========================
-# TELEGRAM SEND
-# =========================
 def send_message(message):
     try:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -23,98 +17,54 @@ def send_message(message):
             "parse_mode": "Markdown"
         }
 
-        requests.post(url, data=payload, timeout=15)
+        requests.post(url, data=payload, timeout=10)
 
-        print("✅ Promotion message sent")
+        print("✅ Promotion sent successfully")
 
     except Exception as e:
         print("❌ Telegram Error:", e)
 
 
-# =========================
-# PROMOTION MESSAGES
-# =========================
-PROMOS = [
+messages = [
+    f"""🚀 *TRADERS ARE SWITCHING TO PREMIUM*
 
-"""🔥 *TRADERS NOTICE*
+✅ Live AI Signals
+✅ Probability-Based Trades
+✅ Institutional Trade Logic
+✅ High Momentum Scanner
 
-Most traders lose because they trade without structure.
-
-📊 Our AI system tracks:
-✅ Breakouts
-✅ Momentum
-✅ Intraday setups
-✅ Pre-market sentiment
-
-🎯 Learn structured trading approach.
-
-🔐 Premium Access:
-₹99 → Trial
-₹499 → Swing Access
-₹1999 → Elite Access
-
-👇 Join Here
-{link}
-
-⚠️ Educational purpose only
+🔥 Upgrade Now:
+{RAZORPAY_LINK}
 """,
 
-"""🚀 *AI SCANNER ALERT SYSTEM*
+    f"""📈 *TODAY'S MARKET MOVES WERE CAPTURED EARLY*
 
-Our automated system tracks:
+Premium Members Received:
+✅ Early Entry Zones
+✅ Breakout Alerts
+✅ Smart Risk Management
 
-✅ Breakout stocks
-✅ Intraday momentum
-✅ BankNifty direction
-✅ High probability setups
-
-📈 Built for serious learners.
-
-🎯 Upgrade Your Access:
-₹99 Starter
-₹499 Pro
-₹1999 Elite
-
-👇 Join Premium
-{link}
-
-⚠️ Informational only
+🔐 Join Premium:
+{RAZORPAY_LINK}
 """,
 
-"""🏦 *MARKET EDGE SYSTEM*
+    f"""🏦 *AI-POWERED MARKET INTELLIGENCE*
 
-Retail traders react late.
+Our Premium System Includes:
+✅ Pre-Market Prediction
+✅ Smart Opening Confirmation
+✅ Momentum Scanner
+✅ Probability Scores
 
-Our system monitors:
-⚡ Momentum
-⚡ Volume
-⚡ Breakouts
-⚡ Trend continuation
-
-📊 Real-time structured updates.
-
-🔐 Upgrade Access:
-₹99 Trial
-₹499 Advanced
-₹1999 Elite
-
-👇 Access Here
-{link}
-
-⚠️ Educational only
+⚡ Upgrade Today:
+{RAZORPAY_LINK}
 """
 ]
 
 
-# =========================
-# MAIN
-# =========================
 if __name__ == "__main__":
+    selected = random.choice(messages)
 
-    selected = random.choice(PROMOS)
+    send_message(selected)
 
-    msg = selected.format(link=RAZORPAY_LINK)
-
-    send_message(msg)
-
-    print("✅ Promotion engine completed")
+    print("✅ Daily promotion completed")
