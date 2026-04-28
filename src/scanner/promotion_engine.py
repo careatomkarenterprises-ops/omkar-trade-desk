@@ -1,9 +1,12 @@
 import requests
 import os
+import random
 from datetime import datetime
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+
 CHANNEL = os.getenv("CHANNEL_FREE_MAIN")
+
 RAZORPAY_LINK = os.getenv("RAZORPAY_LINK")
 
 
@@ -20,43 +23,87 @@ def send_message(message):
             "parse_mode": "Markdown"
         }
 
-        requests.post(url, data=payload, timeout=10)
+        requests.post(url, data=payload, timeout=15)
 
-        print("✅ Promotion sent")
+        print("✅ Promotion message sent")
 
     except Exception as e:
-        print("Telegram Error:", e)
+        print("❌ Telegram Error:", e)
 
 
 # =========================
-# PROMOTION MESSAGE
+# PROMOTION MESSAGES
 # =========================
-def build_message():
+PROMOS = [
 
-    msg = f"""
-🚀 *OMKAR TRADE DESK PREMIUM*
+"""🔥 *TRADERS NOTICE*
 
-✅ Daily AI-Based Market Analysis
-✅ Pre-Market Probability Scanner
-✅ Intraday Momentum Scanner
-✅ Smart Money Tracking
-✅ Opening Confirmation System
-✅ Premium Trade Levels
-✅ Risk Management Updates
+Most traders lose because they trade without structure.
 
-📈 Upgrade Your Trading Experience Today
+📊 Our AI system tracks:
+✅ Breakouts
+✅ Momentum
+✅ Intraday setups
+✅ Pre-market sentiment
 
-🔥 *Plans Starting From ₹99*
+🎯 Learn structured trading approach.
 
-💳 Join Now:
-{RAZORPAY_LINK}
+🔐 Premium Access:
+₹99 → Trial
+₹499 → Swing Access
+₹1999 → Elite Access
 
-⏰ {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}
+👇 Join Here
+{link}
 
-⚠️ Educational Purpose Only
+⚠️ Educational purpose only
+""",
+
+"""🚀 *AI SCANNER ALERT SYSTEM*
+
+Our automated system tracks:
+
+✅ Breakout stocks
+✅ Intraday momentum
+✅ BankNifty direction
+✅ High probability setups
+
+📈 Built for serious learners.
+
+🎯 Upgrade Your Access:
+₹99 Starter
+₹499 Pro
+₹1999 Elite
+
+👇 Join Premium
+{link}
+
+⚠️ Informational only
+""",
+
+"""🏦 *MARKET EDGE SYSTEM*
+
+Retail traders react late.
+
+Our system monitors:
+⚡ Momentum
+⚡ Volume
+⚡ Breakouts
+⚡ Trend continuation
+
+📊 Real-time structured updates.
+
+🔐 Upgrade Access:
+₹99 Trial
+₹499 Advanced
+₹1999 Elite
+
+👇 Access Here
+{link}
+
+⚠️ Educational only
 """
-
-    return msg
+]
 
 
 # =========================
@@ -64,10 +111,10 @@ def build_message():
 # =========================
 if __name__ == "__main__":
 
-    print("🚀 Running Promotion Engine")
+    selected = random.choice(PROMOS)
 
-    message = build_message()
+    msg = selected.format(link=RAZORPAY_LINK)
 
-    send_message(message)
+    send_message(msg)
 
-    print("✅ Done")
+    print("✅ Promotion engine completed")
