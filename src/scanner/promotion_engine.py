@@ -7,9 +7,6 @@ CHANNEL = os.getenv("CHANNEL_FREE_MAIN")
 RAZORPAY_LINK = os.getenv("RAZORPAY_LINK")
 
 
-# =========================
-# TELEGRAM SEND
-# =========================
 def send_message(message):
     try:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -20,45 +17,35 @@ def send_message(message):
             "parse_mode": "Markdown"
         }
 
-        requests.post(url, data=payload, timeout=10)
+        response = requests.post(url, data=payload, timeout=10)
 
-        print("✅ Promotion sent")
+        print(response.text)
 
     except Exception as e:
         print("Telegram Error:", e)
 
 
-# =========================
-# PROMOTION MESSAGE
-# =========================
 def build_message():
 
-    msg = f"""
+    return f"""
 🚀 *OMKAR TRADE DESK PREMIUM*
 
-📊 Daily AI-Based Market Insights
-📈 Intraday Trade Setups
+📊 AI-Based Market Insights
+📈 Intraday Setups
 🔥 Pre-Market Intelligence
-🎯 Smart Money Scanner
-⚡ Momentum Alerts
-🏦 Institutional Style Reports
+🎯 Momentum Scanner
 
 ━━━━━━━━━━━━━━━
 
 💰 *Plans*
 
-🥉 Starter → ₹99
-🥈 Pro → ₹499
-🥇 Elite → ₹1999
+🥉 ₹99 Starter
+🥈 ₹499 Pro
+🥇 ₹1999 Elite
 
 ━━━━━━━━━━━━━━━
 
-✅ Live Market Updates
-✅ High Probability Setups
-✅ Learning + Execution
-✅ Structured Risk Management
-
-🔗 Join Premium:
+🔗 Join Now:
 {RAZORPAY_LINK}
 
 ⏰ {datetime.now().strftime('%H:%M:%S')}
@@ -66,18 +53,13 @@ def build_message():
 ⚠️ Educational purpose only
 """
 
-    return msg
 
-
-# =========================
-# MAIN
-# =========================
 if __name__ == "__main__":
 
     print("🚀 Running Promotion Engine")
 
-    message = build_message()
+    msg = build_message()
 
-    send_message(message)
+    send_message(msg)
 
     print("✅ Promotion completed")
