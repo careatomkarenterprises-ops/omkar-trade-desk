@@ -1,12 +1,12 @@
-name: Daily Performance Report
+name: Daily Conversion Push
 
 on:
   schedule:
-    - cron: '40 10 * * 1-5'   # 4:10 PM IST (safe buffer)
+    - cron: '0 12 * * 1-5'   # 5:30 PM IST
   workflow_dispatch:
 
 jobs:
-  report:
+  promote:
     runs-on: ubuntu-latest
 
     steps:
@@ -16,10 +16,10 @@ jobs:
         with:
           python-version: '3.11'
 
-      - run: pip install -r requirements.txt
+      - run: pip install requests
 
       - run: python src/marketing/promotion_engine.py
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          RAZORPAY_LINK: ${{ secrets.RAZORPAY_LINK }}
           CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
+          RAZORPAY_LINK: ${{ secrets.RAZORPAY_LINK }}
