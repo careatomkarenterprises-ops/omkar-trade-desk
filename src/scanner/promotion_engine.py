@@ -3,19 +3,15 @@ import os
 from datetime import datetime
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-
 CHANNEL = os.getenv("CHANNEL_FREE_MAIN")
-
 RAZORPAY_LINK = os.getenv("RAZORPAY_LINK")
 
 
-# ============================
-# TELEGRAM
-# ============================
+# =========================
+# TELEGRAM SEND
+# =========================
 def send_message(message):
-
     try:
-
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
         payload = {
@@ -26,53 +22,62 @@ def send_message(message):
 
         requests.post(url, data=payload, timeout=10)
 
-        print("✅ Promotion Sent")
+        print("✅ Promotion sent")
 
     except Exception as e:
-
         print("Telegram Error:", e)
 
 
-# ============================
+# =========================
 # PROMOTION MESSAGE
-# ============================
-def create_message():
+# =========================
+def build_message():
 
-    msg = "🚀 *OMKAR TRADE DESK PREMIUM*\n\n"
+    msg = f"""
+🚀 *OMKAR TRADE DESK PREMIUM*
 
-    msg += "📊 What You Get:\n"
-    msg += "• Pre-market intelligence\n"
-    msg += "• Intraday momentum alerts\n"
-    msg += "• Smart money setups\n"
-    msg += "• 9:20 confirmation strategy\n"
-    msg += "• Multibagger stock scanner\n\n"
+📊 Daily AI-Based Market Insights
+📈 Intraday Trade Setups
+🔥 Pre-Market Intelligence
+🎯 Smart Money Scanner
+⚡ Momentum Alerts
+🏦 Institutional Style Reports
 
-    msg += "🎯 Membership Plans:\n"
-    msg += "• Starter → ₹99\n"
-    msg += "• Pro → ₹499\n"
-    msg += "• Elite → ₹1999\n\n"
+━━━━━━━━━━━━━━━
 
-    msg += "⚡ Upgrade Your Trading System Today\n\n"
+💰 *Plans*
 
-    if RAZORPAY_LINK:
-        msg += f"💳 Join Now:\n{RAZORPAY_LINK}\n\n"
+🥉 Starter → ₹99
+🥈 Pro → ₹499
+🥇 Elite → ₹1999
 
-    msg += "📌 Educational purpose only"
+━━━━━━━━━━━━━━━
 
-    msg += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
+✅ Live Market Updates
+✅ High Probability Setups
+✅ Learning + Execution
+✅ Structured Risk Management
+
+🔗 Join Premium:
+{RAZORPAY_LINK}
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
+
+⚠️ Educational purpose only
+"""
 
     return msg
 
 
-# ============================
+# =========================
 # MAIN
-# ============================
+# =========================
 if __name__ == "__main__":
 
     print("🚀 Running Promotion Engine")
 
-    message = create_message()
+    message = build_message()
 
     send_message(message)
 
-    print("✅ Promotion Completed")
+    print("✅ Promotion completed")
