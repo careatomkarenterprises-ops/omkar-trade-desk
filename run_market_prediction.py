@@ -13,17 +13,12 @@ CHANNELS = [
 ]
 
 # ============================
-# TELEGRAM (WITH STATUS CHECK)
+# TELEGRAM
 # ============================
 def send_telegram(message):
-    if not BOT_TOKEN:
-        print("❌ Missing TELEGRAM_BOT_TOKEN")
-        return
-
     for channel in CHANNELS:
         if not channel:
             continue
-
         try:
             url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
             payload = {
@@ -31,72 +26,48 @@ def send_telegram(message):
                 "text": message,
                 "parse_mode": "Markdown"
             }
-
-            res = requests.post(url, data=payload, timeout=10)
-
-            if res.status_code == 200:
-                print(f"✅ Sent to {channel}")
-            else:
-                print(f"❌ Failed {channel}: {res.text}")
-
+            requests.post(url, data=payload, timeout=10)
+            print(f"✅ Sent to {channel}")
         except Exception as e:
             print(f"❌ Telegram Error: {e}")
 
 
 # ============================
-# NSE FETCH (STABLE VERSION)
+# NSE QUOTE API (MORE STABLE)
 # ============================
-def fetch_nse_index(symbol):
-    url = "https://www.nseindia.com/api/chart-databyindex"
-    params = {"index": symbol}
+def fetch_index(symbol):
+    url = f"https://www.nseindia.com/api/quote-equity?symbol={symbol}"
 
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://www.nseindia.com/",
-        "Connection": "keep-alive"
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json",
+        "Referer": "https://www.nseindia.com/"
     }
 
     session = requests.Session()
 
-    for attempt in range(3):
-        try:
-            # Step 1: Load homepage (important for cookies)
-            session.get("https://www.nseindia.com", headers=headers, timeout=5)
+    try:
+        # Step 1: Get cookies
+        session.get("https://www.nseindia.com", headers=headers, timeout=5)
 
-            # Step 2: Fetch data
-            response = session.get(url, headers=headers, params=params, timeout=10)
+        # Step 2: Fetch data
+        response = session.get(url, headers=headers, timeout=10)
+        data = response.json()
 
-            if response.status_code != 200:
-                print(f"❌ NSE HTTP Error: {response.status_code}")
-                time.sleep(2)
-                continue
+        price = data["priceInfo"]["lastPrice"]
+        prev_close = data["priceInfo"]["previousClose"]
 
-            data = response.json()
+        return {
+            "prev_close": prev_close,
+            "current": price,
+            "change": ((price - prev_close) / prev_close) * 100,
+            "high": data["priceInfo"]["intraDayHighLow"]["max"],
+            "low": data["priceInfo"]["intraDayHighLow"]["min"]
+        }
 
-            values = data.get("grapthData", [])
-
-            if len(values) < 2:
-                print("❌ Not enough data points")
-                return None
-
-            prev = values[-2][1]
-            current = values[-1][1]
-
-            return {
-                "prev_close": prev,
-                "current": current,
-                "change": ((current - prev) / prev) * 100,
-                "high": prev * 1.01,
-                "low": prev * 0.99
-            }
-
-        except Exception as e:
-            print(f"🔁 Retry {attempt+1} NSE failed:", e)
-            time.sleep(3)
-
-    return None
+    except Exception as e:
+        print("❌ NSE fetch failed:", e)
+        return None
 
 
 # ============================
@@ -131,6 +102,7 @@ def get_volatility(range_size):
 # MESSAGE
 # ============================
 def create_message(nifty, banknifty):
+
     nifty_bias = get_bias(nifty["change"])
     bank_bias = get_bias(banknifty["change"])
 
@@ -173,32 +145,31 @@ def create_message(nifty, banknifty):
 
 
 # ============================
-# FALLBACK MESSAGE
-# ============================
-def fallback_message():
-    msg = "🌅 *PRE-MARKET UPDATE*\n\n"
-    msg += "⚠️ Data temporarily unavailable\n\n"
-    msg += "📌 Trade Plan:\n"
-    msg += "• Wait for first 15 minutes\n"
-    msg += "• Avoid early volatility\n"
-    msg += "• Trade with confirmation only\n\n"
-    msg += f"⏰ {datetime.now().strftime('%H:%M:%S')}"
-    return msg
-
-
-# ============================
 # MAIN
 # ============================
 if __name__ == "__main__":
     print("🚀 Running Production Pre-Market Predictor...")
     print("⏰ Time:", datetime.now())
 
-    nifty = fetch_nse_index("NIFTY 50")
-    banknifty = fetch_nse_index("NIFTY BANK")
+    # IMPORTANT: Use correct symbols
+    nifty = fetch_index("NIFTY")
+    banknifty = fetch_index("BANKNIFTY")
 
     if not nifty or not banknifty:
         print("❌ Data fetch failed → sending fallback")
-        send_telegram(fallback_message())
+
+        fallback = f"""
+🌅 *PRE-MARKET UPDATE*
+
+📊 Market preparing for open  
+📍 Awaiting confirmation from opening price  
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
+
+⚠️ Informational only
+"""
+        send_telegram(fallback)
+
     else:
         message = create_message(nifty, banknifty)
         print(message)
