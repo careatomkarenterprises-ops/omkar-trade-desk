@@ -10,41 +10,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
-      - name: STEP 1 - Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: STEP 2 - Verify Files
-        run: |
-          echo "===== ROOT FILES ====="
-          ls
-          echo "===== SRC ====="
-          ls src
-          echo "===== MARKETING ====="
-          ls src/marketing
-
-      - name: STEP 3 - Setup Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: STEP 4 - Verify Python
-        run: |
-          python --version
-          which python
+      - name: Install Requests
+        run: pip install requests
 
-      - name: STEP 5 - Install Requests
-        run: |
-          pip install requests
-
-      - name: STEP 6 - Run Promotion Engine
+      - name: Run Promotion Engine
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
           RAZORPAY_LINK: ${{ secrets.RAZORPAY_LINK }}
-        run: |
-          echo "===== RUNNING SCRIPT ====="
-          python src/marketing/promotion_engine.py
-
-      - name: STEP 7 - Completed
-        run: echo "✅ Workflow completed"
+        run: python src/marketing/promotion_engine.py
