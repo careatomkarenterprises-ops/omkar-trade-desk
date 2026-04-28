@@ -1,64 +1,35 @@
-import requests
-import os
-from datetime import datetime
+name: Opening Confirmation
 
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+on:
+  schedule:
+    - cron: '50 3 * * 1-5'
+  workflow_dispatch:
 
-FREE = [
-    os.getenv("CHANNEL_FREE_MAIN"),
-    os.getenv("CHANNEL_FREE_SIGNALS"),
-]
+jobs:
+  opening-confirmation:
 
-PREMIUM = [
-    os.getenv("CHANNEL_PREMIUM"),
-    os.getenv("CHANNEL_PREMIUM_ELITE"),
-]
+    runs-on: ubuntu-latest
 
-def send(channels, msg):
-    for ch in channels:
-        if not ch:
-            continue
-        try:
-            requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", data={
-                "chat_id": ch,
-                "text": msg,
-                "parse_mode": "Markdown"
-            })
-        except:
-            pass
+    steps:
 
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-def free_msg():
-    return f"""⏰ *9:20 MARKET UPDATE*
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-📊 Market forming structure
-👉 Wait for confirmation
+      - name: Install Dependencies
+        run: |
+          pip install requests
 
-🔐 Premium = Exact trade trigger
+      - name: Run Opening Confirmation
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
+          CHANNEL_FREE_SIGNALS: ${{ secrets.CHANNEL_FREE_SIGNALS }}
+          CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
+          CHANNEL_PREMIUM_ELITE: ${{ secrets.CHANNEL_PREMIUM_ELITE }}
 
-⏰ {datetime.now().strftime('%H:%M:%S')}
-"""
-
-
-def premium_msg():
-    return f"""⏰ *OPENING CONFIRMATION*
-
-📊 First 15-min Range Ready
-
-🎯 Trade Rules:
-• Break High → LONG
-• Break Low → SHORT
-
-⚡ Avoid fake breakout
-
-⏰ {datetime.now().strftime('%H:%M:%S')}
-
-⚠️ Informational only
-"""
-
-
-if __name__ == "__main__":
-    send(FREE, free_msg())
-    send(PREMIUM, premium_msg())
-
-    print("✅ 9:20 sent")
+        run: python run_opening_confirmation.py
