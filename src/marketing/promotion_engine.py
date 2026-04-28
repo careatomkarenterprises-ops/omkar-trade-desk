@@ -1,66 +1,70 @@
-import json
+import requests
 import os
-from datetime import datetime, timedelta
-from src.telegram.poster import send_message
+import random
 
-class PromotionEngine:
-    def __init__(self, log_file="data/performance.json"):
-        self.log_file = log_file
-        self.razorpay_link = os.getenv("RAZORPAY_LINK", "")
-        self._ensure_log_file()
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+CHANNEL = os.getenv("CHANNEL_FREE_MAIN")
+RAZORPAY_LINK = os.getenv("RAZORPAY_LINK")
 
-    def _ensure_log_file(self):
-        if not os.path.exists(self.log_file):
-            os.makedirs(os.path.dirname(self.log_file), exist_ok=True)
-            with open(self.log_file, 'w') as f:
-                json.dump({"daily": {}, "all_time": {"total_patterns": 0, "total_moved": 0, "best_move": 0}}, f)
 
-    def log_pattern_performance(self, pattern_symbol, moved_towards_zone, price_move_percent):
-        try:
-            with open(self.log_file, 'r') as f:
-                data = json.load(f)
-        except:
-            data = {"daily": {}, "all_time": {"total_patterns": 0, "total_moved": 0, "best_move": 0}}
+def send_message(message):
+    try:
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
-        today = datetime.now().strftime("%Y-%m-%d")
-        if today not in data["daily"]:
-            data["daily"][today] = {"total": 0, "moved_towards": 0, "moves": []}
-        data["daily"][today]["total"] += 1
-        if moved_towards_zone:
-            data["daily"][today]["moved_towards"] += 1
-            data["daily"][today]["moves"].append(price_move_percent)
-            data["all_time"]["total_moved"] += 1
-            if price_move_percent > data["all_time"]["best_move"]:
-                data["all_time"]["best_move"] = price_move_percent
-        data["all_time"]["total_patterns"] += 1
+        payload = {
+            "chat_id": CHANNEL,
+            "text": message,
+            "parse_mode": "Markdown"
+        }
 
-        with open(self.log_file, 'w') as f:
-            json.dump(data, f, indent=2)
+        requests.post(url, data=payload, timeout=10)
 
-    def generate_daily_report(self):
-        try:
-            with open(self.log_file, 'r') as f:
-                data = json.load(f)
-        except:
-            return
+        print("✅ Promotion sent successfully")
 
-        today = datetime.now().strftime("%Y-%m-%d")
-        stats = data["daily"].get(today, {"total": 0, "moved_towards": 0, "moves": []})
+    except Exception as e:
+        print("❌ Telegram Error:", e)
 
-        if stats["total"] == 0:
-            msg = "📊 *Pattern Performance*: No qualifying patterns today."
-        else:
-            ratio = (stats["moved_towards"] / stats["total"]) * 100
-            best_move = max(stats["moves"]) if stats["moves"] else 0
-            msg = (f"📈 *Daily Performance Report*\n"
-                   f"📅 {datetime.now().strftime('%B %d, %Y')}\n\n"
-                   f"✅ Patterns moved towards statistical zone: {stats['moved_towards']} / {stats['total']} ({ratio:.0f}%)\n"
-                   f"🏆 Best observed move: +{best_move:.2f}%\n\n"
-                   f"🚀 *Real-time alerts:* {self.razorpay_link}\n⚠️ Educational purpose only.")
 
-        send_message("free_main", msg)
-        return stats
+messages = [
+    f"""🚀 *TRADERS ARE SWITCHING TO PREMIUM*
+
+✅ Live AI Signals
+✅ Probability-Based Trades
+✅ Institutional Trade Logic
+✅ High Momentum Scanner
+
+🔥 Upgrade Now:
+{RAZORPAY_LINK}
+""",
+
+    f"""📈 *TODAY'S MARKET MOVES WERE CAPTURED EARLY*
+
+Premium Members Received:
+✅ Early Entry Zones
+✅ Breakout Alerts
+✅ Smart Risk Management
+
+🔐 Join Premium:
+{RAZORPAY_LINK}
+""",
+
+    f"""🏦 *AI-POWERED MARKET INTELLIGENCE*
+
+Our Premium System Includes:
+✅ Pre-Market Prediction
+✅ Smart Opening Confirmation
+✅ Momentum Scanner
+✅ Probability Scores
+
+⚡ Upgrade Today:
+{RAZORPAY_LINK}
+"""
+]
+
 
 if __name__ == "__main__":
-    engine = PromotionEngine()
-    engine.generate_daily_report()
+    selected = random.choice(messages)
+
+    send_message(selected)
+
+    print("✅ Daily promotion completed")
