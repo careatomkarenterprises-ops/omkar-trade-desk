@@ -1,77 +1,64 @@
 import requests
 import os
 from datetime import datetime
-import random
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
-FREE_CHANNELS = [
+FREE = [
     os.getenv("CHANNEL_FREE_MAIN"),
     os.getenv("CHANNEL_FREE_SIGNALS"),
 ]
 
-PREMIUM_CHANNELS = [
+PREMIUM = [
     os.getenv("CHANNEL_PREMIUM"),
     os.getenv("CHANNEL_PREMIUM_ELITE"),
 ]
 
-def send(channels, message):
+def send(channels, msg):
     for ch in channels:
         if not ch:
             continue
         try:
-            url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-            requests.post(url, data={
+            requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", data={
                 "chat_id": ch,
-                "text": message,
+                "text": msg,
                 "parse_mode": "Markdown"
             })
-            print(f"✅ Sent to {ch}")
-        except Exception as e:
-            print(e)
+        except:
+            pass
 
-def generate_market_state():
-    states = ["BREAKOUT", "RANGE", "WEAK"]
-    return random.choice(states)
 
-def free_message(state):
-    msg = "⏰ *9:20 MARKET UPDATE*\n\n"
+def free_msg():
+    return f"""⏰ *9:20 MARKET UPDATE*
 
-    if state == "BREAKOUT":
-        msg += "📊 Market showing breakout attempt\n"
-        msg += "👉 Wait for confirmation before entry\n"
-    elif state == "WEAK":
-        msg += "📊 Market showing weakness\n"
-        msg += "👉 Avoid aggressive buying\n"
-    else:
-        msg += "📊 Market in range\n"
-        msg += "👉 No clear direction yet\n"
+📊 Market forming structure
+👉 Wait for confirmation
 
-    msg += "\n⚠️ Informational only"
-    return msg
+🔐 Premium = Exact trade trigger
 
-def premium_message(state):
-    msg = "⏰ *OPENING CONFIRMATION (9:20)*\n\n"
+⏰ {datetime.now().strftime('%H:%M:%S')}
+"""
 
-    if state == "BREAKOUT":
-        msg += "📊 Breakout Structure Forming\n"
-        msg += "🎯 Trade Above Range → Long\n"
-    elif state == "WEAK":
-        msg += "📊 Weak Structure\n"
-        msg += "🎯 Below Range → Short Bias\n"
-    else:
-        msg += "📊 Range Formation\n"
-        msg += "🎯 Wait for breakout confirmation\n"
 
-    msg += "\n⚡ Rule: No trade without confirmation candle"
-    msg += "\n⚠️ For educational use"
+def premium_msg():
+    return f"""⏰ *OPENING CONFIRMATION*
 
-    return msg
+📊 First 15-min Range Ready
+
+🎯 Trade Rules:
+• Break High → LONG
+• Break Low → SHORT
+
+⚡ Avoid fake breakout
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
+
+⚠️ Informational only
+"""
+
 
 if __name__ == "__main__":
-    state = generate_market_state()
+    send(FREE, free_msg())
+    send(PREMIUM, premium_msg())
 
-    send(FREE_CHANNELS, free_message(state))
-    send(PREMIUM_CHANNELS, premium_message(state))
-
-    print("✅ 9:20 update sent")
+    print("✅ 9:20 sent")
