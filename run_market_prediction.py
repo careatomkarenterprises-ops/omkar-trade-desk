@@ -1,13 +1,16 @@
 import requests
 import os
+import time
 from datetime import datetime
-import random
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
-CHANNELS = [
+CHANNEL_FREE = [
     os.getenv("CHANNEL_FREE_MAIN"),
     os.getenv("CHANNEL_FREE_SIGNALS"),
+]
+
+CHANNEL_PREMIUM = [
     os.getenv("CHANNEL_PREMIUM"),
     os.getenv("CHANNEL_PREMIUM_ELITE"),
 ]
@@ -15,120 +18,160 @@ CHANNELS = [
 # ============================
 # TELEGRAM
 # ============================
-def send_telegram(message):
-    for channel in CHANNELS:
-        if not channel:
+def send_message(message, channels):
+    for ch in channels:
+        if not ch:
             continue
         try:
             url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
             payload = {
-                "chat_id": channel,
+                "chat_id": ch,
                 "text": message,
                 "parse_mode": "Markdown"
             }
             requests.post(url, data=payload, timeout=10)
-            print(f"✅ Sent to {channel}")
+            print(f"✅ Sent to {ch}")
         except Exception as e:
-            print(f"❌ Telegram Error: {e}")
+            print("Telegram Error:", e)
 
 
 # ============================
-# NSE FETCH (TRY)
+# NSE FETCH (STABLE)
 # ============================
-def fetch_index(symbol):
+def fetch_price(symbol):
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+
     try:
-        url = f"https://www.nseindia.com/api/quote-equity?symbol={symbol}"
+        res = requests.get(url, timeout=10).json()
 
-        headers = {
-            "User-Agent": "Mozilla/5.0",
-            "Accept": "application/json",
-            "Referer": "https://www.nseindia.com/"
-        }
-
-        session = requests.Session()
-        session.get("https://www.nseindia.com", headers=headers, timeout=5)
-
-        response = session.get(url, headers=headers, timeout=10)
-        data = response.json()
-
-        price = data["priceInfo"]["lastPrice"]
-        prev_close = data["priceInfo"]["previousClose"]
+        result = res["chart"]["result"][0]
+        close = result["meta"]["regularMarketPrice"]
+        prev = result["meta"]["previousClose"]
 
         return {
-            "prev_close": prev_close,
-            "current": price,
-            "change": ((price - prev_close) / prev_close) * 100,
+            "current": close,
+            "prev_close": prev,
+            "change": ((close - prev) / prev) * 100
         }
 
     except Exception as e:
-        print("❌ NSE fetch failed:", e)
+        print("❌ Fetch failed:", e)
         return None
 
 
 # ============================
-# GLOBAL SENTIMENT (SMART FALLBACK)
+# GLOBAL SENTIMENT (SIMPLE)
 # ============================
 def get_global_sentiment():
-    sentiments = ["BULLISH", "BEARISH", "MIXED"]
-    return random.choice(sentiments)
+    try:
+        spx = fetch_price("^GSPC")
+        if not spx:
+            return "MIXED"
 
-
-def get_fii_dii_sentiment():
-    flows = ["Net Buying", "Net Selling", "Neutral"]
-    return random.choice(flows)
+        if spx["change"] > 0.5:
+            return "POSITIVE"
+        elif spx["change"] < -0.5:
+            return "NEGATIVE"
+        else:
+            return "MIXED"
+    except:
+        return "MIXED"
 
 
 # ============================
-# LOGIC
+# GAP PROBABILITY LOGIC
+# ============================
+def gap_probability(nifty_change, global_sentiment):
+    score = 0
+
+    # NIFTY momentum
+    if nifty_change > 0.5:
+        score += 1
+    elif nifty_change < -0.5:
+        score -= 1
+
+    # Global sentiment
+    if global_sentiment == "POSITIVE":
+        score += 1
+    elif global_sentiment == "NEGATIVE":
+        score -= 1
+
+    if score >= 2:
+        return "HIGH GAP-UP"
+    elif score == 1:
+        return "MILD GAP-UP"
+    elif score == 0:
+        return "FLAT OPEN"
+    elif score == -1:
+        return "MILD GAP-DOWN"
+    else:
+        return "HIGH GAP-DOWN"
+
+
+# ============================
+# BIAS
 # ============================
 def get_bias(change):
     if change > 0.4:
         return "BULLISH"
     elif change < -0.4:
         return "BEARISH"
-    else:
-        return "SIDEWAYS"
+    return "SIDEWAYS"
 
 
 # ============================
-# MESSAGE BUILDER
+# FREE MESSAGE
 # ============================
-def create_message(nifty, banknifty):
+def create_free_msg(global_sentiment, gap, nifty_bias, bank_bias):
+    msg = "🌅 *PRE-MARKET SNAPSHOT*\n\n"
 
-    global_sentiment = get_global_sentiment()
-    fii_dii = get_fii_dii_sentiment()
+    msg += f"🌍 Global: *{global_sentiment}*\n"
+    msg += f"📊 NIFTY: *{nifty_bias}*\n"
+    msg += f"🏦 BANK NIFTY: *{bank_bias}*\n"
+    msg += f"⚡ Gap Expectation: *{gap}*\n\n"
 
-    if nifty and banknifty:
-        nifty_bias = get_bias(nifty["change"])
-        bank_bias = get_bias(banknifty["change"])
-    else:
-        # fallback logic
-        nifty_bias = global_sentiment
-        bank_bias = global_sentiment
+    msg += "📌 *Plan:*\n"
+    msg += "• Wait for 9:20 confirmation\n"
+    msg += "• Avoid early entries\n\n"
 
-    msg = "🌅 *PRE-MARKET INTELLIGENCE REPORT*\n\n"
+    msg += "🔐 Premium gives exact levels & trade plan\n"
 
-    msg += "🌍 Global Sentiment:\n"
-    msg += f"• Market Tone: *{global_sentiment}*\n\n"
+    msg += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
 
-    msg += "💰 Institutional Activity:\n"
-    msg += f"• FII/DII: *{fii_dii}*\n\n"
+    return msg
 
-    msg += "📊 Index Outlook:\n"
-    msg += f"• NIFTY: *{nifty_bias}*\n"
-    msg += f"• BANK NIFTY: *{bank_bias}*\n\n"
+
+# ============================
+# PREMIUM MESSAGE
+# ============================
+def create_premium_msg(global_sentiment, gap, nifty, bank):
+    nifty_bias = get_bias(nifty["change"])
+    bank_bias = get_bias(bank["change"])
+
+    msg = "🏦 *INSTITUTIONAL PRE-MARKET REPORT*\n\n"
+
+    msg += f"🌍 Global Sentiment: *{global_sentiment}*\n"
+    msg += f"⚡ Gap Outlook: *{gap}*\n\n"
+
+    msg += "📊 Index Bias:\n"
+    msg += f"• NIFTY: *{nifty_bias}* ({round(nifty['change'],2)}%)\n"
+    msg += f"• BANK NIFTY: *{bank_bias}* ({round(bank['change'],2)}%)\n\n"
 
     msg += "📦 Expected Behaviour:\n"
 
     if nifty_bias == "BULLISH":
-        msg += "• Buy on dips likely\n"
+        msg += "• Buy on dips strategy\n"
     elif nifty_bias == "BEARISH":
-        msg += "• Sell on rise expected\n"
+        msg += "• Sell on rise strategy\n"
     else:
-        msg += "• Range-bound movement\n"
+        msg += "• Range-bound day\n"
 
-    msg += "• Avoid early trades before confirmation\n"
-    msg += "• Watch first 15-min breakout\n\n"
+    msg += "• Wait first 15-min breakout\n"
+    msg += "• Avoid fake breakout traps\n\n"
+
+    msg += "🎯 *9:20 Confirmation Rule:*\n"
+    msg += "• Above opening high → LONG\n"
+    msg += "• Below opening low → SHORT\n\n"
 
     msg += f"⏰ {datetime.now().strftime('%H:%M:%S')}"
     msg += "\n\n⚠️ Informational only"
@@ -140,15 +183,27 @@ def create_message(nifty, banknifty):
 # MAIN
 # ============================
 if __name__ == "__main__":
-    print("🚀 Running Advanced Pre-Market Predictor...")
-    print("⏰ Time:", datetime.now())
+    print("🚀 Running PRO Market System...")
 
-    nifty = fetch_index("NIFTY")
-    banknifty = fetch_index("BANKNIFTY")
+    nifty = fetch_price("^NSEI")
+    bank = fetch_price("^NSEBANK")
 
-    message = create_message(nifty, banknifty)
+    if not nifty or not bank:
+        send_message("⚠️ Market data unavailable", CHANNEL_FREE + CHANNEL_PREMIUM)
+        exit()
 
-    print(message)
-    send_telegram(message)
+    global_sentiment = get_global_sentiment()
+    gap = gap_probability(nifty["change"], global_sentiment)
+
+    nifty_bias = get_bias(nifty["change"])
+    bank_bias = get_bias(bank["change"])
+
+    # FREE
+    free_msg = create_free_msg(global_sentiment, gap, nifty_bias, bank_bias)
+    send_message(free_msg, CHANNEL_FREE)
+
+    # PREMIUM
+    premium_msg = create_premium_msg(global_sentiment, gap, nifty, bank)
+    send_message(premium_msg, CHANNEL_PREMIUM)
 
     print("✅ Done")
