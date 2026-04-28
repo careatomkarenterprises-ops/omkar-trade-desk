@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Setup Python
@@ -18,12 +18,14 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Requests
-        run: pip install requests
+      - name: Install Dependencies
+        run: |
+          pip install requests
 
       - name: Run Promotion Engine
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
           RAZORPAY_LINK: ${{ secrets.RAZORPAY_LINK }}
-        run: python src/marketing/promotion_engine.py
+        run: |
+          python src/marketing/promotion_engine.py
