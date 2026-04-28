@@ -2,7 +2,7 @@ name: Opening Confirmation
 
 on:
   schedule:
-    - cron: '50 3 * * 1-5'   # 9:20 AM IST
+    - cron: '52 3 * * 1-5'   # 9:22 AM IST (realistic delay buffer)
   workflow_dispatch:
 
 jobs:
