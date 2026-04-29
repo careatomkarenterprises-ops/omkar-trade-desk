@@ -19,7 +19,7 @@ def send_message(message):
         payload = {
             "chat_id": CHANNEL,
             "text": message,
-            "parse_mode": "Markdown"
+            "parse_mode": "HTML"
         }
 
         response = requests.post(
@@ -41,7 +41,7 @@ def send_message(message):
 
 
 messages = [
-    f"""🚀 *TRADERS ARE SWITCHING TO PREMIUM*
+    f"""🚀 <b>TRADERS ARE SWITCHING TO PREMIUM</b>
 
 ✅ Live AI Signals
 ✅ Probability-Based Trades
@@ -52,7 +52,7 @@ messages = [
 {RAZORPAY_LINK}
 """,
 
-    f"""📈 *TODAY'S MARKET MOVES WERE CAPTURED EARLY*
+    f"""📈 <b>TODAY'S MARKET MOVES WERE CAPTURED EARLY</b>
 
 Premium Members Received:
 ✅ Early Entry Zones
@@ -63,7 +63,7 @@ Premium Members Received:
 {RAZORPAY_LINK}
 """,
 
-    f"""🏦 *AI-POWERED MARKET INTELLIGENCE*
+    f"""🏦 <b>AI-POWERED MARKET INTELLIGENCE</b>
 
 Our Premium System Includes:
 ✅ Pre-Market Prediction
