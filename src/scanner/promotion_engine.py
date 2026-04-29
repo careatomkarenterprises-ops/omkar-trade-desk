@@ -6,6 +6,10 @@ BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHANNEL = os.getenv("CHANNEL_FREE_MAIN")
 RAZORPAY_LINK = os.getenv("RAZORPAY_LINK")
 
+print("BOT TOKEN EXISTS:", bool(BOT_TOKEN))
+print("CHANNEL:", CHANNEL)
+print("RAZORPAY LINK EXISTS:", bool(RAZORPAY_LINK))
+
 
 def send_message(message):
     try:
@@ -17,54 +21,49 @@ def send_message(message):
             "parse_mode": "Markdown"
         }
 
-        requests.post(url, data=payload, timeout=10)
+        response = requests.post(url, data=payload, timeout=15)
 
-        print("✅ Promotion sent successfully")
+        print("STATUS CODE:", response.status_code)
+        print("RESPONSE:", response.text)
+
+        if response.status_code == 200:
+            print("✅ Promotion sent successfully")
+        else:
+            print("❌ Telegram failed")
 
     except Exception as e:
-        print("❌ Telegram Error:", e)
+        print("❌ ERROR:", str(e))
 
 
 messages = [
     f"""🚀 *TRADERS ARE SWITCHING TO PREMIUM*
 
 ✅ Live AI Signals
-✅ Probability-Based Trades
-✅ Institutional Trade Logic
-✅ High Momentum Scanner
+✅ Breakout Scanner
+✅ Institutional Logic
 
-🔥 Upgrade Now:
+🔐 Upgrade:
 {RAZORPAY_LINK}
 """,
 
-    f"""📈 *TODAY'S MARKET MOVES WERE CAPTURED EARLY*
+    f"""📈 *AI MARKET INTELLIGENCE*
 
-Premium Members Received:
-✅ Early Entry Zones
-✅ Breakout Alerts
-✅ Smart Risk Management
+Premium Includes:
+✅ Entry Zones
+✅ Momentum Detection
+✅ Smart Risk System
 
-🔐 Join Premium:
-{RAZORPAY_LINK}
-""",
-
-    f"""🏦 *AI-POWERED MARKET INTELLIGENCE*
-
-Our Premium System Includes:
-✅ Pre-Market Prediction
-✅ Smart Opening Confirmation
-✅ Momentum Scanner
-✅ Probability Scores
-
-⚡ Upgrade Today:
+⚡ Join:
 {RAZORPAY_LINK}
 """
 ]
 
 
 if __name__ == "__main__":
+    print("===== STARTING PROMOTION ENGINE =====")
+
     selected = random.choice(messages)
 
     send_message(selected)
 
-    print("✅ Daily promotion completed")
+    print("===== SCRIPT FINISHED =====")
