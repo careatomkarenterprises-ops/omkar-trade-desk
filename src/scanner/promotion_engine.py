@@ -6,10 +6,6 @@ BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHANNEL = os.getenv("CHANNEL_FREE_MAIN")
 RAZORPAY_LINK = os.getenv("RAZORPAY_LINK")
 
-print("BOT TOKEN EXISTS:", bool(BOT_TOKEN))
-print("CHANNEL:", CHANNEL)
-print("RAZORPAY LINK EXISTS:", bool(RAZORPAY_LINK))
-
 
 def send_message(message):
     try:
@@ -23,8 +19,11 @@ def send_message(message):
 
         response = requests.post(url, data=payload, timeout=15)
 
-        print("STATUS CODE:", response.status_code)
+        print("========== TELEGRAM DEBUG ==========")
+        print("STATUS:", response.status_code)
         print("RESPONSE:", response.text)
+        print("CHANNEL:", CHANNEL)
+        print("====================================")
 
         if response.status_code == 200:
             print("✅ Promotion sent successfully")
@@ -36,34 +35,61 @@ def send_message(message):
 
 
 messages = [
-    f"""🚀 *TRADERS ARE SWITCHING TO PREMIUM*
+
+f"""🚀 *TRADERS ARE SWITCHING TO PREMIUM*
 
 ✅ Live AI Signals
 ✅ Breakout Scanner
 ✅ Institutional Logic
+✅ Momentum Detection
 
-🔐 Upgrade:
+📈 Learn structured market approach
+
+🔐 Upgrade Now:
 {RAZORPAY_LINK}
+
+⚠️ Educational purpose only
 """,
 
-    f"""📈 *AI MARKET INTELLIGENCE*
+f"""📊 *AI MARKET INTELLIGENCE*
 
-Premium Includes:
+Premium Access Includes:
+
 ✅ Entry Zones
-✅ Momentum Detection
 ✅ Smart Risk System
+✅ Breakout Detection
+✅ Institutional Flow Reading
 
-⚡ Join:
+⚡ Join Premium:
 {RAZORPAY_LINK}
+
+⚠️ Educational purpose only
+""",
+
+f"""🏦 *INSTITUTIONAL MARKET SCANNER*
+
+📈 Real-time momentum tracking
+📉 AI-powered structure analysis
+
+Premium Features:
+✅ Early breakout alerts
+✅ Market strength detection
+✅ Trade planning support
+
+🔐 Access Here:
+{RAZORPAY_LINK}
+
+⚠️ Educational purpose only
 """
 ]
 
 
 if __name__ == "__main__":
+
     print("===== STARTING PROMOTION ENGINE =====")
 
     selected = random.choice(messages)
 
     send_message(selected)
 
-    print("===== SCRIPT FINISHED =====")
+    print("✅ Daily promotion completed")
