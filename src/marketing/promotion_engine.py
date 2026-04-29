@@ -6,6 +6,11 @@ BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHANNEL = os.getenv("CHANNEL_FREE_MAIN")
 RAZORPAY_LINK = os.getenv("RAZORPAY_LINK")
 
+print("===== TELEGRAM DEBUG =====")
+print("BOT TOKEN EXISTS:", bool(BOT_TOKEN))
+print("CHANNEL:", CHANNEL)
+print("RAZORPAY LINK EXISTS:", bool(RAZORPAY_LINK))
+
 
 def send_message(message):
     try:
@@ -17,12 +22,22 @@ def send_message(message):
             "parse_mode": "Markdown"
         }
 
-        requests.post(url, data=payload, timeout=10)
+        response = requests.post(
+            url,
+            data=payload,
+            timeout=15
+        )
 
-        print("✅ Promotion sent successfully")
+        print("STATUS CODE:", response.status_code)
+        print("RESPONSE:", response.text)
+
+        if response.status_code == 200:
+            print("✅ Promotion sent successfully")
+        else:
+            print("❌ Telegram API failed")
 
     except Exception as e:
-        print("❌ Telegram Error:", e)
+        print("❌ Telegram Error:", str(e))
 
 
 messages = [
@@ -63,8 +78,10 @@ Our Premium System Includes:
 
 
 if __name__ == "__main__":
+    print("===== STARTING PROMOTION ENGINE =====")
+
     selected = random.choice(messages)
 
     send_message(selected)
 
-    print("✅ Daily promotion completed")
+    print("===== SCRIPT FINISHED =====")
