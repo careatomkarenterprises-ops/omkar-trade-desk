@@ -34,6 +34,7 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
+          CHANNEL_EDUCATION: ${{ secrets.CHANNEL_EDUCATION }}
           RAZORPAY_LINK: ${{ secrets.RAZORPAY_LINK }}
         run: |
           echo "===== RUNNING PROMOTION ENGINE ====="
