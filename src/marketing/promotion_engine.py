@@ -18,15 +18,10 @@ def send_message(message):
 
         payload = {
             "chat_id": CHANNEL,
-            "text": message,
-            "parse_mode": "HTML"
+            "text": message
         }
 
-        response = requests.post(
-            url,
-            data=payload,
-            timeout=15
-        )
+        response = requests.post(url, data=payload, timeout=15)
 
         print("STATUS CODE:", response.status_code)
         print("RESPONSE:", response.text)
@@ -37,41 +32,28 @@ def send_message(message):
             print("❌ Telegram API failed")
 
     except Exception as e:
-        print("❌ Telegram Error:", str(e))
+        print("❌ ERROR:", str(e))
 
 
 messages = [
-    f"""🚀 <b>TRADERS ARE SWITCHING TO PREMIUM</b>
+    f"""🚀 TRADERS ARE SWITCHING TO PREMIUM
 
 ✅ Live AI Signals
-✅ Probability-Based Trades
-✅ Institutional Trade Logic
-✅ High Momentum Scanner
+✅ Breakout Scanner
+✅ Institutional Logic
 
-🔥 Upgrade Now:
+🔐 Upgrade:
 {RAZORPAY_LINK}
 """,
 
-    f"""📈 <b>TODAY'S MARKET MOVES WERE CAPTURED EARLY</b>
+    f"""📈 AI MARKET INTELLIGENCE
 
-Premium Members Received:
-✅ Early Entry Zones
-✅ Breakout Alerts
-✅ Smart Risk Management
+Premium Includes:
+✅ Entry Zones
+✅ Momentum Detection
+✅ Smart Risk System
 
-🔐 Join Premium:
-{RAZORPAY_LINK}
-""",
-
-    f"""🏦 <b>AI-POWERED MARKET INTELLIGENCE</b>
-
-Our Premium System Includes:
-✅ Pre-Market Prediction
-✅ Smart Opening Confirmation
-✅ Momentum Scanner
-✅ Probability Scores
-
-⚡ Upgrade Today:
+⚡ Join:
 {RAZORPAY_LINK}
 """
 ]
