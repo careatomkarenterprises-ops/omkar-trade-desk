@@ -2,7 +2,9 @@ name: Opening Confirmation
 
 on:
   schedule:
+    # 9:20 AM IST (Indian Market Opening Confirmation)
     - cron: '50 3 * * 1-5'
+
   workflow_dispatch:
 
 jobs:
@@ -22,7 +24,8 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install requests
+          pip install --upgrade pip
+          pip install requests pytz
 
       - name: Run Opening Confirmation
         env:
@@ -31,5 +34,10 @@ jobs:
           CHANNEL_FREE_SIGNALS: ${{ secrets.CHANNEL_FREE_SIGNALS }}
           CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
           CHANNEL_PREMIUM_ELITE: ${{ secrets.CHANNEL_PREMIUM_ELITE }}
+          TZ: Asia/Kolkata
 
-        run: python run_opening_confirmation.py
+        run: |
+          echo "===== OPENING CONFIRMATION STARTED ====="
+          date
+          python -u run_opening_confirmation.py
+          echo "===== OPENING CONFIRMATION FINISHED ====="
