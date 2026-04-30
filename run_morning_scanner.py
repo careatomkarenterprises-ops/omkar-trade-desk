@@ -329,21 +329,40 @@ if __name__ == "__main__":
 
         strong, watchlist, symbols, total = process_data(data)
 
-        smart = get_smart_money_stocks(symbols)
+      smart = get_smart_money_stocks(symbols)
 
-        message = create_message(
-            strong,
-            watchlist,
-            smart,
-            total
-        )
+message = create_message(strong, watchlist, smart, total)
 
-        send_telegram(message)
+send_telegram(message)
 
-        # SAVE CACHE FOR DELAYED POSTS
-        save_cache(smart)
+# ============================
+# SAVE CACHE FOR DELAYED POSTS
+# ============================
 
-        print("✅ Morning Scanner Completed")
+import json
+
+alerts = []
+
+for s in smart:
+
+    alerts.append({
+        "symbol": s["symbol"],
+        "setup": {
+            "candles": 3,
+            "top": s["top"],
+            "bottom": s["bottom"],
+            "fab_50": round((s["top"] + s["bottom"]) / 2, 2)
+        }
+    })
+
+os.makedirs("data", exist_ok=True)
+
+with open("data/last_scanner_cache.json", "w") as f:
+    json.dump({"alerts": alerts}, f)
+
+print("✅ Cache file created")
+
+print("✅ Morning Scanner Completed")
 
     except Exception as e:
 
