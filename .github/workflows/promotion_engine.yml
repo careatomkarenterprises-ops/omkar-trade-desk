@@ -2,7 +2,9 @@ name: Daily Conversion Push
 
 on:
   schedule:
+    # 5:30 PM IST (Best engagement after market hours)
     - cron: '0 12 * * 1-5'
+
   workflow_dispatch:
 
 jobs:
@@ -27,8 +29,10 @@ jobs:
           echo "===== MARKETING ====="
           ls src/marketing
 
-      - name: Install Requests
-        run: pip install requests
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install requests pytz
 
       - name: Run Promotion Engine
         env:
@@ -36,7 +40,9 @@ jobs:
           CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
           CHANNEL_EDUCATION: ${{ secrets.CHANNEL_EDUCATION }}
           RAZORPAY_LINK: ${{ secrets.RAZORPAY_LINK }}
+          TZ: Asia/Kolkata
         run: |
           echo "===== RUNNING PROMOTION ENGINE ====="
+          date
           python -u src/marketing/promotion_engine.py
           echo "===== FINISHED ====="
