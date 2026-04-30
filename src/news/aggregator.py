@@ -5,14 +5,31 @@ import hashlib
 import logging
 from datetime import datetime
 from pathlib import Path
-from src.telegram.poster import send_message
 
-# Force logging to print immediately
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# ============================
+# LOGGING
+# ============================
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
 logger = logging.getLogger(__name__)
 
+# ============================
+# NEWS AGGREGATOR
+# ============================
+
 class NewsAggregator:
-    FINANCE_DOMAINS = "moneycontrol.com,economictimes.indiatimes.com,financialexpress.com,business-standard.com,livemint.com"
+
+    FINANCE_DOMAINS = (
+        "moneycontrol.com,"
+        "economictimes.indiatimes.com,"
+        "financialexpress.com,"
+        "business-standard.com,"
+        "livemint.com"
+    )
 
     HIGH_IMPACT_KEYWORDS = {
         10: ['rbi', 'repo rate', 'crash', 'plunge', 'emergency', 'default'],
@@ -20,145 +37,294 @@ class NewsAggregator:
         8: ['crude oil', 'fii selling', 'dii buying', 'rupee fall', 'earnings']
     }
 
+    # ============================
+    # INIT
+    # ============================
+
     def __init__(self):
-        self.api_key = os.getenv('NEWS_API_KEY')
-        self.data_dir = Path('data')
+
+        self.api_key = os.getenv("NEWS_API_KEY")
+
+        self.bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+
+        self.channels = [
+            os.getenv("CHANNEL_FREE"),
+            os.getenv("CHANNEL_EDUCATION"),
+            os.getenv("CHANNEL_PREMIUM"),
+            os.getenv("CHANNEL_INTRADAY")
+        ]
+
+        # remove empty channels
+        self.channels = [c for c in self.channels if c]
+
+        self.data_dir = Path("data")
         self.data_dir.mkdir(exist_ok=True)
-        self.posted_file = self.data_dir / 'posted_news.json'
+
+        self.posted_file = self.data_dir / "posted_news.json"
+
         self.posted_hashes = self._load_posted_news()
-        logger.info("News Aggregator initialized")
+
+        logger.info("✅ News Aggregator initialized")
+
+    # ============================
+    # LOAD POSTED NEWS
+    # ============================
 
     def _load_posted_news(self):
+
         if self.posted_file.exists():
+
             try:
-                with open(self.posted_file, 'r') as f:
+
+                with open(self.posted_file, "r") as f:
+
                     data = json.load(f)
-                    logger.info(f"Loaded {len(data)} previously posted news hashes")
+
+                    logger.info(f"✅ Loaded {len(data)} old news hashes")
+
                     return set(data)
+
             except Exception as e:
-                logger.error(f"Error loading posted news: {e}")
+
+                logger.error(f"❌ Load error: {e}")
+
         return set()
 
+    # ============================
+    # SAVE POSTED NEWS
+    # ============================
+
     def _save_posted_news(self):
+
         try:
-            with open(self.posted_file, 'w') as f:
+
+            with open(self.posted_file, "w") as f:
+
                 json.dump(list(self.posted_hashes)[-500:], f)
-            logger.info(f"Saved {len(self.posted_hashes)} news hashes")
+
+            logger.info("✅ Posted news cache saved")
+
         except Exception as e:
-            logger.error(f"Error saving posted news: {e}")
+
+            logger.error(f"❌ Save error: {e}")
+
+    # ============================
+    # HASH
+    # ============================
 
     def _get_content_hash(self, title):
-        return hashlib.md5(title.lower().strip()[:100].encode()).hexdigest()
+
+        return hashlib.md5(
+            title.lower().strip()[:100].encode()
+        ).hexdigest()
+
+    # ============================
+    # FETCH NEWS
+    # ============================
 
     def fetch_news(self):
+
         if not self.api_key:
-            logger.error("❌ No NEWS_API_KEY found in secrets")
+
+            logger.error("❌ NEWS_API_KEY missing")
+
             return []
 
-        logger.info(f"Fetching news with API key: {self.api_key[:5]}...")
+        logger.info("📡 Fetching market news")
 
         url = "https://newsapi.org/v2/everything"
-        query = '(Nifty OR Sensex OR RBI OR "Market News" OR "Economy India")'
+
+        query = (
+            '(Nifty OR Sensex OR RBI OR '
+            '"Market News" OR "Indian Economy")'
+        )
 
         params = {
-            'q': query,
-            'domains': self.FINANCE_DOMAINS,
-            'sortBy': 'publishedAt',
-            'language': 'en',
-            'apiKey': self.api_key,
-            'pageSize': 20
+            "q": query,
+            "domains": self.FINANCE_DOMAINS,
+            "sortBy": "publishedAt",
+            "language": "en",
+            "apiKey": self.api_key,
+            "pageSize": 20
         }
 
         try:
-            response = requests.get(url, params=params, timeout=15)
+
+            response = requests.get(
+                url,
+                params=params,
+                timeout=20
+            )
+
             data = response.json()
-            
-            if data.get('status') != 'ok':
-                logger.error(f"❌ NewsAPI error: {data.get('message', 'Unknown error')}")
+
+            if data.get("status") != "ok":
+
+                logger.error(
+                    f"❌ NewsAPI error: {data.get('message')}"
+                )
+
                 return []
 
-            articles = data.get('articles', [])
-            logger.info(f"✅ Fetched {len(articles)} raw articles")
+            articles = data.get("articles", [])
+
+            logger.info(f"✅ Raw articles fetched: {len(articles)}")
 
             filtered = []
+
             for art in articles:
-                title = art['title']
-                if not title or '[Removed]' in title:
+
+                title = art.get("title", "")
+
+                if not title:
+                    continue
+
+                if "[Removed]" in title:
                     continue
 
                 news_hash = self._get_content_hash(title)
+
                 if news_hash in self.posted_hashes:
-                    logger.debug(f"Skipping duplicate: {title[:50]}...")
                     continue
 
-                pub_time = datetime.fromisoformat(art['publishedAt'].replace('Z', '+00:00'))
-                if (datetime.now().astimezone() - pub_time).total_seconds() > 6 * 3600:
-                    logger.debug(f"Skipping old news: {title[:50]}...")
-                    continue
+                text = (
+                    title + " " +
+                    (art.get("description") or "")
+                ).lower()
 
-                text = (title + ' ' + (art.get('description') or '')).lower()
                 impact_score = 7
+
                 for score, keywords in self.HIGH_IMPACT_KEYWORDS.items():
-                    if any(kw in text for kw in keywords):
+
+                    if any(k in text for k in keywords):
+
                         impact_score = score
+
                         break
 
                 self.posted_hashes.add(news_hash)
+
                 filtered.append({
-                    'title': title,
-                    'description': (art.get('description') or 'Full analysis on website.')[:350],
-                    'source': art['source']['name'],
-                    'impact_score': impact_score
+                    "title": title,
+                    "description": (
+                        art.get("description")
+                        or "Read full report online."
+                    )[:300],
+                    "source": art["source"]["name"],
+                    "impact_score": impact_score
                 })
-                logger.info(f"📰 New news: {title[:60]}... (Impact: {impact_score})")
 
             self._save_posted_news()
-            logger.info(f"✅ Filtered {len(filtered)} new news items to post")
+
+            logger.info(
+                f"✅ Final filtered news: {len(filtered)}"
+            )
+
             return filtered
+
         except Exception as e:
-            logger.error(f"❌ News fetch error: {e}")
+
+            logger.error(f"❌ Fetch error: {e}")
+
             return []
 
+    # ============================
+    # SEND TELEGRAM
+    # ============================
+
+    def send_telegram(self, channel, message):
+
+        try:
+
+            url = (
+                f"https://api.telegram.org/bot"
+                f"{self.bot_token}/sendMessage"
+            )
+
+            payload = {
+                "chat_id": channel,
+                "text": message,
+                "parse_mode": "HTML"
+            }
+
+            response = requests.post(
+                url,
+                data=payload,
+                timeout=20
+            )
+
+            logger.info(
+                f"✅ Sent to {channel} "
+                f"| Status {response.status_code}"
+            )
+
+        except Exception as e:
+
+            logger.error(f"❌ Telegram error: {e}")
+
+    # ============================
+    # POST NEWS
+    # ============================
+
     def post_news(self):
-        logger.info("Starting news posting process...")
+
+        logger.info("🚀 Starting news engine")
+
         items = self.fetch_news()
-        
+
         if not items:
-            logger.info("📭 No news items to post")
+
+            logger.info("📭 No fresh news found")
+
             return
 
-        logger.info(f"📨 Posting {len(items)} news items to Telegram channels...")
+        logger.info(
+            f"📨 Posting {len(items)} news items"
+        )
 
         for i, item in enumerate(items):
-            urgency = "🔴 URGENT" if item['impact_score'] >= 9 else "🟠 IMPORTANT"
-            message = (f"{urgency} - Market Impact\n\n"
-                       f"📰 **{item['title']}**\n\n"
-                       f"{item['description']}...\n\n"
-                       f"📊 **Impact Score:** {item['impact_score']}/10\n"
-                       f"🔍 **Source:** {item['source']}\n"
-                       f"⚠️ Educational purpose only.")
 
-            # Send to your 4 channels
-            logger.info(f"📤 Sending news {i+1}/{len(items)} to free_main...")
-            send_message("free_main", message)
-            
-            logger.info(f"📤 Sending to free_signals...")
-            send_message("free_signals", message)
-            
-            logger.info(f"📤 Sending to premium...")
-            send_message("premium", message)
-            
-            logger.info(f"📤 Sending to premium_elite...")
-            send_message("premium_elite", message)
-            
-            logger.info(f"✅ News posted successfully: {item['title'][:50]}...")
+            urgency = (
+                "🔴 URGENT"
+                if item["impact_score"] >= 9
+                else "🟠 IMPORTANT"
+            )
 
-        logger.info("🎉 News posting completed!")
+            message = (
+                f"{urgency} - Market Impact\n\n"
+                f"📰 <b>{item['title']}</b>\n\n"
+                f"{item['description']}\n\n"
+                f"📊 Impact Score: "
+                f"{item['impact_score']}/10\n"
+                f"🔍 Source: {item['source']}\n\n"
+                f"⚠️ Educational purpose only"
+            )
+
+            for channel in self.channels:
+
+                self.send_telegram(channel, message)
+
+            logger.info(
+                f"✅ Posted news "
+                f"{i+1}/{len(items)}"
+            )
+
+        logger.info("🎉 News posting completed")
+
+# ============================
+# MAIN
+# ============================
 
 if __name__ == "__main__":
+
     logger.info("=" * 50)
-    logger.info("Starting News Aggregator")
+
+    logger.info("📰 NEWS AGGREGATOR STARTED")
+
     logger.info("=" * 50)
+
     aggregator = NewsAggregator()
+
     aggregator.post_news()
+
     logger.info("=" * 50)
