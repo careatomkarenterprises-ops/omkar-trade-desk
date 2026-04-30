@@ -2,22 +2,78 @@ name: Delayed Free Posts
 
 on:
   schedule:
-    - cron: '0 5-11 * * 1-5'   # Run at :00 every hour from 5:00 to 11:00 UTC (10:30 AM to 4:30 PM IST)
+    # Every 30 mins during active Indian market hours
+
+    # 10:00 AM IST
+    - cron: '30 4 * * 1-5'
+
+    # 10:30 AM IST
+    - cron: '0 5 * * 1-5'
+
+    # 11:00 AM IST
+    - cron: '30 5 * * 1-5'
+
+    # 11:30 AM IST
+    - cron: '0 6 * * 1-5'
+
+    # 12:00 PM IST
+    - cron: '30 6 * * 1-5'
+
+    # 12:30 PM IST
+    - cron: '0 7 * * 1-5'
+
+    # 1:00 PM IST
+    - cron: '30 7 * * 1-5'
+
+    # 1:30 PM IST
+    - cron: '0 8 * * 1-5'
+
+    # 2:00 PM IST
+    - cron: '30 8 * * 1-5'
+
+    # 2:30 PM IST
+    - cron: '0 9 * * 1-5'
+
+    # 3:00 PM IST
+    - cron: '30 9 * * 1-5'
+
+    # 3:20 PM IST (Final market momentum push)
+    - cron: '50 9 * * 1-5'
+
   workflow_dispatch:
 
 jobs:
   delayed:
+    name: Delayed Free Posts
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-      - name: Post delayed alerts to free channel
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytz
+
+      - name: Run Delayed Poster
         env:
+          PYTHONUNBUFFERED: "1"
+          TZ: Asia/Kolkata
+
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
-        run: python src/scanner/delayed_poster.py
+
+        run: |
+          echo "===== DELAYED POSTER STARTED ====="
+          date
+          python -u src/scanner/delayed_poster.py
+          echo "===== DELAYED POSTER FINISHED ====="
