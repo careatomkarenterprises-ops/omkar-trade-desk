@@ -2,7 +2,9 @@ name: Multibagger Scanner (End of Day)
 
 on:
   schedule:
+    # 4:00 PM IST (After Indian Market Closing Analysis)
     - cron: '30 10 * * 1-5'
+
   workflow_dispatch:
 
 jobs:
@@ -22,7 +24,8 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install requests yfinance pandas numpy
+          pip install --upgrade pip
+          pip install requests yfinance pandas numpy pytz
 
       - name: Run Multibagger Scanner
         env:
@@ -31,5 +34,10 @@ jobs:
           CHANNEL_FREE_SIGNALS: ${{ secrets.CHANNEL_FREE_SIGNALS }}
           CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
           CHANNEL_PREMIUM_ELITE: ${{ secrets.CHANNEL_PREMIUM_ELITE }}
+          TZ: Asia/Kolkata
 
-        run: python run_multibagger_scanner.py
+        run: |
+          echo "===== MULTIBAGGER SCANNER STARTED ====="
+          date
+          python -u run_multibagger_scanner.py
+          echo "===== MULTIBAGGER SCANNER FINISHED ====="
