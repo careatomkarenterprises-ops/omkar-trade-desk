@@ -7,9 +7,9 @@ from datetime import datetime
 from pathlib import Path
 from src.telegram.poster import send_message
 
-# ============================================
+# =========================
 # LOGGING
-# ============================================
+# =========================
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
@@ -20,9 +20,6 @@ logger = logging.getLogger(__name__)
 
 class NewsAggregator:
 
-    # ============================================
-    # TRUSTED FINANCIAL SOURCES
-    # ============================================
     FINANCE_DOMAINS = (
         "moneycontrol.com,"
         "economictimes.indiatimes.com,"
@@ -31,52 +28,74 @@ class NewsAggregator:
         "livemint.com"
     )
 
-    # ============================================
-    # HIGH IMPACT KEYWORDS
-    # ============================================
+    # =========================
+    # IMPACT ENGINE
+    # =========================
     HIGH_IMPACT_KEYWORDS = {
 
         10: [
-            'rbi',
-            'repo rate',
-            'emergency',
             'market crash',
-            'plunge',
+            'stock market crash',
+            'emergency',
             'default',
-            'bank crisis',
+            'bank collapse',
             'war',
-            'fed rate',
-            'recession'
+            'global recession'
         ],
 
         9: [
+            'rbi',
+            'repo rate',
             'inflation',
             'gdp',
-            'rate cut',
             'rate hike',
+            'rate cut',
             'all-time high',
+            'all-time low',
             '52-week high',
-            'fii selling',
-            'fii buying',
-            'dii buying',
-            'dii selling'
+            '52-week low'
         ],
 
         8: [
-            'crude oil',
+            'fii selling',
+            'fii buying',
+            'dii buying',
+            'dii selling',
             'earnings',
             'profit jump',
-            'profit fall',
-            'breakout',
+            'profit falls',
+            'crude oil',
+            'rupee falls',
+            'rupee weakens',
+            'market rally',
+            'market falls'
+        ],
+
+        7: [
             'nifty',
             'sensex',
-            'banknifty'
+            'banknifty',
+            'breakout',
+            'support',
+            'resistance',
+            'stock surge',
+            'volume spike'
         ]
     }
 
-    # ============================================
-    # INIT
-    # ============================================
+    IMPORTANT_MARKET_WORDS = [
+        "nifty",
+        "sensex",
+        "banknifty",
+        "rbi",
+        "inflation",
+        "fii",
+        "dii",
+        "earnings",
+        "breakout",
+        "market"
+    ]
+
     def __init__(self):
 
         self.api_key = os.getenv("NEWS_API_KEY")
@@ -86,14 +105,14 @@ class NewsAggregator:
 
         self.posted_file = self.data_dir / "posted_news.json"
 
-        self.posted_hashes = self._load_posted_news()
+        self.posted_hashes = self.load_posted_news()
 
         logger.info("✅ News Aggregator Started")
 
-    # ============================================
-    # LOAD OLD POSTS
-    # ============================================
-    def _load_posted_news(self):
+    # =========================
+    # LOAD CACHE
+    # =========================
+    def load_posted_news(self):
 
         if self.posted_file.exists():
 
@@ -102,52 +121,56 @@ class NewsAggregator:
                     return set(json.load(f))
 
             except Exception as e:
-                logger.error(f"Load error: {e}")
+                logger.error(f"Load cache error: {e}")
 
         return set()
 
-    # ============================================
-    # SAVE POSTED HASHES
-    # ============================================
-    def _save_posted_news(self):
+    # =========================
+    # SAVE CACHE
+    # =========================
+    def save_posted_news(self):
 
         try:
             with open(self.posted_file, "w") as f:
                 json.dump(list(self.posted_hashes)[-500:], f)
 
         except Exception as e:
-            logger.error(f"Save error: {e}")
+            logger.error(f"Save cache error: {e}")
 
-    # ============================================
+    # =========================
     # UNIQUE HASH
-    # ============================================
-    def _get_hash(self, text):
+    # =========================
+    def get_hash(self, text):
 
         return hashlib.md5(
-            text.lower().strip()[:120].encode()
+            text.lower().strip().encode()
         ).hexdigest()
 
-    # ============================================
+    # =========================
     # FETCH NEWS
-    # ============================================
+    # =========================
     def fetch_news(self):
 
         if not self.api_key:
+
             logger.error("❌ NEWS_API_KEY missing")
             return []
 
         url = "https://newsapi.org/v2/everything"
 
+        query = (
+            '(Nifty OR Sensex OR RBI OR '
+            '"Indian Stock Market" OR '
+            '"Economy India")'
+        )
+
         params = {
-            "q": (
-                'Nifty OR Sensex OR RBI OR '
-                'Inflation OR GDP OR Market'
-            ),
+            "q": query,
             "domains": self.FINANCE_DOMAINS,
-            "language": "en",
             "sortBy": "publishedAt",
-            "pageSize": 20,
-            "apiKey": self.api_key
+            "language": "en",
+            "apiKey": self.api_key,
+            "pageSize": 20
         }
 
         try:
@@ -163,8 +186,7 @@ class NewsAggregator:
             if data.get("status") != "ok":
 
                 logger.error(
-                    f"❌ NewsAPI Error: "
-                    f"{data.get('message')}"
+                    f"❌ API Error: {data.get('message')}"
                 )
 
                 return []
@@ -172,8 +194,7 @@ class NewsAggregator:
             articles = data.get("articles", [])
 
             logger.info(
-                f"✅ Raw articles fetched: "
-                f"{len(articles)}"
+                f"✅ Raw articles fetched: {len(articles)}"
             )
 
             filtered = []
@@ -188,98 +209,63 @@ class NewsAggregator:
                 if "[Removed]" in title:
                     continue
 
-                # ============================================
-                # DUPLICATE CHECK
-                # ============================================
-                news_hash = self._get_hash(title)
+                news_hash = self.get_hash(title)
 
+                # DUPLICATE CHECK
                 if news_hash in self.posted_hashes:
                     continue
 
-                # ============================================
-                # AGE FILTER
-                # ============================================
-                try:
+                description = art.get("description") or ""
 
-                    pub_time = datetime.fromisoformat(
-                        art["publishedAt"].replace("Z", "+00:00")
-                    )
-
-                    age_seconds = (
-                        datetime.now().astimezone() - pub_time
-                    ).total_seconds()
-
-                    # older than 6 hours ignore
-                    if age_seconds > 21600:
-                        continue
-
-                except:
-                    continue
-
-                # ============================================
-                # IMPACT SCORE
-                # ============================================
                 text = (
-                    title + " " +
-                    (art.get("description") or "")
+                    title + " " + description
                 ).lower()
 
+                # =========================
+                # IMPACT SCORE ENGINE
+                # =========================
                 impact_score = 5
 
-                for score, keywords in (
-                    self.HIGH_IMPACT_KEYWORDS.items()
-                ):
+                for score, keywords in self.HIGH_IMPACT_KEYWORDS.items():
 
                     if any(
-                        keyword in text
-                        for keyword in keywords
+                        kw.lower() in text
+                        for kw in keywords
                     ):
                         impact_score = score
                         break
 
-                # ============================================
-                # IGNORE LOW IMPACT
-                # ============================================
+                # =========================
+                # STRICT FILTERING
+                # =========================
                 if impact_score < 8:
-                    continue
 
-                # ============================================
-                # SAVE
-                # ============================================
+                    if not any(
+                        word in text
+                        for word in self.IMPORTANT_MARKET_WORDS
+                    ):
+                        continue
+
+                # =========================
+                # SAVE HASH
+                # =========================
                 self.posted_hashes.add(news_hash)
 
                 filtered.append({
-
                     "title": title,
-
-                    "description": (
-                        art.get("description")
-                        or "Market update"
-                    )[:250],
-
-                    "source": (
-                        art.get("source", {})
-                        .get("name", "Unknown")
-                    ),
-
+                    "description": description[:250],
+                    "source": art["source"]["name"],
                     "impact_score": impact_score
                 })
 
-            self._save_posted_news()
+                logger.info(
+                    f"📰 Important News Added "
+                    f"(Score {impact_score})"
+                )
 
-            # ============================================
-            # SORT BY IMPACT
-            # ============================================
-            filtered = sorted(
-                filtered,
-                key=lambda x: x["impact_score"],
-                reverse=True
-            )
+            self.save_posted_news()
 
-            # ============================================
-            # LIMIT POSTS
-            # ============================================
-            return filtered[:5]
+            return filtered
 
         except Exception as e:
 
@@ -287,27 +273,25 @@ class NewsAggregator:
 
             return []
 
-    # ============================================
-    # POST NEWS
-    # ============================================
+    # =========================
+    # POST TO TELEGRAM
+    # =========================
     def post_news(self):
 
         logger.info("🚀 Starting News Engine")
 
-        items = self.fetch_news()
+        news_items = self.fetch_news()
 
-        if not items:
+        if not news_items:
 
             logger.info("📭 No important news found")
-
             return
 
         logger.info(
-            f"📨 Posting {len(items)} "
-            f"important news alerts"
+            f"📨 Posting {len(news_items)} important news"
         )
 
-        for idx, item in enumerate(items, start=1):
+        for i, item in enumerate(news_items):
 
             urgency = (
                 "🔴 URGENT"
@@ -316,65 +300,41 @@ class NewsAggregator:
             )
 
             message = (
-
-                f"{urgency} - MARKET ALERT\n\n"
-
+                f"{urgency} - MARKET UPDATE\n\n"
                 f"📰 *{item['title']}*\n\n"
-
                 f"{item['description']}\n\n"
-
                 f"📊 Impact Score: "
                 f"{item['impact_score']}/10\n"
-
-                f"📰 Source: "
-                f"{item['source']}\n\n"
-
+                f"📰 Source: {item['source']}\n\n"
                 f"⚠️ Educational purpose only"
             )
 
-            # ============================================
-            # SEND CHANNELS
-            # ============================================
-            channels = [
-                "free_main",
-                "free_signals",
-                "premium",
-                "premium_elite"
-            ]
+            try:
 
-            for channel in channels:
+                send_message("free_main", message)
+                send_message("premium", message)
 
-                try:
+                logger.info(
+                    f"✅ Posted news "
+                    f"{i+1}/{len(news_items)}"
+                )
 
-                    send_message(channel, message)
+            except Exception as e:
 
-                    logger.info(
-                        f"✅ Sent to {channel}"
-                    )
-
-                except Exception as e:
-
-                    logger.error(
-                        f"❌ Failed {channel}: {e}"
-                    )
-
-            logger.info(
-                f"✅ Posted news "
-                f"{idx}/{len(items)}"
-            )
+                logger.error(
+                    f"❌ Telegram post failed: {e}"
+                )
 
         logger.info("🎉 News posting completed")
 
 
-# ============================================
+# =========================
 # MAIN
-# ============================================
+# =========================
 if __name__ == "__main__":
 
     logger.info("=" * 50)
-
     logger.info("📰 NEWS ENGINE STARTED")
-
     logger.info("=" * 50)
 
     aggregator = NewsAggregator()
