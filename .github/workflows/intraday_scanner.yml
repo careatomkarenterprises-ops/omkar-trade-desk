@@ -1,32 +1,40 @@
-name: Intraday Scanner
+name: Pre-Open Scanner
 
 on:
   schedule:
-    # 9:35 AM → 3:05 PM IST (clean market window)
-    - cron: '5,35 4-9 * * 1-5'
+    # 9:08 AM IST (Best NSE pre-open confirmation timing)
+    - cron: '38 3 * * 1-5'
+
   workflow_dispatch:
 
 jobs:
-  intraday:
+  run:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - run: |
-          python -m pip install --upgrade pip
-          pip install pandas numpy requests yfinance
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install requests pytz
 
-      - name: Run Scanner
+      - name: Run Pre-Open Scanner
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
-          CHANNEL_FREE_SIGNALS: ${{ secrets.CHANNEL_FREE_SIGNALS }}
           CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
-          CHANNEL_PREMIUM_ELITE: ${{ secrets.CHANNEL_PREMIUM_ELITE }}
+          TZ: Asia/Kolkata
 
-        run: python main.py
+        run: |
+          echo "===== PRE-OPEN SCANNER STARTED ====="
+          date
+          python -u run_preopen_scanner.py
+          echo "===== PRE-OPEN SCANNER FINISHED ====="
