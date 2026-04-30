@@ -2,15 +2,20 @@ name: 🔄 Daily Reset - Cleanup Data
 
 on:
   schedule:
-    - cron: '30 2 * * *'  # 8:00 AM IST
+    # 7:45 AM IST → Before NSE pre-open preparation
+    - cron: '15 2 * * 1-5'
+
   workflow_dispatch:
 
 jobs:
   reset:
     name: Reset Daily Data
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
       
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -18,15 +23,26 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
       
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytz
       
       - name: Run Daily Reset
         env:
           PYTHONPATH: .
           PYTHONUNBUFFERED: "1"
+          TZ: Asia/Kolkata
+
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           RAZORPAY_LINK: ${{ secrets.RAZORPAY_LINK }}
+
           CHANNEL_FREE: ${{ secrets.CHANNEL_FREE }}
           CHANNEL_EDUCATION: ${{ secrets.CHANNEL_EDUCATION }}
-        run: python -m src.utils.daily_reset
+
+        run: |
+          echo "===== DAILY RESET STARTED ====="
+          date
+          python -u -m src.utils.daily_reset
+          echo "===== DAILY RESET FINISHED ====="
