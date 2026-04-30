@@ -1,35 +1,54 @@
-name: Pre-Market Predictor
+name: 🔮 Pre-Market Predictor
 
 on:
   schedule:
-    # 9:10 AM IST (Recommended NSE Pre-Market Timing)
+    # 9:10 AM IST
     - cron: '40 3 * * 1-5'
 
   workflow_dispatch:
 
 jobs:
   run-predictor:
+    name: Run Pre-Market Predictor
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
+
+      - name: 📥 Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
 
-      - name: Install Dependencies
+      - name: 📦 Install Dependencies
         run: |
-          pip install --upgrade pip
-          pip install requests pytz
+          python -m pip install --upgrade pip
+          pip install requests pytz yfinance pandas numpy
 
-      - name: Run Pre-Market Predictor
+      - name: 🚀 Run Pre-Market Predictor
         env:
+          TZ: Asia/Kolkata
+          PYTHONUNBUFFERED: "1"
+
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+
           CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
           CHANNEL_FREE_SIGNALS: ${{ secrets.CHANNEL_FREE_SIGNALS }}
+
           CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
           CHANNEL_PREMIUM_ELITE: ${{ secrets.CHANNEL_PREMIUM_ELITE }}
-        run: python run_market_prediction.py
+
+        run: |
+          echo "========================================"
+          echo "🔮 PRE-MARKET PREDICTOR STARTED"
+          echo "========================================"
+          date
+
+          python -u run_market_prediction.py
+
+          echo "========================================"
+          echo "✅ PRE-MARKET PREDICTOR FINISHED"
+          echo "========================================"
