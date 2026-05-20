@@ -12,3 +12,6 @@ python-telegram-bot==20.3
 # Utilities
 python-dotenv==1.0.0
 schedule==1.2.0
+
+kiteconnect==5.0.1
+websocket-client
