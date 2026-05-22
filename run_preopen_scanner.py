@@ -9,11 +9,10 @@ FREE_CHANNEL = os.getenv("CHANNEL_FREE_MAIN")
 PREMIUM_CHANNEL = os.getenv("CHANNEL_PREMIUM")
 
 
-# =========================
-# TELEGRAM
-# =========================
+# =========================================
+# TELEGRAM SENDER
+# =========================================
 def send(msg, channel):
-
     try:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
@@ -24,53 +23,70 @@ def send(msg, channel):
                 "text": msg,
                 "parse_mode": "Markdown"
             },
-            timeout=10
+            timeout=15
         )
+
+        print(f"✅ Sent message to {channel}")
 
     except Exception as e:
         print(f"Telegram Error: {e}")
 
 
-# =========================
-# FETCH NSE PREOPEN
-# =========================
-def fetch():
-
-    url = "https://www.nseindia.com/api/market-data-pre-open?key=NIFTY"
-
-    headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json",
-        "Referer": "https://www.nseindia.com/"
-    }
+# =========================================
+# NSE PREOPEN FETCH
+# =========================================
+def fetch_preopen_data():
 
     session = requests.Session()
 
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0 Safari/537.36"
+        ),
+        "Accept": "application/json",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.nseindia.com/",
+        "Connection": "keep-alive"
+    }
+
     try:
+
+        # STEP 1: Load NSE Homepage
         session.get(
             "https://www.nseindia.com",
             headers=headers,
-            timeout=5
+            timeout=20
         )
 
-        time.sleep(1)
+        time.sleep(3)
 
-        res = session.get(
+        # STEP 2: Fetch Preopen Data
+        url = "https://www.nseindia.com/api/market-data-pre-open?key=NIFTY"
+
+        response = session.get(
             url,
             headers=headers,
-            timeout=10
+            timeout=20
         )
 
-        return res.json().get("data", [])
+        if response.status_code != 200:
+            print(f"NSE Status Code: {response.status_code}")
+            return []
+
+        data = response.json()
+
+        return data.get("data", [])
 
     except Exception as e:
         print(f"NSE Fetch Error: {e}")
         return []
 
 
-# =========================
-# PROCESS DATA
-# =========================
+# =========================================
+# ANALYZE STOCKS
+# =========================================
 def analyze(data):
 
     stocks = []
@@ -78,16 +94,15 @@ def analyze(data):
     for item in data:
 
         try:
-            m = item["metadata"]
+            meta = item["metadata"]
 
-            symbol = m["symbol"]
-            change = float(m["pChange"])
-            price = float(m["iep"])
+            symbol = meta["symbol"]
+            change = float(meta["pChange"])
+            price = float(meta["iep"])
 
             if price <= 0:
                 continue
 
-            # Probability score
             score = min(100, abs(change) * 20)
 
             if score >= 40:
@@ -99,7 +114,7 @@ def analyze(data):
                     "score": int(score)
                 })
 
-        except Exception:
+        except:
             continue
 
     return sorted(
@@ -109,12 +124,11 @@ def analyze(data):
     )[:6]
 
 
-# =========================
+# =========================================
 # BUILD TELEGRAM MESSAGE
-# =========================
+# =========================================
 def build_messages(stocks):
 
-    # FREE VERSION
     free_msg = "📊 *PRE-OPEN STOCK WATCH*\n\n"
 
     for s in stocks[:3]:
@@ -124,14 +138,10 @@ def build_messages(stocks):
             f"{s['change']:.2f}%\n"
         )
 
-    free_msg += "\n🔒 Full levels & entries in premium"
+    free_msg += "\n🔒 Full setup in premium"
+    free_msg += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
 
-    free_msg += (
-        f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
-    )
-
-    # PREMIUM VERSION
-    premium_msg = "🔥 *SMART MONEY STOCKS (PRE-OPEN)*\n\n"
+    premium_msg = "🔥 *SMART MONEY PRE-OPEN STOCKS*\n\n"
 
     for s in stocks:
 
@@ -142,50 +152,59 @@ def build_messages(stocks):
             f"Score: {s['score']}\n"
         )
 
-    premium_msg += "\n📌 Plan: Wait for breakout confirmation"
-    premium_msg += "\n⚠️ Informational only"
+    premium_msg += "\n📌 Wait for breakout confirmation"
+    premium_msg += "\n⚠️ Educational Purpose Only"
 
     return free_msg, premium_msg
 
 
-# =========================
+# =========================================
 # MAIN
-# =========================
+# =========================================
 if __name__ == "__main__":
 
     print("🚀 Starting Pre-Open Scanner")
 
-    data = fetch()
+    data = fetch_preopen_data()
 
     if not data:
 
+        print("❌ No NSE Data")
+
         send(
-            "⚠️ Pre-open data unavailable",
+            "⚠️ NSE Pre-open data unavailable",
             FREE_CHANNEL
         )
 
-        print("❌ No NSE Data")
         exit()
+
+    print(f"✅ NSE Records Fetched: {len(data)}")
 
     stocks = analyze(data)
 
     if not stocks:
 
         print("❌ No Stocks Found")
+
+        send(
+            "⚠️ No valid pre-open setups today",
+            FREE_CHANNEL
+        )
+
         exit()
 
     free_msg, premium_msg = build_messages(stocks)
 
-    # PREMIUM FIRST
+    print("📤 Sending Premium Message")
+
     send(premium_msg, PREMIUM_CHANNEL)
 
-    print("✅ Premium Sent")
+    print("⏳ Waiting before Free Message")
 
-    # DELAY FREE VERSION
     time.sleep(120)
+
+    print("📤 Sending Free Message")
 
     send(free_msg, FREE_CHANNEL)
 
-    print("✅ Free Channel Sent")
-
-    print("🎯 Scanner Completed")
+    print("✅ Pre-Open Scanner Completed")
