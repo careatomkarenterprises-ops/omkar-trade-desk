@@ -3,179 +3,189 @@ import os
 import time
 from datetime import datetime
 
-from src.scanner.zerodha_fetcher import get_zerodha_fetcher
-
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 FREE_CHANNEL = os.getenv("CHANNEL_FREE_MAIN")
 PREMIUM_CHANNEL = os.getenv("CHANNEL_PREMIUM")
 
-# =========================
 
+# =========================
 # TELEGRAM
-
 # =========================
-
 def send(msg, channel):
-try:
-url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-
-```
-    requests.post(url, data={
-        "chat_id": channel,
-        "text": msg,
-        "parse_mode": "Markdown"
-    })
-
-except Exception as e:
-    print("Telegram Error:", e)
-```
-
-# =========================
-
-# STOCK LIST
-
-# =========================
-
-WATCHLIST = [
-"RELIANCE",
-"HDFCBANK",
-"ICICIBANK",
-"SBIN",
-"TCS",
-"INFY",
-"AXISBANK",
-"ITC",
-"LT",
-"BAJFINANCE"
-]
-
-# =========================
-
-# ANALYZE STOCKS
-
-# =========================
-
-def scan_market():
-
-```
-fetcher = get_zerodha_fetcher()
-
-results = []
-
-for symbol in WATCHLIST:
 
     try:
-        df = fetcher.get_stock_data(
-            symbol=symbol,
-            interval="5minute",
-            days=5
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+
+        requests.post(
+            url,
+            data={
+                "chat_id": channel,
+                "text": msg,
+                "parse_mode": "Markdown"
+            },
+            timeout=10
         )
 
-        if df is None or len(df) < 10:
-            continue
+    except Exception as e:
+        print(f"Telegram Error: {e}")
 
-        latest = df.iloc[-1]
 
-        latest_close = latest["close"]
-        latest_volume = latest["volume"]
+# =========================
+# FETCH NSE PREOPEN
+# =========================
+def fetch():
 
-        avg_volume = df["volume"].tail(10).mean()
+    url = "https://www.nseindia.com/api/market-data-pre-open?key=NIFTY"
 
-        volume_ratio = latest_volume / avg_volume
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json",
+        "Referer": "https://www.nseindia.com/"
+    }
 
-        score = 0
+    session = requests.Session()
 
-        if volume_ratio > 2:
-            score += 40
+    try:
+        session.get(
+            "https://www.nseindia.com",
+            headers=headers,
+            timeout=5
+        )
 
-        if latest_close > df["high"].tail(10).max():
-            score += 30
+        time.sleep(1)
 
-        if latest_close > df["close"].rolling(20).mean().iloc[-1]:
-            score += 30
+        res = session.get(
+            url,
+            headers=headers,
+            timeout=10
+        )
 
-        if score >= 50:
-
-            results.append({
-                "symbol": symbol,
-                "price": round(latest_close, 2),
-                "score": score,
-                "volume_ratio": round(volume_ratio, 2)
-            })
+        return res.json().get("data", [])
 
     except Exception as e:
-        print(f"Error scanning {symbol}: {e}")
+        print(f"NSE Fetch Error: {e}")
+        return []
 
-return sorted(results, key=lambda x: x["score"], reverse=True)
-```
-
-# =========================
-
-# MESSAGE
 
 # =========================
+# PROCESS DATA
+# =========================
+def analyze(data):
 
-def build_messages(results):
+    stocks = []
 
-```
-free_msg = "📊 *PRE-OPEN MOMENTUM STOCKS*\n\n"
+    for item in data:
 
-for stock in results[:3]:
+        try:
+            m = item["metadata"]
+
+            symbol = m["symbol"]
+            change = float(m["pChange"])
+            price = float(m["iep"])
+
+            if price <= 0:
+                continue
+
+            # Probability score
+            score = min(100, abs(change) * 20)
+
+            if score >= 40:
+
+                stocks.append({
+                    "symbol": symbol,
+                    "change": change,
+                    "price": price,
+                    "score": int(score)
+                })
+
+        except Exception:
+            continue
+
+    return sorted(
+        stocks,
+        key=lambda x: x["score"],
+        reverse=True
+    )[:6]
+
+
+# =========================
+# BUILD TELEGRAM MESSAGE
+# =========================
+def build_messages(stocks):
+
+    # FREE VERSION
+    free_msg = "📊 *PRE-OPEN STOCK WATCH*\n\n"
+
+    for s in stocks[:3]:
+
+        free_msg += (
+            f"• {s['symbol']} | "
+            f"{s['change']:.2f}%\n"
+        )
+
+    free_msg += "\n🔒 Full levels & entries in premium"
 
     free_msg += (
-        f"• {stock['symbol']} | "
-        f"₹{stock['price']} | "
-        f"Score: {stock['score']}\n"
+        f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
     )
 
-free_msg += "\n🔒 Full breakout analysis in premium"
-free_msg += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
+    # PREMIUM VERSION
+    premium_msg = "🔥 *SMART MONEY STOCKS (PRE-OPEN)*\n\n"
 
-premium_msg = "🔥 *ZERODHA SMART MONEY SCANNER*\n\n"
+    for s in stocks:
 
-for stock in results:
+        premium_msg += (
+            f"• {s['symbol']} | "
+            f"₹{s['price']} | "
+            f"{s['change']:.2f}% | "
+            f"Score: {s['score']}\n"
+        )
 
-    premium_msg += (
-        f"• {stock['symbol']}\n"
-        f"Price: ₹{stock['price']}\n"
-        f"Score: {stock['score']}\n"
-        f"Volume Spike: {stock['volume_ratio']}x\n\n"
-    )
+    premium_msg += "\n📌 Plan: Wait for breakout confirmation"
+    premium_msg += "\n⚠️ Informational only"
 
-premium_msg += "📌 High momentum candidates"
-premium_msg += "\n⚠️ Educational purpose only"
+    return free_msg, premium_msg
 
-return free_msg, premium_msg
-```
 
 # =========================
-
 # MAIN
-
 # =========================
+if __name__ == "__main__":
 
-if **name** == "**main**":
+    print("🚀 Starting Pre-Open Scanner")
 
-```
-print("🚀 Starting Zerodha Scanner...")
+    data = fetch()
 
-results = scan_market()
+    if not data:
 
-if not results:
+        send(
+            "⚠️ Pre-open data unavailable",
+            FREE_CHANNEL
+        )
 
-    send("⚠️ No strong setups found today", FREE_CHANNEL)
-    exit()
+        print("❌ No NSE Data")
+        exit()
 
-free_msg, premium_msg = build_messages(results)
+    stocks = analyze(data)
 
-# PREMIUM FIRST
-send(premium_msg, PREMIUM_CHANNEL)
+    if not stocks:
 
-# DELAYED FREE
-time.sleep(120)
+        print("❌ No Stocks Found")
+        exit()
 
-send(free_msg, FREE_CHANNEL)
+    free_msg, premium_msg = build_messages(stocks)
 
-print("✅ Scanner Finished")
-```
+    # PREMIUM FIRST
+    send(premium_msg, PREMIUM_CHANNEL)
+
+    print("✅ Premium Sent")
+
+    # DELAY FREE VERSION
+    time.sleep(120)
+
+    send(free_msg, FREE_CHANNEL)
+
+    print("✅ Free Channel Sent")
+
+    print("🎯 Scanner Completed")
