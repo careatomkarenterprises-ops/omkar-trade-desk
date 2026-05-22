@@ -4,11 +4,11 @@ from kiteconnect import KiteConnect
 # ZERODHA API DETAILS
 # =====================================
 
-api_key = "YOUR_API_KEY"
-api_secret = "YOUR_API_SECRET"
+api_key = "y9td8bzzuoobxp2b"
+api_secret = "wqk99q83t3zcufo0m354bzpegl57z492"
 
 # Paste request token here
-request_token = "PASTE_REQUEST_TOKEN"
+request_token = "SFrcEWEREUiIwBF5LFe61HmUW9pqh9gJ"
 
 # =====================================
 # GENERATE ACCESS TOKEN
