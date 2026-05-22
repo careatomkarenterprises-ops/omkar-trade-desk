@@ -1,3 +1,4 @@
+```python
 import requests
 import os
 import time
@@ -13,23 +14,28 @@ PREMIUM_CHANNEL = os.getenv("CHANNEL_PREMIUM")
 # TELEGRAM SENDER
 # =========================================
 def send(msg, channel):
+
     try:
+
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
-        requests.post(
+        response = requests.post(
             url,
             data={
                 "chat_id": channel,
                 "text": msg,
                 "parse_mode": "Markdown"
             },
-            timeout=15
+            timeout=20
         )
 
-        print(f"✅ Sent message to {channel}")
+        if response.status_code == 200:
+            print(f"✅ Telegram Message Sent -> {channel}")
+        else:
+            print(f"❌ Telegram Error Code: {response.status_code}")
 
     except Exception as e:
-        print(f"Telegram Error: {e}")
+        print(f"❌ Telegram Exception: {e}")
 
 
 # =========================================
@@ -37,7 +43,7 @@ def send(msg, channel):
 # =========================================
 def fetch_preopen_data():
 
-    session = requests.Session()
+    url = "https://www.nseindia.com/api/market-data-pre-open?key=NIFTY"
 
     headers = {
         "User-Agent": (
@@ -51,37 +57,57 @@ def fetch_preopen_data():
         "Connection": "keep-alive"
     }
 
-    try:
+    # Retry NSE 3 Times
+    for attempt in range(3):
 
-        # STEP 1: Load NSE Homepage
-        session.get(
-            "https://www.nseindia.com",
-            headers=headers,
-            timeout=20
-        )
+        try:
 
-        time.sleep(3)
+            print(f"🔄 NSE Fetch Attempt: {attempt + 1}")
 
-        # STEP 2: Fetch Preopen Data
-        url = "https://www.nseindia.com/api/market-data-pre-open?key=NIFTY"
+            session = requests.Session()
 
-        response = session.get(
-            url,
-            headers=headers,
-            timeout=20
-        )
+            # Load homepage first for cookies
+            session.get(
+                "https://www.nseindia.com",
+                headers=headers,
+                timeout=20
+            )
 
-        if response.status_code != 200:
-            print(f"NSE Status Code: {response.status_code}")
-            return []
+            time.sleep(3)
 
-        data = response.json()
+            # Fetch API
+            response = session.get(
+                url,
+                headers=headers,
+                timeout=30
+            )
 
-        return data.get("data", [])
+            if response.status_code != 200:
 
-    except Exception as e:
-        print(f"NSE Fetch Error: {e}")
-        return []
+                print(f"❌ NSE Status Code: {response.status_code}")
+
+                time.sleep(5)
+                continue
+
+            data = response.json()
+
+            records = data.get("data", [])
+
+            if records:
+
+                print(f"✅ NSE Data Records: {len(records)}")
+
+                return records
+
+            print("⚠ Empty NSE Data")
+
+        except Exception as e:
+
+            print(f"❌ NSE Fetch Error: {e}")
+
+        time.sleep(5)
+
+    return []
 
 
 # =========================================
@@ -94,15 +120,19 @@ def analyze(data):
     for item in data:
 
         try:
+
             meta = item["metadata"]
 
             symbol = meta["symbol"]
+
             change = float(meta["pChange"])
+
             price = float(meta["iep"])
 
             if price <= 0:
                 continue
 
+            # Smart scoring logic
             score = min(100, abs(change) * 20)
 
             if score >= 40:
@@ -129,19 +159,21 @@ def analyze(data):
 # =========================================
 def build_messages(stocks):
 
-    free_msg = "📊 *PRE-OPEN STOCK WATCH*\n\n"
+    # FREE MESSAGE
+    free_msg = "📊 *PRE-OPEN STOCK WATCH*\\n\\n"
 
     for s in stocks[:3]:
 
         free_msg += (
             f"• {s['symbol']} | "
-            f"{s['change']:.2f}%\n"
+            f"{s['change']:.2f}%\\n"
         )
 
-    free_msg += "\n🔒 Full setup in premium"
-    free_msg += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
+    free_msg += "\\n🔒 Full setup in premium"
+    free_msg += f"\\n⏰ {datetime.now().strftime('%H:%M:%S')}"
 
-    premium_msg = "🔥 *SMART MONEY PRE-OPEN STOCKS*\n\n"
+    # PREMIUM MESSAGE
+    premium_msg = "🔥 *SMART MONEY PRE-OPEN STOCKS*\\n\\n"
 
     for s in stocks:
 
@@ -149,11 +181,11 @@ def build_messages(stocks):
             f"• {s['symbol']} | "
             f"₹{s['price']} | "
             f"{s['change']:.2f}% | "
-            f"Score: {s['score']}\n"
+            f"Score: {s['score']}\\n"
         )
 
-    premium_msg += "\n📌 Wait for breakout confirmation"
-    premium_msg += "\n⚠️ Educational Purpose Only"
+    premium_msg += "\\n📌 Wait for breakout confirmation"
+    premium_msg += "\\n⚠️ Educational Purpose Only"
 
     return free_msg, premium_msg
 
@@ -163,48 +195,59 @@ def build_messages(stocks):
 # =========================================
 if __name__ == "__main__":
 
-    print("🚀 Starting Pre-Open Scanner")
+    print("=======================================")
+    print("🚀 STARTING PRE-OPEN SCANNER")
+    print("=======================================")
 
     data = fetch_preopen_data()
 
     if not data:
 
-        print("❌ No NSE Data")
+        print("❌ NO NSE DATA AVAILABLE")
 
         send(
-            "⚠️ NSE Pre-open data unavailable",
+            "⚠️ NSE Pre-open data unavailable today",
             FREE_CHANNEL
         )
 
         exit()
-
-    print(f"✅ NSE Records Fetched: {len(data)}")
 
     stocks = analyze(data)
 
     if not stocks:
 
-        print("❌ No Stocks Found")
+        print("❌ NO VALID STOCKS FOUND")
 
         send(
-            "⚠️ No valid pre-open setups today",
+            "⚠️ No strong pre-open setups today",
             FREE_CHANNEL
         )
 
         exit()
 
+    print(f"✅ Final Stocks Selected: {len(stocks)}")
+
     free_msg, premium_msg = build_messages(stocks)
 
     print("📤 Sending Premium Message")
 
-    send(premium_msg, PREMIUM_CHANNEL)
+    send(
+        premium_msg,
+        PREMIUM_CHANNEL
+    )
 
-    print("⏳ Waiting before Free Message")
+    print("⏳ Waiting 120 seconds before Free Signal")
 
     time.sleep(120)
 
     print("📤 Sending Free Message")
 
-    send(free_msg, FREE_CHANNEL)
+    send(
+        free_msg,
+        FREE_CHANNEL
+    )
 
-    print("✅ Pre-Open Scanner Completed")
+    print("=======================================")
+    print("✅ PRE-OPEN SCANNER COMPLETED")
+    print("=======================================")
+```
