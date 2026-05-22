@@ -65,7 +65,7 @@ def fetch_preopen_data():
 
             session = requests.Session()
 
-            # Load homepage first for cookies
+            # Load NSE homepage first
             session.get(
                 "https://www.nseindia.com",
                 headers=headers,
@@ -74,7 +74,7 @@ def fetch_preopen_data():
 
             time.sleep(3)
 
-            # Fetch API
+            # Fetch pre-open data
             response = session.get(
                 url,
                 headers=headers,
@@ -98,7 +98,7 @@ def fetch_preopen_data():
 
                 return records
 
-            print("⚠ Empty NSE Data")
+            print("⚠️ Empty NSE Data")
 
         except Exception as e:
 
@@ -159,20 +159,20 @@ def analyze(data):
 def build_messages(stocks):
 
     # FREE MESSAGE
-    free_msg = "📊 *PRE-OPEN STOCK WATCH*\\n\\n"
+    free_msg = "📊 *PRE-OPEN STOCK WATCH*\n\n"
 
     for s in stocks[:3]:
 
         free_msg += (
             f"• {s['symbol']} | "
-            f"{s['change']:.2f}%\\n"
+            f"{s['change']:.2f}%\n"
         )
 
-    free_msg += "\\n🔒 Full setup in premium"
-    free_msg += f"\\n⏰ {datetime.now().strftime('%H:%M:%S')}"
+    free_msg += "\n🔒 Full setup in premium"
+    free_msg += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
 
     # PREMIUM MESSAGE
-    premium_msg = "🔥 *SMART MONEY PRE-OPEN STOCKS*\\n\\n"
+    premium_msg = "🔥 *SMART MONEY PRE-OPEN STOCKS*\n\n"
 
     for s in stocks:
 
@@ -180,11 +180,11 @@ def build_messages(stocks):
             f"• {s['symbol']} | "
             f"₹{s['price']} | "
             f"{s['change']:.2f}% | "
-            f"Score: {s['score']}\\n"
+            f"Score: {s['score']}\n"
         )
 
-    premium_msg += "\\n📌 Wait for breakout confirmation"
-    premium_msg += "\\n⚠️ Educational Purpose Only"
+    premium_msg += "\n📌 Wait for breakout confirmation"
+    premium_msg += "\n⚠️ Educational Purpose Only"
 
     return free_msg, premium_msg
 
@@ -249,4 +249,3 @@ if __name__ == "__main__":
     print("=======================================")
     print("✅ PRE-OPEN SCANNER COMPLETED")
     print("=======================================")
-```
