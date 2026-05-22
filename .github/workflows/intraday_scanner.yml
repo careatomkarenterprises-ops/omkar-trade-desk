@@ -1,40 +1,69 @@
-name: Pre-Open Scanner
+name: 🔥 Pre-Open Scanner
 
 on:
   schedule:
-    # 9:08 AM IST (Best NSE pre-open confirmation timing)
+    # 9:08 AM IST
     - cron: '38 3 * * 1-5'
 
   workflow_dispatch:
 
 jobs:
-  run:
+  scanner:
+
+    name: Run Pre-Open Scanner
+
     runs-on: ubuntu-latest
 
     steps:
 
-      - name: Checkout Repository
+      - name: 📥 Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
 
-      - name: Install Dependencies
+      - name: 📦 Install Dependencies
         run: |
-          pip install --upgrade pip
-          pip install requests pytz
+          python -m pip install --upgrade pip
 
-      - name: Run Pre-Open Scanner
+          pip install \
+            requests \
+            pytz \
+            yfinance \
+            pandas \
+            numpy \
+            python-dotenv \
+            kiteconnect
+
+      - name: 🚀 Run Pre-Open Scanner
         env:
+
+          TZ: Asia/Kolkata
+          PYTHONUNBUFFERED: "1"
+
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+
           CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
           CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
-          TZ: Asia/Kolkata
+
+          KITE_API_KEY: ${{ secrets.KITE_API_KEY }}
+          KITE_API_SECRET: ${{ secrets.KITE_API_SECRET }}
+          KITE_ACCESS_TOKEN: ${{ secrets.KITE_ACCESS_TOKEN }}
 
         run: |
-          echo "===== PRE-OPEN SCANNER STARTED ====="
-          date
+
+          echo "======================================="
+          echo "🔥 PRE-OPEN SCANNER STARTED"
+          echo "======================================="
+
+          echo "📅 Current IST Time:"
+          TZ='Asia/Kolkata' date
+
           python -u run_preopen_scanner.py
-          echo "===== PRE-OPEN SCANNER FINISHED ====="
+
+          echo "======================================="
+          echo "✅ PRE-OPEN SCANNER FINISHED"
+          echo "======================================="
