@@ -22,9 +22,7 @@ def send_message(chat_id, message):
 
         payload = {
             "chat_id": chat_id,
-            "text": message,
-            "parse_mode": "Markdown",
-            "disable_web_page_preview": True
+            "text": message
         }
 
         response = requests.post(
@@ -48,101 +46,94 @@ def send_message(chat_id, message):
 
 
 # =========================================
-# MARKETING CONTENT
+# MARKETING MESSAGES
 # =========================================
 messages = [
 
-    f"""
-🚨 *MOST RETAIL TRADERS LOSE MONEY*
+f"""
+🚀 OMKAR TRADE DESK PREMIUM
 
-Why?
+AI Based Market Intelligence
 
-❌ Late Entry
-❌ No Proper Setup
-❌ Emotional Trading
-❌ Fake Breakouts
-
-Omkar Trade Desk Helps With:
-
-✅ AI Market Scanner
+✅ Intraday Trade Setups
+✅ Breakout Scanner
+✅ Smart Money Tracking
 ✅ Momentum Detection
-✅ Smart Money Logic
-✅ Risk Management
-✅ Institutional Style Analysis
+✅ Risk Management Levels
+✅ Daily Market Analysis
+✅ Educational Content
 
-🔥 Start 7 Days Free Trial
+🎯 Plans Starting From ₹999
 
-🔐 Upgrade Here:
+⚡ Start Free Trial:
 {RAZORPAY_LINK}
-
-⚠️ Educational Purpose Only
 """,
 
-    f"""
-📈 *AI MARKET INTELLIGENCE*
+f"""
+📈 AI MARKET INTELLIGENCE
 
 Premium Includes:
 
 ✅ Entry Zones
 ✅ Momentum Detection
 ✅ Smart Risk System
-✅ Intraday Trading Setups
-✅ Swing Trade Analysis
-✅ Market Direction Alerts
+✅ Institutional Logic
+✅ Daily Market View
 
-🎯 Built For Serious Traders
-
-🔥 7 Days Free Access
+🔥 Built For Serious Traders
 
 ⚡ Join Now:
 {RAZORPAY_LINK}
-
-⚠️ Educational Purpose Only
 """,
 
-    f"""
-🏦 *DAILY MARKET EDGE*
+f"""
+🏦 DAILY MARKET EDGE
 
 Premium Members Receive:
 
 ✅ Early Breakout Alerts
 ✅ AI Momentum Detection
 ✅ Smart Risk Management
-✅ Intraday & Swing Calls
-✅ Institutional Market Logic
+✅ Equity & Index Analysis
+✅ Institutional Market View
 
-📊 Equity • Index • Commodity • Currency
+🎯 Free Trial Available
 
-🔥 Free Trial Available
-
-🚀 Upgrade Here:
+🔥 Upgrade Here:
 {RAZORPAY_LINK}
-
-⚠️ Educational Purpose Only
 """,
 
-    f"""
-🔥 *SMART MONEY TRADING SYSTEM*
+f"""
+📊 TRADE WITH STRUCTURE
 
-What You Get:
+Most traders follow emotions.
+Professionals follow systems.
 
-✅ High Probability Setups
-✅ Live Market Analysis
-✅ Smart Entry Zones
-✅ Demand & Supply Logic
-✅ Advanced Scanner Signals
+OMKAR TRADE DESK Gives:
 
-📈 Perfect For:
-• Intraday Traders
-• Swing Traders
-• Positional Traders
+✅ Scanner Based Setups
+✅ Momentum Stocks
+✅ Institutional Concepts
+✅ Smart Risk Management
 
-🎁 7 Days Free Trial
-
-🔐 Join Premium:
+🚀 Join Premium:
 {RAZORPAY_LINK}
+""",
 
-⚠️ Educational Purpose Only
+f"""
+🔥 SMART MONEY SCANNER
+
+Detect:
+
+✅ Volume Expansion
+✅ Breakout Stocks
+✅ Momentum Build-Up
+✅ Institutional Activity
+
+🎯 Designed For Traders & Investors
+
+⚡ Join:
+{RAZORPAY_LINK}
 """
 ]
 
