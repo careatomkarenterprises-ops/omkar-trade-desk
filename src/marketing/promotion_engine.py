@@ -1,6 +1,7 @@
 import requests
 import os
 import random
+from datetime import datetime
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
@@ -10,17 +11,29 @@ EDUCATION = os.getenv("CHANNEL_EDUCATION")
 RAZORPAY_LINK = os.getenv("RAZORPAY_LINK")
 
 
+# =========================================
+# TELEGRAM SEND
+# =========================================
 def send_message(chat_id, message):
+
     try:
+
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
         payload = {
             "chat_id": chat_id,
-            "text": message
+            "text": message,
+            "parse_mode": "Markdown",
+            "disable_web_page_preview": True
         }
 
-        response = requests.post(url, data=payload, timeout=15)
+        response = requests.post(
+            url,
+            data=payload,
+            timeout=15
+        )
 
+        print("===================================")
         print("STATUS:", response.status_code)
         print("RESPONSE:", response.text)
 
@@ -30,47 +43,119 @@ def send_message(chat_id, message):
             print(f"❌ Failed for {chat_id}")
 
     except Exception as e:
+
         print("❌ ERROR:", str(e))
 
 
+# =========================================
+# MARKETING CONTENT
+# =========================================
 messages = [
-    f"""🚀 TRADERS ARE SWITCHING TO PREMIUM
 
-✅ Live AI Signals
-✅ Breakout Scanner
-✅ Institutional Logic
+    f"""
+🚨 *MOST RETAIL TRADERS LOSE MONEY*
 
-🔐 Upgrade:
+Why?
+
+❌ Late Entry
+❌ No Proper Setup
+❌ Emotional Trading
+❌ Fake Breakouts
+
+Omkar Trade Desk Helps With:
+
+✅ AI Market Scanner
+✅ Momentum Detection
+✅ Smart Money Logic
+✅ Risk Management
+✅ Institutional Style Analysis
+
+🔥 Start 7 Days Free Trial
+
+🔐 Upgrade Here:
 {RAZORPAY_LINK}
+
+⚠️ Educational Purpose Only
 """,
 
-    f"""📈 AI MARKET INTELLIGENCE
+    f"""
+📈 *AI MARKET INTELLIGENCE*
 
 Premium Includes:
+
 ✅ Entry Zones
 ✅ Momentum Detection
 ✅ Smart Risk System
+✅ Intraday Trading Setups
+✅ Swing Trade Analysis
+✅ Market Direction Alerts
 
-⚡ Join:
+🎯 Built For Serious Traders
+
+🔥 7 Days Free Access
+
+⚡ Join Now:
 {RAZORPAY_LINK}
+
+⚠️ Educational Purpose Only
 """,
 
-    f"""🏦 DAILY MARKET EDGE
+    f"""
+🏦 *DAILY MARKET EDGE*
 
 Premium Members Receive:
+
 ✅ Early Breakout Alerts
 ✅ AI Momentum Detection
 ✅ Smart Risk Management
+✅ Intraday & Swing Calls
+✅ Institutional Market Logic
 
-🔥 Upgrade:
+📊 Equity • Index • Commodity • Currency
+
+🔥 Free Trial Available
+
+🚀 Upgrade Here:
 {RAZORPAY_LINK}
+
+⚠️ Educational Purpose Only
+""",
+
+    f"""
+🔥 *SMART MONEY TRADING SYSTEM*
+
+What You Get:
+
+✅ High Probability Setups
+✅ Live Market Analysis
+✅ Smart Entry Zones
+✅ Demand & Supply Logic
+✅ Advanced Scanner Signals
+
+📈 Perfect For:
+• Intraday Traders
+• Swing Traders
+• Positional Traders
+
+🎁 7 Days Free Trial
+
+🔐 Join Premium:
+{RAZORPAY_LINK}
+
+⚠️ Educational Purpose Only
 """
 ]
 
 
+# =========================================
+# MAIN
+# =========================================
 if __name__ == "__main__":
 
-    print("===== STARTING PROMOTION ENGINE =====")
+    print("===================================")
+    print("🚀 STARTING PROMOTION ENGINE")
+    print(datetime.now())
+    print("===================================")
 
     selected = random.choice(messages)
 
@@ -80,7 +165,10 @@ if __name__ == "__main__":
     ]
 
     for channel in channels:
+
         if channel:
             send_message(channel, selected)
 
-    print("===== SCRIPT FINISHED =====")
+    print("===================================")
+    print("✅ PROMOTION ENGINE FINISHED")
+    print("===================================")
