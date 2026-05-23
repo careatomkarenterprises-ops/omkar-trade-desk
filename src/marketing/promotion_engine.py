@@ -3,6 +3,10 @@ import os
 import random
 from datetime import datetime
 
+# ============================================
+# ENV VARIABLES
+# ============================================
+
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 FREE_MAIN = os.getenv("CHANNEL_FREE_MAIN")
@@ -11,9 +15,10 @@ EDUCATION = os.getenv("CHANNEL_EDUCATION")
 RAZORPAY_LINK = os.getenv("RAZORPAY_LINK")
 
 
-# =========================================
-# TELEGRAM SEND
-# =========================================
+# ============================================
+# TELEGRAM MESSAGE SENDER
+# ============================================
+
 def send_message(chat_id, message):
 
     try:
@@ -22,7 +27,8 @@ def send_message(chat_id, message):
 
         payload = {
             "chat_id": chat_id,
-            "text": message
+            "text": message,
+            "disable_web_page_preview": True
         }
 
         response = requests.post(
@@ -45,102 +51,116 @@ def send_message(chat_id, message):
         print("❌ ERROR:", str(e))
 
 
-# =========================================
-# MARKETING MESSAGES
-# =========================================
+# ============================================
+# PROMOTIONAL MESSAGES
+# ============================================
+
 messages = [
 
 f"""
-🚀 OMKAR TRADE DESK PREMIUM
+🚨 MOST TRADERS LOSE MONEY
 
-AI Based Market Intelligence
+Because They Trade Without Structure
 
-✅ Intraday Trade Setups
-✅ Breakout Scanner
-✅ Smart Money Tracking
-✅ Momentum Detection
-✅ Risk Management Levels
-✅ Daily Market Analysis
-✅ Educational Content
+OMKAR TRADE DESK Helps You Detect:
 
-🎯 Plans Starting From ₹999
+✅ Smart Money Activity
+✅ Breakout Before Crowd
+✅ Volume Expansion
+✅ Institutional Momentum
+✅ Trap Avoidance Zones
 
-⚡ Start Free Trial:
+📊 Daily AI Based Market Intelligence
+
+🎯 Start Your 7 Days Free Trial
+
+⚡ Join Premium:
 {RAZORPAY_LINK}
 """,
 
 f"""
 📈 AI MARKET INTELLIGENCE
 
-Premium Includes:
+Stop Following Random Tips.
 
-✅ Entry Zones
-✅ Momentum Detection
-✅ Smart Risk System
+Trade With:
+
+✅ Scanner Based Signals
+✅ Momentum Stocks
 ✅ Institutional Logic
-✅ Daily Market View
+✅ Risk Management
+✅ Intraday + Swing Analysis
 
-🔥 Built For Serious Traders
+🔥 Built For Serious Traders & Investors
 
-⚡ Join Now:
+🎯 Free Trial Available
+
+⚡ Upgrade Here:
+{RAZORPAY_LINK}
+""",
+
+f"""
+🔥 SMART MONEY SCANNER ACTIVE
+
+Detect:
+
+✅ Breakout Stocks
+✅ Volume Blast
+✅ Momentum Build-Up
+✅ Institutional Buying
+✅ Demand Supply Zones
+
+⚠️ Avoid Fake Breakouts & Retail Traps
+
+🎯 Used For Intraday + Swing Trading
+
+🚀 Start Free Trial:
 {RAZORPAY_LINK}
 """,
 
 f"""
 🏦 DAILY MARKET EDGE
 
-Premium Members Receive:
+Premium Members Get:
 
-✅ Early Breakout Alerts
-✅ AI Momentum Detection
-✅ Smart Risk Management
-✅ Equity & Index Analysis
-✅ Institutional Market View
+✅ Equity Analysis
+✅ Nifty & BankNifty View
+✅ Momentum Detection
+✅ Institutional Structure
+✅ Smart Risk Levels
+✅ High Probability Setups
 
-🎯 Free Trial Available
+📊 Designed For Consistent Traders
 
-🔥 Upgrade Here:
+🔥 Join Premium:
 {RAZORPAY_LINK}
 """,
 
 f"""
-📊 TRADE WITH STRUCTURE
+⚡ DON'T TRADE BLINDLY
 
-Most traders follow emotions.
-Professionals follow systems.
+Most traders enter late.
+Professionals enter early.
 
-OMKAR TRADE DESK Gives:
+OMKAR TRADE DESK Provides:
 
-✅ Scanner Based Setups
-✅ Momentum Stocks
-✅ Institutional Concepts
-✅ Smart Risk Management
+✅ Early Momentum Detection
+✅ AI Scanner Alerts
+✅ Smart Money Tracking
+✅ Institutional Market Structure
 
-🚀 Join Premium:
-{RAZORPAY_LINK}
-""",
+🎯 Trade With Logic, Not Emotion
 
-f"""
-🔥 SMART MONEY SCANNER
-
-Detect:
-
-✅ Volume Expansion
-✅ Breakout Stocks
-✅ Momentum Build-Up
-✅ Institutional Activity
-
-🎯 Designed For Traders & Investors
-
-⚡ Join:
+🚀 Join Here:
 {RAZORPAY_LINK}
 """
 ]
 
 
-# =========================================
-# MAIN
-# =========================================
+# ============================================
+# MAIN ENGINE
+# ============================================
+
 if __name__ == "__main__":
 
     print("===================================")
@@ -158,7 +178,11 @@ if __name__ == "__main__":
     for channel in channels:
 
         if channel:
-            send_message(channel, selected)
+
+            send_message(
+                channel,
+                selected
+            )
 
     print("===================================")
     print("✅ PROMOTION ENGINE FINISHED")
