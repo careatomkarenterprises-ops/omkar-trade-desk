@@ -3,10 +3,6 @@ import os
 import random
 from datetime import datetime
 
-# ============================================
-# ENV VARIABLES
-# ============================================
-
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 FREE_MAIN = os.getenv("CHANNEL_FREE_MAIN")
@@ -15,12 +11,7 @@ EDUCATION = os.getenv("CHANNEL_EDUCATION")
 RAZORPAY_LINK = os.getenv("RAZORPAY_LINK")
 
 
-# ============================================
-# TELEGRAM MESSAGE SENDER
-# ============================================
-
 def send_message(chat_id, message):
-
     try:
 
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -34,7 +25,7 @@ def send_message(chat_id, message):
         response = requests.post(
             url,
             data=payload,
-            timeout=15
+            timeout=20
         )
 
         print("===================================")
@@ -47,57 +38,10 @@ def send_message(chat_id, message):
             print(f"❌ Failed for {chat_id}")
 
     except Exception as e:
-
         print("❌ ERROR:", str(e))
 
 
-# ============================================
-# PROMOTIONAL MESSAGES
-# ============================================
-
 messages = [
-
-f"""
-🚨 MOST TRADERS LOSE MONEY
-
-Because They Trade Without Structure
-
-OMKAR TRADE DESK Helps You Detect:
-
-✅ Smart Money Activity
-✅ Breakout Before Crowd
-✅ Volume Expansion
-✅ Institutional Momentum
-✅ Trap Avoidance Zones
-
-📊 Daily AI Based Market Intelligence
-
-🎯 Start Your 7 Days Free Trial
-
-⚡ Join Premium:
-{RAZORPAY_LINK}
-""",
-
-f"""
-📈 AI MARKET INTELLIGENCE
-
-Stop Following Random Tips.
-
-Trade With:
-
-✅ Scanner Based Signals
-✅ Momentum Stocks
-✅ Institutional Logic
-✅ Risk Management
-✅ Intraday + Swing Analysis
-
-🔥 Built For Serious Traders & Investors
-
-🎯 Free Trial Available
-
-⚡ Upgrade Here:
-{RAZORPAY_LINK}
-""",
 
 f"""
 🔥 SMART MONEY SCANNER ACTIVE
@@ -119,47 +63,74 @@ Detect:
 """,
 
 f"""
-🏦 DAILY MARKET EDGE
+📈 AI MARKET INTELLIGENCE
 
-Premium Members Get:
+Premium Includes:
 
-✅ Equity Analysis
-✅ Nifty & BankNifty View
+✅ Entry Zones
 ✅ Momentum Detection
-✅ Institutional Structure
-✅ Smart Risk Levels
-✅ High Probability Setups
+✅ Smart Risk System
+✅ Smart Scalping Setups
+✅ Institutional Flow Tracking
 
-📊 Designed For Consistent Traders
+⚡ Built For Serious Traders
 
-🔥 Join Premium:
+🚀 Join Premium:
 {RAZORPAY_LINK}
 """,
 
 f"""
-⚡ DON'T TRADE BLINDLY
+🚀 TRADERS ARE SWITCHING TO AI
 
-Most traders enter late.
-Professionals enter early.
+Why?
 
-OMKAR TRADE DESK Provides:
+✅ Faster Market Detection
+✅ Breakout Identification
+✅ Momentum Tracking
+✅ Smart Risk Management
+✅ High Probability Setups
 
-✅ Early Momentum Detection
-✅ AI Scanner Alerts
-✅ Smart Money Tracking
-✅ Institutional Market Structure
+🔥 Upgrade Your Trading System
 
-🎯 Trade With Logic, Not Emotion
+🎯 Join Now:
+{RAZORPAY_LINK}
+""",
 
-🚀 Join Here:
+f"""
+🏦 DAILY MARKET EDGE
+
+Premium Members Receive:
+
+✅ Early Breakout Alerts
+✅ AI Momentum Detection
+✅ Demand Supply Zones
+✅ Intraday Trade Ideas
+✅ Swing Trade Opportunities
+
+⚡ Trade Smarter With AI
+
+🚀 Upgrade Here:
+{RAZORPAY_LINK}
+""",
+
+f"""
+🔥 INSTITUTIONAL STYLE TRADING
+
+Get Access To:
+
+✅ Smart Money Concepts
+✅ AI Breakout Scanner
+✅ Volume Expansion Alerts
+✅ Momentum Entries
+✅ Market Structure Analysis
+
+🎯 Built For Consistent Traders
+
+🚀 Access Premium:
 {RAZORPAY_LINK}
 """
 ]
 
-
-# ============================================
-# MAIN ENGINE
-# ============================================
 
 if __name__ == "__main__":
 
@@ -178,11 +149,7 @@ if __name__ == "__main__":
     for channel in channels:
 
         if channel:
-
-            send_message(
-                channel,
-                selected
-            )
+            send_message(channel, selected)
 
     print("===================================")
     print("✅ PROMOTION ENGINE FINISHED")
