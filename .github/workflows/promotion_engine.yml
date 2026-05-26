@@ -1,48 +1,33 @@
-name: Daily Conversion Push
+name: ⚡ Daily Conversion Push
 
 on:
   schedule:
-    # 5:30 PM IST (Best engagement after market hours)
-    - cron: '0 12 * * 1-5'
-
+    - cron: '47 15 * * 1-5'
   workflow_dispatch:
 
 jobs:
-  promote:
+  conversion:
+    name: Run Conversion Campaigns
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Repository
+      - name: 📥 Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
 
-      - name: Verify Files
+      - name: 📦 Install Dependencies
         run: |
-          echo "===== ROOT ====="
-          ls
-          echo "===== SRC ====="
-          ls src
-          echo "===== MARKETING ====="
-          ls src/marketing
-
-      - name: Install Dependencies
-        run: |
-          pip install --upgrade pip
-          pip install requests pytz
-
-      - name: Run Promotion Engine
+          python -m pip install --upgrade pip
+          pip install requests pytz python-dotenv
+        
+      - name: 🚀 Run Conversion Strategy
         env:
+          TZ: Asia/Kolkata
+          PYTHONUNBUFFERED: "1"
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
-          CHANNEL_EDUCATION: ${{ secrets.CHANNEL_EDUCATION }}
-          RAZORPAY_LINK: ${{ secrets.RAZORPAY_LINK }}
-          TZ: Asia/Kolkata
-        run: |
-          echo "===== RUNNING PROMOTION ENGINE ====="
-          date
-          python -u src/marketing/promotion_engine.py
-          echo "===== FINISHED ====="
+        run: python -u src/marketing/promotion_engine.py --mode conversion
