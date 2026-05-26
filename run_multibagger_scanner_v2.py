@@ -1,6 +1,8 @@
+```python
 import os
 import requests
 from datetime import datetime
+import pandas as pd
 import yfinance as yf
 from kiteconnect import KiteConnect
 
@@ -23,18 +25,32 @@ PREMIUM_CHANNELS = [
     os.getenv("CHANNEL_PREMIUM_ELITE"),
 ]
 
-WATCHLIST = [
-    "RELIANCE.NS",
-    "TCS.NS",
-    "INFY.NS",
-    "HDFCBANK.NS",
-    "ICICIBANK.NS",
-    "SBIN.NS",
-    "LT.NS",
-    "BHARTIARTL.NS",
-    "ADANIPORTS.NS",
-    "ADANIENT.NS"
-]
+# =========================================
+# LOAD F&O STOCKS FROM CSV
+# =========================================
+
+WATCHLIST = []
+
+try:
+
+    df = pd.read_csv("fno_stocks.csv")
+
+    for stock in df.iloc[:, 0]:
+
+        stock = str(stock).strip()
+
+        if stock and stock != "nan":
+
+            if not stock.endswith(".NS"):
+                stock += ".NS"
+
+            WATCHLIST.append(stock)
+
+    print(f"✅ Loaded {len(WATCHLIST)} F&O Stocks")
+
+except Exception as e:
+
+    print("❌ CSV LOAD ERROR:", e)
 
 # =========================================
 # ZERODHA CONNECTION
@@ -43,9 +59,11 @@ WATCHLIST = [
 kite = None
 
 try:
+
     if KITE_API_KEY and KITE_ACCESS_TOKEN:
 
         kite = KiteConnect(api_key=KITE_API_KEY)
+
         kite.set_access_token(KITE_ACCESS_TOKEN)
 
         profile = kite.profile()
@@ -53,9 +71,11 @@ try:
         print(f"✅ Zerodha Connected: {profile['user_name']}")
 
     else:
+
         print("⚠️ Zerodha credentials missing")
 
 except Exception as e:
+
     print("❌ Zerodha Connection Failed:", e)
 
 # =========================================
@@ -90,6 +110,7 @@ def send_message(channels, text):
             print(response.text)
 
         except Exception as e:
+
             print("❌ Telegram Error:", e)
 
 # =========================================
@@ -111,7 +132,9 @@ def fetch_stock(symbol):
         )
 
         if df.empty or len(df) < 3:
+
             print(f"⚠️ No Data: {symbol}")
+
             return None
 
         latest = df.iloc[-1]
@@ -288,3 +311,4 @@ if __name__ == "__main__":
     except Exception as e:
 
         print("❌ MAIN ERROR:", e)
+```
