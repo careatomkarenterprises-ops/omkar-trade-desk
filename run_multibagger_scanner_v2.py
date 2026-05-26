@@ -1,14 +1,10 @@
-```python
+```python id="k9m2b7"
 import os
 import requests
 from datetime import datetime
 import pandas as pd
 import yfinance as yf
 from kiteconnect import KiteConnect
-
-# =========================================
-# ENV VARIABLES
-# =========================================
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
@@ -24,10 +20,6 @@ PREMIUM_CHANNELS = [
     os.getenv("CHANNEL_PREMIUM"),
     os.getenv("CHANNEL_PREMIUM_ELITE"),
 ]
-
-# =========================================
-# LOAD F&O STOCKS FROM CSV
-# =========================================
 
 WATCHLIST = []
 
@@ -46,15 +38,11 @@ try:
 
             WATCHLIST.append(stock)
 
-    print(f"✅ Loaded {len(WATCHLIST)} F&O Stocks")
+    print(f"✅ Loaded {len(WATCHLIST)} Stocks")
 
 except Exception as e:
 
     print("❌ CSV LOAD ERROR:", e)
-
-# =========================================
-# ZERODHA CONNECTION
-# =========================================
 
 kite = None
 
@@ -77,10 +65,6 @@ try:
 except Exception as e:
 
     print("❌ Zerodha Connection Failed:", e)
-
-# =========================================
-# TELEGRAM
-# =========================================
 
 def send_message(channels, text):
 
@@ -112,10 +96,6 @@ def send_message(channels, text):
         except Exception as e:
 
             print("❌ Telegram Error:", e)
-
-# =========================================
-# FETCH STOCK DATA
-# =========================================
 
 def fetch_stock(symbol):
 
@@ -160,10 +140,6 @@ def fetch_stock(symbol):
 
         return None
 
-# =========================================
-# SIGNAL ENGINE
-# =========================================
-
 def generate_signals():
 
     signals = []
@@ -177,19 +153,15 @@ def generate_signals():
 
         probability = 50
 
-        # Momentum
         if data["change"] > 2:
             probability += 20
 
-        # Strong breakout
         if data["change"] > 4:
             probability += 20
 
-        # Volume strength
         if data["volume"] > 10000000:
             probability += 15
 
-        # Very high momentum
         if data["change"] > 6:
             probability += 10
 
@@ -217,10 +189,6 @@ def generate_signals():
         reverse=True
     )[:5]
 
-# =========================================
-# FREE MESSAGE
-# =========================================
-
 def free_message(signals):
 
     msg = "📊 *END OF DAY MARKET REPORT*\n\n"
@@ -245,10 +213,6 @@ def free_message(signals):
     msg += f"\n\n⏰ {datetime.now().strftime('%H:%M:%S')}"
 
     return msg
-
-# =========================================
-# PREMIUM MESSAGE
-# =========================================
 
 def premium_message(signals):
 
@@ -277,10 +241,6 @@ def premium_message(signals):
     msg += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
 
     return msg
-
-# =========================================
-# MAIN
-# =========================================
 
 if __name__ == "__main__":
 
