@@ -22,10 +22,10 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: Install Dependencies
-        run: |
-          pip install --upgrade pip
-          pip install requests yfinance pandas numpy pytz
+- name: Install Dependencies
+  run: |
+    pip install --upgrade pip
+    pip install requests yfinance pandas numpy pytz kiteconnect
 
       - name: Run Multibagger Scanner
         env:
