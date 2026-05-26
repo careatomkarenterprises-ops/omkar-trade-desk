@@ -1,4 +1,3 @@
-```python id="k9m2b7"
 import os
 import requests
 from datetime import datetime
@@ -271,4 +270,3 @@ if __name__ == "__main__":
     except Exception as e:
 
         print("❌ MAIN ERROR:", e)
-```
