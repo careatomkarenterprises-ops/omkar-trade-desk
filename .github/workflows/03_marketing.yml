@@ -2,42 +2,33 @@ name: 📢 Marketing Posts - Daily
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
-
+    - cron: '13 13 * * 1-5'
+    - cron: '52 14 * * 1-5'
   workflow_dispatch:
 
 jobs:
-  marketing-engine:
-
+  marketing:
+    name: Distribute Marketing Posts
     runs-on: ubuntu-latest
-
-    env:
-      TZ: Asia/Kolkata
-
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-
-      CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
-      CHANNEL_EDUCATION: ${{ secrets.CHANNEL_EDUCATION }}
-
-      RAZORPAY_LINK: ${{ secrets.RAZORPAY_LINK }}
-
     steps:
-
-      - name: Checkout Repository
+      - name: 📥 Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
+          cache: 'pip'
 
-      - name: Install Requirements
+      - name: 📦 Install Dependencies
         run: |
-          pip install -r requirements.txt
+          python -m pip install --upgrade pip
+          pip install requests pytz python-dotenv
 
-      - name: Run Marketing Engine
-        run: |
-          echo "===== MARKETING ENGINE STARTED ====="
-          date
-          python -u src/marketing/promotion_engine.py
-          echo "===== MARKETING ENGINE FINISHED ====="
+      - name: 🚀 Run Promotion Engine
+        env:
+          TZ: Asia/Kolkata
+          PYTHONUNBUFFERED: "1"
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
+        run: python -u src/marketing/promotion_engine.py
