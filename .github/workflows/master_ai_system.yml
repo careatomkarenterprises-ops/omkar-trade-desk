@@ -1,13 +1,9 @@
-```yaml id="x3p9qv"
+```yaml id="tw5svh"
 name: MASTER AI TRADING SYSTEM
 
 on:
   schedule:
-
-    # TEMPORARY TEST
-    # Runs every 5 minutes ALL DAYS
-
-    - cron: "*/5 * * * *"
+    - cron: '*/5 * * * *'
 
   workflow_dispatch:
 
@@ -53,7 +49,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Install Dependencies
         run: |
