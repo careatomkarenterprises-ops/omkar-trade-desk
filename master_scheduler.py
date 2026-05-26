@@ -1,74 +1,120 @@
-from datetime import datetime
+```python
 import os
+import subprocess
+from datetime import datetime
+import pytz
 
-ist_now = datetime.now()
+IST = pytz.timezone("Asia/Kolkata")
+now = datetime.now(IST)
 
-hour = ist_now.hour
-minute = ist_now.minute
-
-current = f"{hour:02d}:{minute:02d}"
+hour = now.hour
+minute = now.minute
 
 print("===================================")
-print("MASTER AI SCHEDULER")
-print("Current IST:", current)
+print("🚀 MASTER AI TRADING SYSTEM")
+print("===================================")
+print(f"⏰ Current IST Time: {now}")
 print("===================================")
 
-# -----------------------------------
-# PRE MARKET
-# -----------------------------------
+# ---------------------------------------------------
+# PRE-MARKET PREDICTOR
+# 8:40 AM - 8:50 AM
+# ---------------------------------------------------
 
-if current == "08:40":
-    print("RUNNING PRE-MARKET PREDICTOR")
-    os.system("python run_market_prediction.py")
+if hour == 8 and 40 <= minute <= 50:
+    print("📈 RUNNING PRE-MARKET PREDICTOR")
 
-# -----------------------------------
-# PRE OPEN
-# -----------------------------------
+    subprocess.run(
+        ["python", "-u", "run_market_prediction.py"],
+        check=False
+    )
 
-if current == "09:05":
-    print("RUNNING PRE-OPEN SCANNER")
-    os.system("python run_preopen_scanner.py")
+# ---------------------------------------------------
+# PRE-OPEN SCANNER
+# 9:05 AM - 9:10 AM
+# ---------------------------------------------------
 
-# -----------------------------------
+if hour == 9 and 5 <= minute <= 10:
+    print("🔥 RUNNING PRE-OPEN SCANNER")
+
+    subprocess.run(
+        ["python", "-u", "run_preopen_scanner.py"],
+        check=False
+    )
+
+# ---------------------------------------------------
 # OPENING CONFIRMATION
-# -----------------------------------
+# 9:15 AM - 9:20 AM
+# ---------------------------------------------------
 
-if current == "09:15":
-    print("RUNNING OPENING CONFIRMATION")
-    os.system("python run_opening_confirmation.py")
+if hour == 9 and 15 <= minute <= 20:
+    print("🏦 RUNNING OPENING CONFIRMATION")
 
-# -----------------------------------
-# NEWS ENGINE EVERY 30 MINS
-# -----------------------------------
+    subprocess.run(
+        ["python", "-u", "run_opening_confirmation.py"],
+        check=False
+    )
 
-if minute in [0, 30]:
-    print("RUNNING NEWS ENGINE")
-    os.system("python -m src.news.aggregator")
+# ---------------------------------------------------
+# MARKET HOURS NEWS ENGINE
+# Every 30 mins
+# 9:30 AM - 3:30 PM
+# ---------------------------------------------------
 
-# -----------------------------------
+if 9 <= hour <= 15 and minute in [0, 30]:
+
+    print("📰 RUNNING NEWS ENGINE")
+
+    subprocess.run(
+        ["python", "-u", "-m", "src.news.aggregator"],
+        check=False
+    )
+
+# ---------------------------------------------------
 # DELAYED FREE POSTS
-# -----------------------------------
+# Every 30 mins
+# ---------------------------------------------------
 
-if minute in [0, 30]:
-    print("RUNNING DELAYED POSTS")
-    os.system("python src/scanner/delayed_poster.py")
+if 10 <= hour <= 15 and minute in [0, 30]:
 
-# -----------------------------------
-# MARKETING
-# -----------------------------------
+    print("📢 RUNNING DELAYED FREE POSTS")
 
-if current in ["11:30", "14:30", "17:30"]:
-    print("RUNNING MARKETING ENGINE")
-    os.system("python src/marketing/promotion_engine.py")
+    subprocess.run(
+        ["python", "-u", "src/scanner/delayed_poster.py"],
+        check=False
+    )
 
-# -----------------------------------
-# MULTIBAGGER
-# -----------------------------------
+# ---------------------------------------------------
+# MARKETING POSTS
+# 11:00 AM / 2:00 PM / 5:00 PM
+# ---------------------------------------------------
 
-if current == "16:00":
-    print("RUNNING MULTIBAGGER SCANNER")
-    os.system("python run_multibagger_scanner.py")
+if (hour == 11 and minute <= 5) or \
+   (hour == 14 and minute <= 5) or \
+   (hour == 17 and minute <= 5):
+
+    print("📣 RUNNING MARKETING ENGINE")
+
+    subprocess.run(
+        ["python", "-u", "src/marketing/promotion_engine.py"],
+        check=False
+    )
+
+# ---------------------------------------------------
+# MULTIBAGGER SCANNER
+# 3:40 PM onwards
+# ---------------------------------------------------
+
+if hour == 15 and minute >= 40:
+
+    print("🚀 RUNNING MULTIBAGGER SCANNER")
+
+    subprocess.run(
+        ["python", "-u", "run_multibagger_scanner.py"],
+        check=False
+    )
 
 print("===================================")
-print("MASTER SCHEDULER COMPLETED")
+print("✅ MASTER AI SYSTEM FINISHED")
 print("===================================")
+```
