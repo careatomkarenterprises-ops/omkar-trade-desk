@@ -2,7 +2,7 @@ name: Multibagger Scanner (End of Day)
 
 on:
   schedule:
-    # 4:00 PM IST (After Indian Market Closing Analysis)
+    # 4:00 PM IST
     - cron: '30 10 * * 1-5'
 
   workflow_dispatch:
@@ -22,10 +22,10 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-- name: Install Dependencies
-  run: |
-    pip install --upgrade pip
-    pip install requests yfinance pandas numpy pytz kiteconnect
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install requests yfinance pandas numpy pytz kiteconnect
 
       - name: Run Multibagger Scanner
         env:
@@ -34,6 +34,8 @@ jobs:
           CHANNEL_FREE_SIGNALS: ${{ secrets.CHANNEL_FREE_SIGNALS }}
           CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
           CHANNEL_PREMIUM_ELITE: ${{ secrets.CHANNEL_PREMIUM_ELITE }}
+          KITE_API_KEY: ${{ secrets.KITE_API_KEY }}
+          KITE_ACCESS_TOKEN: ${{ secrets.KITE_ACCESS_TOKEN }}
           TZ: Asia/Kolkata
 
         run: |
