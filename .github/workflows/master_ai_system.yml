@@ -1,14 +1,12 @@
 name: MASTER AI TRADING SYSTEM
 
 on:
-workflow_dispatch:
+  workflow_dispatch:
 
 jobs:
-test:
-runs-on: ubuntu-latest
+  test:
+    runs-on: ubuntu-latest
 
-```
-steps:
-  - name: Test
-    run: echo "WORKING"
-```
+    steps:
+      - name: Test
+        run: echo "WORKING"
