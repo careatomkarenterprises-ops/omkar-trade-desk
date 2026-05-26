@@ -1,8 +1,13 @@
+```yaml id="x3p9qv"
 name: MASTER AI TRADING SYSTEM
+
 on:
   schedule:
-    # Every 5 minutes
-    - cron: "*/5 * * * 1-5"
+
+    # TEMPORARY TEST
+    # Runs every 5 minutes ALL DAYS
+
+    - cron: "*/5 * * * *"
 
   workflow_dispatch:
 
@@ -69,3 +74,4 @@ jobs:
           echo "==================================="
           echo "✅ MASTER AI SYSTEM FINISHED"
           echo "==================================="
+```
