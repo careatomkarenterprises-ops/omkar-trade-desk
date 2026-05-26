@@ -39,5 +39,5 @@ jobs:
         run: |
           echo "===== MULTIBAGGER SCANNER STARTED ====="
           date
-          python -u run_multibagger_scanner.py
+          python -u run_multibagger_scanner_v2.py
           echo "===== MULTIBAGGER SCANNER FINISHED ====="
