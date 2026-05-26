@@ -1,45 +1,37 @@
-name: Multibagger Scanner (End of Day)
+name: 📊 Multibagger Scanner (End of Day)
 
 on:
   schedule:
-    # 4:00 PM IST
-    - cron: '30 10 * * 1-5'
-
+    - cron: '42 10 * * 1-5'
   workflow_dispatch:
 
 jobs:
   multibagger:
+    name: Run Multibagger Scanner
     runs-on: ubuntu-latest
-
     steps:
-
-      - name: Checkout Repository
+      - name: 📥 Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: Install Dependencies
+      - name: 📦 Install Dependencies
         run: |
-          pip install --upgrade pip
-          pip install requests yfinance pandas numpy pytz kiteconnect
+          python -m pip install --upgrade pip
+          pip install requests pytz yfinance pandas numpy python-dotenv kiteconnect
 
-      - name: Run Multibagger Scanner
+      - name: 🚀 Run Multibagger Scanner
         env:
+          TZ: Asia/Kolkata
+          PYTHONUNBUFFERED: "1"
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
-          CHANNEL_FREE_SIGNALS: ${{ secrets.CHANNEL_FREE_SIGNALS }}
           CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
-          CHANNEL_PREMIUM_ELITE: ${{ secrets.CHANNEL_PREMIUM_ELITE }}
           KITE_API_KEY: ${{ secrets.KITE_API_KEY }}
+          KITE_API_SECRET: ${{ secrets.KITE_API_SECRET }}
           KITE_ACCESS_TOKEN: ${{ secrets.KITE_ACCESS_TOKEN }}
-          TZ: Asia/Kolkata
-
-        run: |
-          echo "===== MULTIBAGGER SCANNER STARTED ====="
-          date
-          python -u run_multibagger_scanner_v2.py
-          echo "===== MULTIBAGGER SCANNER FINISHED ====="
+        run: python -u run_multibagger_scanner.py
