@@ -1,5 +1,4 @@
 name: MASTER AI TRADING SYSTEM
-
 on:
   schedule:
     # Every 5 minutes
