@@ -1,12 +1,26 @@
-name: Keepalive
+name: 💓 Automation Guard Heartbeat
 
 on:
   schedule:
-    - cron: '0 0 * * *'  # Daily at midnight UTC
+    - cron: '12 5 * * 0'
   workflow_dispatch:
 
 jobs:
-  keepalive:
+  heartbeat:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - run: echo "Keepalive trigger at $(date)"
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Touch Pulse File
+        run: |
+          mkdir -p data
+          echo "Last structural system heartbeat pulse verified on: $(date)" > data/heartbeat.txt
+
+      - name: 📤 Push Maintenance Commits
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "sys(automation): verify core cron engine heartbeat pulse [skip ci]"
+          file_pattern: 'data/heartbeat.txt'
