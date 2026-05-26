@@ -2,8 +2,11 @@ import os
 import requests
 from datetime import datetime
 import pandas as pd
-import yfinance as yf
 from kiteconnect import KiteConnect
+
+# =========================================
+# ENV VARIABLES
+# =========================================
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
@@ -20,6 +23,10 @@ PREMIUM_CHANNELS = [
     os.getenv("CHANNEL_PREMIUM_ELITE"),
 ]
 
+# =========================================
+# LOAD FNO STOCKS
+# =========================================
+
 WATCHLIST = []
 
 try:
@@ -28,42 +35,62 @@ try:
 
     for stock in df.iloc[:, 0]:
 
-        stock = str(stock).strip()
+        stock = str(stock).strip().upper()
 
-        if stock and stock != "nan":
-
-            if not stock.endswith(".NS"):
-                stock += ".NS"
+        if stock and stock != "NAN":
 
             WATCHLIST.append(stock)
 
-    print(f"✅ Loaded {len(WATCHLIST)} Stocks")
+    print(f"✅ Loaded {len(WATCHLIST)} FNO Stocks")
 
 except Exception as e:
 
     print("❌ CSV LOAD ERROR:", e)
 
+# =========================================
+# ZERODHA CONNECTION
+# =========================================
+
 kite = None
 
 try:
 
-    if KITE_API_KEY and KITE_ACCESS_TOKEN:
+    kite = KiteConnect(api_key=KITE_API_KEY)
 
-        kite = KiteConnect(api_key=KITE_API_KEY)
+    kite.set_access_token(KITE_ACCESS_TOKEN)
 
-        kite.set_access_token(KITE_ACCESS_TOKEN)
+    profile = kite.profile()
 
-        profile = kite.profile()
-
-        print(f"✅ Zerodha Connected: {profile['user_name']}")
-
-    else:
-
-        print("⚠️ Zerodha credentials missing")
+    print(f"✅ Zerodha Connected: {profile['user_name']}")
 
 except Exception as e:
 
     print("❌ Zerodha Connection Failed:", e)
+    exit()
+
+# =========================================
+# LOAD INSTRUMENT MAP
+# =========================================
+
+instrument_map = {}
+
+try:
+
+    instruments = kite.instruments("NSE")
+
+    for item in instruments:
+
+        instrument_map[item["tradingsymbol"]] = item["instrument_token"]
+
+    print(f"✅ Loaded {len(instrument_map)} NSE Instruments")
+
+except Exception as e:
+
+    print("❌ Instrument Load Error:", e)
+
+# =========================================
+# TELEGRAM
+# =========================================
 
 def send_message(channels, text):
 
@@ -96,38 +123,49 @@ def send_message(channels, text):
 
             print("❌ Telegram Error:", e)
 
+# =========================================
+# FETCH STOCK DATA FROM ZERODHA
+# =========================================
+
 def fetch_stock(symbol):
 
     try:
 
         print(f"📊 Fetching {symbol}")
 
-        df = yf.download(
-            symbol,
-            period="5d",
-            interval="1d",
-            progress=False,
-            auto_adjust=True
-        )
+        if symbol not in instrument_map:
 
-        if df.empty or len(df) < 3:
-
-            print(f"⚠️ No Data: {symbol}")
+            print(f"⚠️ Instrument Missing: {symbol}")
 
             return None
 
-        latest = df.iloc[-1]
-        prev = df.iloc[-2]
+        token = instrument_map[symbol]
 
-        close = float(latest["Close"])
-        prev_close = float(prev["Close"])
+        data = kite.historical_data(
+            instrument_token=token,
+            from_date=datetime.now().replace(hour=9, minute=15),
+            to_date=datetime.now(),
+            interval="day"
+        )
+
+        if not data or len(data) < 2:
+
+            print(f"⚠️ No Historical Data: {symbol}")
+
+            return None
+
+        latest = data[-1]
+        prev = data[-2]
+
+        close = float(latest["close"])
+        prev_close = float(prev["close"])
 
         change = ((close - prev_close) / prev_close) * 100
 
-        volume = int(latest["Volume"])
+        volume = int(latest["volume"])
 
         return {
-            "symbol": symbol.replace(".NS", ""),
+            "symbol": symbol,
             "close": round(close, 2),
             "change": round(change, 2),
             "volume": volume
@@ -138,6 +176,10 @@ def fetch_stock(symbol):
         print(f"❌ Error Fetching {symbol}: {e}")
 
         return None
+
+# =========================================
+# SIGNAL ENGINE
+# =========================================
 
 def generate_signals():
 
@@ -152,15 +194,19 @@ def generate_signals():
 
         probability = 50
 
+        # Momentum
         if data["change"] > 2:
             probability += 20
 
+        # Strong breakout
         if data["change"] > 4:
             probability += 20
 
-        if data["volume"] > 10000000:
+        # Volume strength
+        if data["volume"] > 1000000:
             probability += 15
 
+        # Extreme momentum
         if data["change"] > 6:
             probability += 10
 
@@ -188,6 +234,10 @@ def generate_signals():
         reverse=True
     )[:5]
 
+# =========================================
+# FREE MESSAGE
+# =========================================
+
 def free_message(signals):
 
     msg = "📊 *END OF DAY MARKET REPORT*\n\n"
@@ -212,6 +262,10 @@ def free_message(signals):
     msg += f"\n\n⏰ {datetime.now().strftime('%H:%M:%S')}"
 
     return msg
+
+# =========================================
+# PREMIUM MESSAGE
+# =========================================
 
 def premium_message(signals):
 
@@ -240,6 +294,10 @@ def premium_message(signals):
     msg += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
 
     return msg
+
+# =========================================
+# MAIN
+# =========================================
 
 if __name__ == "__main__":
 
