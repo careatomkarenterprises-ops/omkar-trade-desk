@@ -1,40 +1,14 @@
-```yaml id="2k3dqx"
 name: MASTER AI TRADING SYSTEM
 
 on:
-  schedule:
-    - cron: '*/5 * * * *'
-
-  workflow_dispatch:
+workflow_dispatch:
 
 jobs:
-  master-system:
-    runs-on: ubuntu-latest
+test:
+runs-on: ubuntu-latest
 
-    env:
-      TZ: Asia/Kolkata
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Test Run
-        run: |
-          echo "==================================="
-          echo "🚀 MASTER AI SYSTEM STARTED"
-          echo "==================================="
-
-          TZ='Asia/Kolkata' date
-
-          echo "Scheduler working successfully"
-
-          echo "==================================="
-          echo "✅ MASTER AI SYSTEM FINISHED"
-          echo "==================================="
+```
+steps:
+  - name: Test
+    run: echo "WORKING"
 ```
