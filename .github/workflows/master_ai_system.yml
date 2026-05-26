@@ -1,9 +1,6 @@
 name: MASTER AI TRADING SYSTEM
 
 on:
-schedule:
-- cron: '*/5 * * * 1-5'
-
 workflow_dispatch:
 
 jobs:
@@ -13,5 +10,6 @@ runs-on: ubuntu-latest
 ```
 steps:
   - name: Test
-    run: echo "WORKING"
+    run: |
+      echo "WORKING"
 ```
