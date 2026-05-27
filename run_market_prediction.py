@@ -38,10 +38,6 @@ def send(msg, channel):
 # LIGHTWEIGHT NATIVE MACRO DATA FETCH
 # =========================================
 def fetch_data():
-    """
-    Fetches international indices and global assets using clean, native 
-    HTTP structures, completely bypassing the need for yfinance.
-    """
     try:
         print("🔄 Pulling Global Macro Trends via Direct Engine Data Core...")
         url = "https://query1.finance.yahoo.com/v7/finance/spark"
@@ -157,9 +153,6 @@ def build_message(data, bias, score):
     msg += f"\n⚠️ Educational Purpose Only\n⏰ {datetime.now().strftime('%H:%M:%S')}"
     return msg
 
-# =========================================
-# RUN TIME DISPATCH ENTRY
-# =========================================
 if __name__ == "__main__":
     print("=======================================")
     print("🚀 RUNNING AI PRE-MARKET ENGINE")
@@ -177,7 +170,6 @@ if __name__ == "__main__":
     send(message, FREE_CHANNEL)
     send(message, PREMIUM_CHANNEL)
     send(message, ELITE_CHANNEL)
-    
     print("=======================================")
     print("✅ MARKET PREDICTION COMPLETED")
     print("=======================================")
