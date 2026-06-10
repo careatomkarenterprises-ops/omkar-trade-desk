@@ -2,8 +2,16 @@ name: 📰 News Alerts - Market Hours
 
 on:
   schedule:
-    # Runs at minute 14 of every hour from 4 AM UTC (9:34 AM IST) to 11 AM UTC (4:34 PM IST)
-    - cron: '14 4-11 * * 1-5'
+    # RUN 1: The original 4:14 UTC run shifts to 23:44 UTC the previous day.
+    # Therefore, days shift from Mon-Fri (1-5) to Sun-Thu (0-4).
+    # With your 4.5-hour delay, this executes at 8:44 AM IST.
+    - cron: '44 23 * * 0-4'
+    
+    # RUNS 2-8: The original 5:14 to 11:14 UTC runs shift to 00:44 to 06:44 UTC.
+    # These stay on the same day, so days remain Mon-Fri (1-5).
+    # With your 4.5-hour delay, these execute hourly from 9:44 AM to 3:44 PM IST.
+    - cron: '44 0-6 * * 1-5'
+    
   workflow_dispatch:
 
 jobs:
