@@ -2,14 +2,10 @@ name: 📰 News Alerts - Market Hours
 
 on:
   schedule:
-    # RUN 1: The original 4:14 UTC run shifts to 23:44 UTC the previous day.
-    # Therefore, days shift from Mon-Fri (1-5) to Sun-Thu (0-4).
-    # With your 4.5-hour delay, this executes at 8:44 AM IST.
+    # RUN 1: 23:44 UTC = 4:44 AM IST -> Runs at 9:14 AM IST (with 4.5h delay)
     - cron: '44 23 * * 0-4'
     
-    # RUNS 2-8: The original 5:14 to 11:14 UTC runs shift to 00:44 to 06:44 UTC.
-    # These stay on the same day, so days remain Mon-Fri (1-5).
-    # With your 4.5-hour delay, these execute hourly from 9:44 AM to 3:44 PM IST.
+    # RUNS 2-8: 00:44 to 06:44 UTC -> Runs hourly 10:14 AM to 4:14 PM IST (with 4.5h delay)
     - cron: '44 0-6 * * 1-5'
     
   workflow_dispatch:
@@ -33,10 +29,21 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests pytz yfinance pandas python-dotenv
 
+      - name: 💾 Manage News Cache
+        uses: actions/cache@v4
+        with:
+          path: data/posted_news.json
+          key: news-cache-${{ github.run_id }}
+          restore-keys: |
+            news-cache-
+
       - name: 🚀 Run News Aggregator
         env:
           TZ: Asia/Kolkata
           PYTHONUNBUFFERED: "1"
+          PYTHONPATH: ${{ github.workspace }}
+          NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHANNEL_FREE_MAIN: ${{ secrets.CHANNEL_FREE_MAIN }}
+          CHANNEL_PREMIUM: ${{ secrets.CHANNEL_PREMIUM }}
         run: python -u src/news/aggregator.py
