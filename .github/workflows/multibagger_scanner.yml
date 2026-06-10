@@ -2,7 +2,9 @@ name: 📊 Multibagger Scanner (End of Day)
 
 on:
   schedule:
-    - cron: '42 10 * * 1-5'
+    # 06:12 UTC = 11:42 AM IST.
+    # Factoring in your consistent 4.5-hour delay, this will execute at 4:12 PM IST.
+    - cron: '12 6 * * 1-5'
   workflow_dispatch:
 
 jobs:
