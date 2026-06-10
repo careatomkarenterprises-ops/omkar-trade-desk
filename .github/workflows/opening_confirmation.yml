@@ -2,7 +2,9 @@ name: 🏦 Opening Confirmation
 
 on:
   schedule:
-    - cron: '43 3 * * 1-5'
+    # 23:13 UTC = 4:43 AM IST.
+    # Factoring in the 4.5-hour delay, this will execute at 9:13 AM IST.
+    - cron: '13 23 * * 0-4'
   workflow_dispatch:
 
 jobs:
